@@ -321,3 +321,11 @@ read this to replay the build quickly.
   - Containers reaching the host's Postgres via `host.docker.internal` still work with compose ports bound to `127.0.0.1` on Docker Desktop.
 - **How to show it:** `scripts/fly-deploy.sh`, then open `https://<prefix>-web.fly.dev`. The browser asks for the credentials in `.fly-credentials`; the status page shows four green cards. Point out in `fly ips list -a <prefix>-rating` that rating has only a private address, and that `/admin` works through web.
 - **Not deployed yet:** verified locally (configs validated, images built and run as non-root, gate, proxy and headers tested with curl). The first real `scripts/fly-deploy.sh` run still needs the owner's go-ahead because it creates billed resources.
+- **Deployed 2026-10-23:** `uwdesk-web` (public, https://uwdesk-web.fly.dev, Basic auth), `uwdesk-rating` and `uwdesk-ingestion` (private_v6 Flycast only), `uwdesk-db` (Managed Postgres, Basic plan, iad). Verified live:
+  - `/api/live` returns 200 without auth; pages and `/admin` return 401 without credentials and 200 with them.
+  - `/api/health` is all green: both databases are connected over Managed Postgres (the attached URLs worked with node-postgres and psycopg as-is), and rating (rates 2026.1) and ingestion are reachable over Flycast.
+  - A real extraction of case 05 through a `fly proxy` tunnel took 20.7 s, inferred class 98304, and had nothing missing for rating and no warnings.
+- **Deploy gotchas:**
+  - `fly deploy <dir> --config <path>` resolves the config path relative to `<dir>`, so pass it absolute.
+  - `fly mpg create` and `fly mpg attach` print the full connection string, password included. The script now sends their output to /dev/null; rotate the password if it was shown (`fly mpg users rotate-password` prints the new one and does not update app secrets).
+  - `fly proxy <port> -a <app>` targets `<app>.internal` (IPv6), which an app bound to 0.0.0.0 doesn't answer. Tunnel to the Flycast address: `fly proxy 18002:80 <app>.flycast -a <app>`.

@@ -50,7 +50,8 @@ done
 step "Managed Postgres cluster $DB ($PLAN, $REGION)"
 id="$(cluster_id)"
 if [ -z "$id" ]; then
-  fly mpg create --name "$DB" --org "$ORG" --region "$REGION" --plan "$PLAN"
+  # flyctl prints the connection string (with password) here and on attach; keep it off the terminal.
+  fly mpg create --name "$DB" --org "$ORG" --region "$REGION" --plan "$PLAN" >/dev/null
   id="$(cluster_id)"
 fi
 [ -n "$id" ] || { echo "Could not find cluster $DB after creating it"; exit 1; }
@@ -62,7 +63,8 @@ done
 
 step "Database URLs (fly mpg attach sets them as secrets)"
 attach() {  # app database variable
-  if has_secret "$1" "$3"; then echo "$1 already has $3"; else fly mpg attach "$id" --app "$1" --database "$2" --variable-name "$3"; fi
+  if has_secret "$1" "$3"; then echo "$1 already has $3"
+  else fly mpg attach "$id" --app "$1" --database "$2" --variable-name "$3" >/dev/null && echo "$1: $3 set"; fi
 }
 attach "$RATING" rating DATABASE_URL
 attach "$WEB" customer CUSTOMER_DATABASE_URL
@@ -92,13 +94,14 @@ fi
 step "Deploy private services (no public IPs) and give them Flycast addresses"
 for pair in "$RATING:services/rating" "$INGESTION:services/ingestion"; do
   app="${pair%%:*}" dir="${pair#*:}"
-  fly deploy "$dir" --config "$dir/fly.toml" --app "$app" --no-public-ips --ha=false ${overrides[@]+"${overrides[@]}"}
+  # --config is resolved relative to the build directory, so pass it absolute.
+  fly deploy "$dir" --config "$ROOT/$dir/fly.toml" --app "$app" --no-public-ips --ha=false ${overrides[@]+"${overrides[@]}"}
   if fly ips list -a "$app" --json | grep -q '"private'; then echo "$app has a private address"
   else fly ips allocate-v6 --private -a "$app"; fi
 done
 
 step "Deploy web (public)"
-fly deploy web --config web/fly.toml --app "$WEB" --ha=false ${overrides[@]+"${overrides[@]}"}
+fly deploy web --config "$ROOT/web/fly.toml" --app "$WEB" --ha=false ${overrides[@]+"${overrides[@]}"}
 
 step "Done"
 echo "UW Desktop: https://$WEB.fly.dev  (credentials in .fly-credentials)"
