@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { referralFlags, type ReferralContext } from "./referrals.ts";
-import { inputsHash, parseSchedule, scheduleMod } from "./worksheet.ts";
+import { inputsHash, parseSchedule, scheduleKey, scheduleMod } from "./worksheet.ts";
 import type { SubmissionData } from "./submission.ts";
 
 const inputs = {
@@ -74,4 +74,11 @@ test("rating fingerprint ignores object key order (jsonb reorders keys)", () => 
   const shuffled = Object.fromEntries(Object.entries(inputs).reverse()) as typeof inputs;
   assert.equal(inputsHash(shuffled, []), inputsHash(inputs, []));
   assert.notEqual(inputsHash({ ...inputs, deductible: 1000 }, []), inputsHash(inputs, []));
+});
+
+test("schedule comparison ignores jsonb key order (CR-001)", () => {
+  const parsed = [{ category: "safety", pct: -5, rationale: "Written program" }];
+  const fromJsonb = [{ pct: -5, category: "safety", rationale: "Written program" }];
+  assert.equal(scheduleKey(fromJsonb), scheduleKey(parsed));
+  assert.notEqual(scheduleKey([{ ...parsed[0], pct: -6 }]), scheduleKey(parsed));
 });

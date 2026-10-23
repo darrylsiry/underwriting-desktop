@@ -4,7 +4,7 @@ import { referralFlags, type Flag } from "./referrals";
 import { RATING_SERVICE_URL } from "./services";
 import type { SubmissionRow } from "./submissions";
 import {
-  INPUT_DEFS, inputsFromSubmission, inputsHash, parseInputs, parseSchedule, scheduleMod, scheduleTotal,
+  INPUT_DEFS, inputsFromSubmission, inputsHash, parseInputs, parseSchedule, scheduleKey, scheduleMod, scheduleTotal,
   type Clearance, type RatingInputs, type ScheduleItem,
 } from "./worksheet";
 
@@ -85,7 +85,7 @@ export async function saveAndRate(sub: SubmissionRow, form: Record<string, strin
   const correlationId = crypto.randomUUID();
 
   const changed = INPUT_DEFS.filter((d) => JSON.stringify(ws.rating_inputs[d.key]) !== JSON.stringify(inputs[d.key]));
-  const scheduleChanged = JSON.stringify(ws.schedule) !== JSON.stringify(schedule);
+  const scheduleChanged = scheduleKey(ws.schedule) !== scheduleKey(schedule);
   await customerDb.query(
     "UPDATE worksheets SET rating_inputs = $2, schedule = $3, updated_by = $4, updated_at = now() WHERE submission_id = $1",
     [sub.id, inputs, JSON.stringify(schedule), actor],

@@ -130,6 +130,11 @@ export function parseSchedule(form: Record<string, string>): ScheduleItem[] {
 export const scheduleTotal = (items: ScheduleItem[]) => items.reduce((sum, i) => sum + i.pct, 0);
 export const scheduleMod = (items: ScheduleItem[]) => Math.round((1 + scheduleTotal(items) / 100) * 100) / 100;
 
+/** Schedule in a fixed key order, for comparing a stored (jsonb, keys reordered) schedule with a parsed one. */
+export function scheduleKey(schedule: ScheduleItem[]): string {
+  return JSON.stringify(schedule.map((s) => [s.category, s.pct, s.rationale]));
+}
+
 /** Fingerprint of what a rating used. Fixed key order: jsonb doesn't preserve object key order. */
 export function inputsHash(inputs: RatingInputs, schedule: ScheduleItem[]): string {
   return JSON.stringify([INPUT_DEFS.map((d) => inputs[d.key]), schedule.map((s) => [s.category, s.pct])]);
