@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from starlette.concurrency import run_in_threadpool
 
 from app import repository
 
@@ -128,7 +129,9 @@ async def create_version(request: Request):
     form = await request.form()
     actor = str(form.get("actor", "")).strip() or "rating-admin"
     try:
-        new_id = repository.create_draft(int(form["based_on"]), str(form["label"]).strip(), str(form.get("notes", "")), actor)
+        # psycopg is synchronous: keep it off the event loop in these async (form-reading) handlers.
+        new_id = await run_in_threadpool(
+            repository.create_draft, int(form["based_on"]), str(form["label"]).strip(), str(form.get("notes", "")), actor)
     except (LookupError, ValueError) as e:
         return redirect("/admin", error=str(e))
     return remember_actor(redirect(f"/admin/versions/{new_id}", msg="Draft created. Edit any variable, then activate."), actor)
@@ -178,7 +181,8 @@ async def save_section(request: Request, version_id: int, section: str):
                 continue
             edit = edits.setdefault((kind, *ident), repository.Edit(kind, tuple(ident), {}))
             edit.values[column] = Decimal(str(raw).strip())
-        changed = repository.apply_edits(version_id, list(edits.values()), actor, str(form.get("reason", "")))
+        changed = await run_in_threadpool(
+            repository.apply_edits, version_id, list(edits.values()), actor, str(form.get("reason", "")))
     except InvalidOperation:
         return redirect(back, section=section, error="Every value must be a number")
     except (LookupError, ValueError, repository.VersionNotEditable) as e:
@@ -192,7 +196,7 @@ async def activate_version(request: Request, version_id: int):
     form = await request.form()
     actor = str(form.get("actor", "")).strip() or "rating-admin"
     try:
-        repository.activate(version_id, actor, str(form.get("reason", "")))
+        await run_in_threadpool(repository.activate, version_id, actor, str(form.get("reason", "")))
     except (LookupError, ValueError, repository.VersionNotEditable) as e:
         return redirect(f"/admin/versions/{version_id}", error=str(e))
     return remember_actor(redirect(f"/admin/versions/{version_id}", msg="Activated. New ratings now use this version."), actor)
