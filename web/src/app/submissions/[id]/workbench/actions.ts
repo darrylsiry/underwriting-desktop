@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSubmission } from "@/lib/submissions";
 import { currentUser } from "@/lib/user";
+import { bindQuote } from "@/lib/policies";
 import { issueQuote } from "@/lib/quotes";
 import { clearReferral, money, saveAndRate } from "@/lib/worksheets";
 
@@ -54,5 +55,19 @@ export async function issueQuoteAction(id: string, form: FormData) {
   }
   revalidatePath(`/submissions/${id}/workbench`);
   revalidatePath("/quotes");
+  back(id, { msg });
+}
+
+export async function bindAction(id: string, quoteId: string, form: FormData) {
+  const received = new Set(form.getAll("received").map((v) => Number(v)));
+  let msg: string;
+  try {
+    const p = await bindQuote(quoteId, received, await currentUser());
+    msg = `Bound: policy ${p.policy_number}, binder ${p.binder_number}`;
+  } catch (err) {
+    back(id, { error: (err as Error).message });
+  }
+  revalidatePath(`/submissions/${id}/workbench`);
+  revalidatePath("/policies");
   back(id, { msg });
 }

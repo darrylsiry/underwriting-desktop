@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { auditTrail } from "@/lib/audit";
 import { addYears, suggestedSubjectivities } from "@/lib/quote-terms";
+import { bindBlockers } from "@/lib/bind-rules";
+import { policiesForSubmission } from "@/lib/policies";
 import { quotesForSubmission } from "@/lib/quotes";
 import { getSubmission } from "@/lib/submissions";
 import { currentUser } from "@/lib/user";
@@ -10,13 +12,13 @@ import {
 } from "@/lib/worksheet";
 import { money, openWorksheet, readiness } from "@/lib/worksheets";
 import { StatusBadge } from "../../status-badge";
-import { clearReferralAction, issueQuoteAction, saveAndRateAction } from "./actions";
+import { bindAction, clearReferralAction, issueQuoteAction, saveAndRateAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ msg?: string; error?: string }> };
 
-const WORKSHEET_ACTIONS = new Set(["worksheet.opened", "worksheet.input_changed", "worksheet.schedule_changed", "worksheet.rated", "referral.cleared", "quote.issued"]);
+const WORKSHEET_ACTIONS = new Set(["worksheet.opened", "worksheet.input_changed", "worksheet.schedule_changed", "worksheet.rated", "referral.cleared", "quote.issued", "policy.bound"]);
 
 export default async function WorkbenchPage({ params, searchParams }: Props) {
   const { id } = await params;
@@ -40,9 +42,30 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
   const effective = latest?.effective_date ?? String(sub.data.policy?.effective_date ?? "");
   const expiration = latest?.expiration_date ?? (effective ? addYears(effective, 1) : "");
   const subjectivities = latest?.subjectivities ?? suggestedSubjectivities(flags, sub.data);
+  const [policy] = await policiesForSubmission(id);
+  const bindIssues = latest ? bindBlockers(latest, new Date().toISOString().slice(0, 10)) : [];
   const rating = ws.last_rating;
   const schedule = new Map(ws.schedule.map((s) => [s.category, s]));
   const total = scheduleTotal(ws.schedule);
+
+  const issueForm = (
+    <form action={issueQuoteAction.bind(null, id)} className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <label className="flex flex-col gap-1 text-xs text-slate-500">Effective
+          <input name="effective_date" defaultValue={effective} placeholder="YYYY-MM-DD" required className="rounded border border-slate-300 px-2 py-1 text-sm text-slate-900" />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-slate-500">Expiration
+          <input name="expiration_date" defaultValue={expiration} placeholder="YYYY-MM-DD" className="rounded border border-slate-300 px-2 py-1 text-sm text-slate-900" />
+        </label>
+      </div>
+      <label className="flex flex-col gap-1 text-xs text-slate-500">Subjectivities (one per line)
+        <textarea name="subjectivities" rows={4} defaultValue={subjectivities.join("\n")} className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-900" />
+      </label>
+      <button className="w-full rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
+        {latest ? `Issue revised quote (v${latest.version + 1})` : `Issue quote · ${rating ? money(rating.total) : ""}`}
+      </button>
+    </form>
+  );
 
   return (
     <main className="mx-auto max-w-7xl p-8">
@@ -51,8 +74,8 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
         <h1 className="text-2xl font-semibold">{sub.applicant_name}</h1>
         <span className="font-mono text-sm text-slate-500">{sub.reference}</span>
         <StatusBadge status={sub.status} />
-        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ready ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600"}`}>
-          {ready ? "Ready to quote" : !rated ? "Not rated" : `${openReferrals.length} referral${openReferrals.length === 1 ? "" : "s"} open`}
+        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${policy || ready ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600"}`}>
+          {policy ? `Bound · ${policy.policy_number}` : ready ? (latest ? `Quoted · ${latest.quote_number} v${latest.version}` : "Ready to quote") : !rated ? "Not rated" : `${openReferrals.length} referral${openReferrals.length === 1 ? "" : "s"} open`}
         </span>
       </div>
       <p className="mt-1 text-sm text-slate-500">Underwriting workbench · {String(sub.data.operations?.description ?? "")}</p>
@@ -116,10 +139,27 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
         </form>
 
         <aside className="space-y-6">
-          <Card title="Quote">
-            <div className="p-4">
+          <Card title={policy ? "Policy" : "Quote"}>
+            <div className="space-y-4 p-4">
+              {policy && (
+                <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm">
+                  <p className="font-medium text-emerald-800">Bound · {policy.policy_number}</p>
+                  <p className="mt-0.5 text-xs text-emerald-700">
+                    Binder {policy.binder_number} · {policy.quote_number} v{policy.quote_version} · {money(policy.total)} · by {policy.bound_by}
+                  </p>
+                  <p className="mt-2 flex gap-3 text-xs">
+                    <a href={`/policies/${policy.id}/binder`} target="_blank" className="text-indigo-600 hover:underline">Binder PDF</a>
+                    <a href={`/policies/${policy.id}/policy`} target="_blank" className="text-indigo-600 hover:underline">Policy PDF</a>
+                  </p>
+                  {policy.subjectivities.some((s) => s.status === "open") && (
+                    <ul className="mt-2 space-y-0.5 text-xs text-amber-800">
+                      {policy.subjectivities.filter((s) => s.status === "open").map((s) => <li key={s.text}>Open: {s.text} (due {s.due_date})</li>)}
+                    </ul>
+                  )}
+                </div>
+              )}
               {quotes.length > 0 && (
-                <ul className="mb-4 space-y-1 text-sm">
+                <ul className="space-y-1 text-sm">
                   {quotes.map((q) => (
                     <li key={q.id} className={`flex items-center gap-2 ${q.status === "superseded" ? "text-slate-400" : ""}`}>
                       <span className="font-mono text-xs">{q.quote_number} v{q.version}</span>
@@ -130,28 +170,36 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                   ))}
                 </ul>
               )}
-              {ready ? (
-                <form action={issueQuoteAction.bind(null, id)} className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="flex flex-col gap-1 text-xs text-slate-500">Effective
-                      <input name="effective_date" defaultValue={effective} placeholder="YYYY-MM-DD" required className="rounded border border-slate-300 px-2 py-1 text-sm text-slate-900" />
-                    </label>
-                    <label className="flex flex-col gap-1 text-xs text-slate-500">Expiration
-                      <input name="expiration_date" defaultValue={expiration} placeholder="YYYY-MM-DD" className="rounded border border-slate-300 px-2 py-1 text-sm text-slate-900" />
-                    </label>
-                  </div>
-                  <label className="flex flex-col gap-1 text-xs text-slate-500">Subjectivities (one per line)
-                    <textarea name="subjectivities" rows={4} defaultValue={subjectivities.join("\n")} className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-900" />
-                  </label>
-                  <button className="w-full rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
-                    {latest ? `Issue revised quote (v${latest.version + 1})` : `Issue quote · ${rating ? money(rating.total) : ""}`}
-                  </button>
-                </form>
+              {!policy && latest?.status === "issued" && (
+                bindIssues.length ? (
+                  <p className="rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">{bindIssues.join("; ")}</p>
+                ) : (
+                  <form action={bindAction.bind(null, id, latest.id)} className="space-y-2 rounded-md border border-slate-200 p-3">
+                    <p className="text-sm font-medium">Bind {latest.quote_number} v{latest.version}</p>
+                    <p className="text-xs text-slate-500">Tick subjectivities already received. The rest stay open on the binder, due in 30 days.</p>
+                    {latest.subjectivities.map((text, i) => (
+                      <label key={i} className="flex items-start gap-2 text-xs">
+                        <input type="checkbox" name="received" value={i} className="mt-0.5" /> {text}
+                      </label>
+                    ))}
+                    <button className="w-full rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600">
+                      Bind · {money(latest.total)}
+                    </button>
+                  </form>
+                )
+              )}
+              {!policy && (ready ? (
+                latest ? (
+                  <details>
+                    <summary className="cursor-pointer text-xs text-indigo-600">Revise quote (v{latest.version + 1})</summary>
+                    <div className="mt-3">{issueForm}</div>
+                  </details>
+                ) : issueForm
               ) : (
                 <p className="text-sm text-slate-500">
                   {!rated ? "Save & rate the current inputs to quote." : `Clear ${openReferrals.length} open referral${openReferrals.length === 1 ? "" : "s"} to quote.`}
                 </p>
-              )}
+              ))}
             </div>
           </Card>
 

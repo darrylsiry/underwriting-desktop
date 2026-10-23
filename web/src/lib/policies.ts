@@ -1,0 +1,129 @@
+import { audit } from "./audit";
+import { bindBlockers, policyNumbers, subjectivityStatus, type SubjectivityStatus } from "./bind-rules";
+import { policyDb } from "./db";
+import { renderBinderPdf, renderPolicyPdf, type PolicyDocument } from "./policy-pdf";
+import type { RatingInputs } from "./worksheet";
+import { money, type Rating } from "./worksheets";
+
+export type PolicyRow = {
+  id: string; policy_number: string; binder_number: string; status: string; quote_id: string;
+  quote_number: string; quote_version: number; submission_id: string; insured_name: string;
+  effective_date: string; expiration_date: string; premium: string; policy_fee: string;
+  surplus_lines_tax: string; total: string; subjectivities: SubjectivityStatus[];
+  bound_by: string; bound_at: Date;
+};
+
+const COLUMNS = `p.id, p.policy_number, p.binder_number, p.status, p.quote_id, q.quote_number, q.version AS quote_version,
+  p.submission_id, p.insured_name, p.effective_date::text, p.expiration_date::text, p.premium, p.policy_fee,
+  p.surplus_lines_tax, p.total, p.subjectivities, p.bound_by, p.bound_at`;
+
+export async function policiesForSubmission(submissionId: string): Promise<PolicyRow[]> {
+  const { rows } = await policyDb.query<PolicyRow>(
+    `SELECT ${COLUMNS} FROM policies p JOIN quotes q ON q.id = p.quote_id WHERE p.submission_id = $1`, [submissionId]);
+  return rows;
+}
+
+export async function listPolicies(): Promise<PolicyRow[]> {
+  const { rows } = await policyDb.query<PolicyRow>(
+    `SELECT ${COLUMNS} FROM policies p JOIN quotes q ON q.id = p.quote_id ORDER BY p.bound_at DESC`);
+  return rows;
+}
+
+export async function getPolicyDocument(id: string, kind: "binder" | "policy") {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  const { rows } = await policyDb.query<{ filename: string; pdf: Buffer }>(
+    kind === "binder"
+      ? "SELECT binder_number || '.pdf' AS filename, binder_pdf AS pdf FROM policies WHERE id = $1"
+      : "SELECT policy_number || '.pdf' AS filename, policy_pdf AS pdf FROM policies WHERE id = $1",
+    [id],
+  );
+  return rows[0] ?? null;
+}
+
+type QuoteForBinding = {
+  id: string; quote_number: string; version: number; status: string; submission_id: string; submission_ref: string;
+  insured_id: string | null; insured_name: string; effective_date: string; expiration_date: string; valid_until: string;
+  rating_inputs: RatingInputs; rating: Rating; premium: string; policy_fee: string; surplus_lines_tax: string; total: string;
+  subjectivities: string[];
+  terms: { insured_address: string[]; producer: string[]; limits: { label: string; amount: number }[]; deductible: number;
+    class_code: string; class_description: string; operations: string; forms: string[] };
+};
+
+/**
+ * Bind an issued quote on its quoted terms (no re-rating). Subjectivities not marked received
+ * stay open on the binder with a due date.
+ */
+export async function bindQuote(quoteId: string, received: Set<number>, actor: string): Promise<PolicyRow> {
+  const today = new Date().toISOString().slice(0, 10);
+  const client = await policyDb.connect();
+  let policyId: string;
+  let doc: PolicyDocument;
+  let q: QuoteForBinding;
+  try {
+    await client.query("BEGIN");
+    // Lock the quote so two clicks can't bind it twice.
+    const found = (await client.query<QuoteForBinding>(
+      `SELECT id, quote_number, version, status, submission_id, submission_ref, insured_id, insured_name,
+              effective_date::text, expiration_date::text, valid_until::text, rating_inputs, rating,
+              premium, policy_fee, surplus_lines_tax, total, subjectivities, terms
+       FROM quotes WHERE id = $1 FOR UPDATE`, [quoteId])).rows[0];
+    if (!found) throw new Error("Quote not found");
+    q = found;
+    const blockers = bindBlockers(q, today);
+    if (blockers.length) throw new Error(blockers.join("; "));
+
+    const seq = Number((await client.query<{ n: string }>("SELECT nextval('policy_number_seq') AS n")).rows[0].n);
+    const numbers = policyNumbers(seq, Number(q.effective_date.slice(0, 4)));
+    const subjectivities = subjectivityStatus(q.subjectivities, received, today);
+    const boundAt = new Date();
+    doc = {
+      policyNumber: numbers.policy, binderNumber: numbers.binder, quoteNumber: q.quote_number, quoteVersion: q.version,
+      boundAt, boundBy: actor, insuredName: q.insured_name, insuredAddress: q.terms.insured_address, producer: q.terms.producer,
+      effectiveDate: q.effective_date, expirationDate: q.expiration_date, limits: q.terms.limits, deductible: q.terms.deductible,
+      classCode: q.terms.class_code, classDescription: q.terms.class_description, operations: q.terms.operations,
+      states: q.rating_inputs.states, grossReceipts: q.rating_inputs.gross_receipts,
+      premium: Number(q.premium), policyFee: Number(q.policy_fee), surplusLinesTax: Number(q.surplus_lines_tax),
+      surplusLinesTaxRate: Number(q.rating.surplus_lines_tax_rate), homeState: q.rating_inputs.home_state,
+      total: Number(q.total), rateVersion: q.rating.rate_version, subjectivities, forms: q.terms.forms,
+    };
+    const [binderPdf, policyPdf] = await Promise.all([renderBinderPdf(doc), renderPolicyPdf(doc)]);
+
+    policyId = (await client.query<{ id: string }>(
+      `INSERT INTO policies (policy_number, binder_number, quote_id, submission_id, insured_id, insured_name,
+         effective_date, expiration_date, premium, policy_fee, surplus_lines_tax, total, subjectivities,
+         binder_pdf, policy_pdf, bound_by, bound_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
+      [numbers.policy, numbers.binder, q.id, q.submission_id, q.insured_id, q.insured_name, q.effective_date,
+       q.expiration_date, q.premium, q.policy_fee, q.surplus_lines_tax, q.total, JSON.stringify(subjectivities),
+       Buffer.from(binderPdf), Buffer.from(policyPdf), actor, boundAt],
+    )).rows[0].id;
+    await client.query("UPDATE quotes SET status = 'bound' WHERE id = $1", [q.id]);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  const open = doc.subjectivities.filter((s) => s.status === "open");
+  const correlationId = crypto.randomUUID();
+  await audit(
+    {
+      actor, action: "quote.bound", entityType: "quote", entityId: q.id,
+      summary: `${q.quote_number} v${q.version} bound as ${doc.policyNumber}`, before: { status: "issued" }, after: { status: "bound" },
+      correlationId,
+    },
+    {
+      actor, action: "policy.bound", entityType: "policy", entityId: policyId,
+      summary: `${doc.policyNumber} bound for ${q.insured_name}: ${money(q.total)}, effective ${q.effective_date}`
+        + (open.length ? `, ${open.length} open subjectivit${open.length === 1 ? "y" : "ies"}` : ""),
+      after: { quote_id: q.id, binder_number: doc.binderNumber, total: q.total, subjectivities: doc.subjectivities }, correlationId,
+    },
+    {
+      actor, action: "policy.bound", entityType: "submission", entityId: q.submission_id,
+      summary: `${q.submission_ref}: bound as ${doc.policyNumber} (${q.quote_number} v${q.version}, ${money(q.total)})`, correlationId,
+    },
+  );
+  return (await policiesForSubmission(q.submission_id)).find((p) => p.id === policyId)!;
+}

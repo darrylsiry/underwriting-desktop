@@ -58,6 +58,7 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
   if (!/^\d{4}-\d{2}-\d{2}$/.test(expiration) || expiration <= effective) throw new Error("Expiration must be a date after the effective date");
 
   const previous = (await quotesForSubmission(sub.id))[0];
+  if (previous?.status === "bound") throw new Error(`${previous.quote_number} is already bound; changes now need a policy endorsement`);
   const quoteNumber = previous?.quote_number ?? (await policyDb.query<{ n: string }>(
     "SELECT 'Q-' || to_char(now(), 'YYYY') || '-' || lpad(nextval('quote_number_seq')::text, 4, '0') AS n")).rows[0].n;
   const version = (previous?.version ?? 0) + 1;
