@@ -1,0 +1,13 @@
+[project]
+name = "ingestion-service"
+version = "0.1.0"
+description = "Submission ingestion: classify documents and extract submission data"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "python-multipart>=0.0.12",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "httpx>=0.27"]

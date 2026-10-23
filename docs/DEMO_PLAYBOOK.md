@@ -14,7 +14,7 @@ Code in the **live** repo. Claude there will pull the matching step from
 ## Steps
 | # | Prompt to type | What they'll see |
 |---|----------------|------------------|
-| (filled in as we build) | | |
+| 01 | "Scaffold the monorepo from the plan: Next.js web app, FastAPI rating and ingestion services, one Postgres with customer/policy/rating DBs, docker compose, and a status page that health-checks everything." | Four services come up; status page shows all green |
 
 ## Things to show off along the way
 - Plan mode before a bigger change

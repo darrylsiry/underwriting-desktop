@@ -1,0 +1,45 @@
+# Local stack: `docker compose up --build`, then open http://localhost:3000
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: uw
+      POSTGRES_PASSWORD: uw
+    ports: ["5432:5432"]
+    volumes:
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U uw"]
+      interval: 2s
+      retries: 30
+
+  rating:
+    build: ./services/rating
+    environment:
+      DATABASE_URL: postgresql://uw:uw@db:5432/rating
+    ports: ["8001:8000"]
+    depends_on:
+      db: { condition: service_healthy }
+
+  ingestion:
+    build: ./services/ingestion
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8002:8000"]
+
+  web:
+    build: ./web
+    environment:
+      CUSTOMER_DATABASE_URL: postgresql://uw:uw@db:5432/customer
+      POLICY_DATABASE_URL: postgresql://uw:uw@db:5432/policy
+      RATING_SERVICE_URL: http://rating:8000
+      INGESTION_SERVICE_URL: http://ingestion:8000
+    ports: ["3000:3000"]
+    depends_on:
+      db: { condition: service_healthy }
+      rating: { condition: service_started }
+      ingestion: { condition: service_started }
+
+volumes:
+  pgdata:
