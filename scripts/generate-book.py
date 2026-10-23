@@ -1,0 +1,106 @@
+"""Generate the seeded in-force book: policies each underwriter already wrote in the prior policy system.
+
+    python3 scripts/generate-book.py > web/migrations/policy/004_book_policies.sql
+
+The UW Desktop has only written a few policies itself, so without this the home page would have no
+book and no renewals. Rows are deterministic (fixed seed). Dates are relative to the day the
+migration runs (CURRENT_DATE + n), so renewals are always upcoming in a fresh demo. All names are
+fictitious.
+"""
+import random
+
+rng = random.Random(20261023)
+
+UNDERWRITERS = [f"underwriter{i}" for i in range(1, 10)]
+
+# class code -> (description, trade words for names, premium range)
+CLASSES = {
+    "91342": ("Carpentry - residential (interior finish)", ["Finish Carpentry", "Millwork", "Cabinet & Trim"], (6_000, 40_000)),
+    "91560": ("Concrete construction (flatwork, foundations)", ["Concrete", "Flatwork", "Foundations"], (15_000, 140_000)),
+    "91583": ("General contractor - remodel / renovation", ["Builders", "Construction", "Renovations"], (40_000, 420_000)),
+    "92215": ("Electrical work - within buildings", ["Electric", "Electrical Contractors", "Power & Lighting"], (12_000, 110_000)),
+    "97050": ("HVAC systems - commercial", ["Mechanical", "Air Systems", "HVAC Services"], (8_000, 75_000)),
+    "98304": ("Painting - exterior / interior", ["Painting", "Coatings", "Painting & Restoration"], (5_000, 45_000)),
+    "98482": ("Plumbing - commercial and industrial", ["Plumbing", "Pipe & Mechanical", "Plumbing Services"], (15_000, 160_000)),
+    "98677": ("Roofing - residential", ["Roofing", "Roof Systems", "Exteriors"], (30_000, 260_000)),
+}
+
+STATES = ["TX", "FL", "GA", "SC", "AZ", "NV", "CO", "WY", "WA", "NY", "NJ"]
+NEIGHBORS = {"TX": ["TX"], "FL": ["FL", "GA"], "GA": ["GA", "SC"], "SC": ["SC", "GA"], "AZ": ["AZ", "NV"],
+             "NV": ["NV", "AZ"], "CO": ["CO", "WY"], "WY": ["WY", "CO"], "WA": ["WA"], "NY": ["NY", "NJ"], "NJ": ["NJ", "NY"]}
+PLACES = {
+    "TX": ["Brazos", "Hill Country", "Gulf Plains", "Pecos", "Trinity"], "FL": ["Suncoast", "Palm Harbor", "Everglades", "Gulf Breeze"],
+    "GA": ["Chattahoochee", "Savannah River", "Blue Ridge"], "SC": ["Palmetto", "Lowcountry", "Congaree"],
+    "AZ": ["Saguaro", "Mesa Verde", "Red Rock", "Sonoran"], "NV": ["Silver State", "High Desert", "Tahoe"],
+    "CO": ["Summit", "Pikes Peak", "Front Range", "Aspen Grove"], "WY": ["Wind River", "Teton", "Bighorn"],
+    "WA": ["Cascade", "Olympic", "Puget", "Rainier"], "NY": ["Hudson", "Empire", "Adirondack", "Finger Lakes"],
+    "NJ": ["Garden State", "Pinelands", "Raritan"],
+}
+PRODUCERS = ["Alamo Specialty Brokers", "Big Sky Brokerage Group", "Catskill Specialty Agency", "Copper State Insurance Group",
+             "Coral Gables Excess & Surplus", "Desert Peak Insurance Services", "Evergreen Wholesale Brokers",
+             "Front Range Wholesale", "Hill Country Insurance Partners", "Lowcountry Wholesale Insurance",
+             "Metro Excess & Surplus", "Puget Sound E&S", "Southern Risk Advisors", "Sunshine State Brokerage",
+             "Turnpike Risk Partners"]
+ENTITY = ["LLC", "Inc.", "Co.", "Group LLC", "Corp."]
+
+
+def q(s: str) -> str:
+    return "'" + s.replace("'", "''") + "'"
+
+
+rows, used, n = [], set(), 0
+for uw in UNDERWRITERS:
+    # Each underwriter: 10-14 policies; at least 3 expire within 90 days so every desk has renewals to work.
+    count = rng.randint(10, 14)
+    offsets = [rng.randint(6, 30), rng.randint(31, 60), rng.randint(61, 90)] + [rng.randint(5, 365) for _ in range(count - 3)]
+    for days in offsets:
+        code = rng.choice(list(CLASSES))
+        desc, trades, (lo, hi) = CLASSES[code]
+        home = rng.choice(STATES)
+        while True:
+            name = f"{rng.choice(PLACES[home])} {rng.choice(trades)} {rng.choice(ENTITY)}"
+            if name not in used:
+                used.add(name)
+                break
+        states = NEIGHBORS[home][: rng.randint(1, len(NEIGHBORS[home]))]
+        premium = round(rng.uniform(lo, hi) / 100) * 100
+        claims = rng.choices([0, 1, 2, 3, 4], weights=[45, 25, 15, 10, 5])[0]
+        # Most books run a 30-60% loss ratio; a few accounts are much worse.
+        incurred = 0 if claims == 0 else round(premium * rng.choice([0.05, 0.15, 0.3, 0.45, 0.7, 1.1, 1.6]) / 100) * 100
+        open_claims = 0 if claims == 0 else rng.choices([0, 1], weights=[70, 30])[0]
+        status = "in_progress" if days <= 45 and rng.random() < 0.35 else "not_started"
+        n += 1
+        rows.append(
+            f"({q(f'GL-25-{70000 + n:05d}')}, {q(name)}, {q(uw)}, {q(code)}, {q(desc)}, "
+            f"ARRAY[{', '.join(q(s) for s in states)}], {q(home)}, {q(rng.choice(PRODUCERS))}, "
+            f"CURRENT_DATE + {days - 365}, CURRENT_DATE + {days}, {premium}, {claims}, {incurred}, {open_claims}, {q(status)})"
+        )
+
+print("""-- In-force book each underwriter already wrote in the prior policy system (seeded, fictitious).
+-- Generated by scripts/generate-book.py; dates are relative to when this migration runs.
+-- Policies written in the UW Desktop itself live in the policies table; the home page shows both.
+CREATE TABLE book_policies (
+    id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    policy_number    text NOT NULL UNIQUE,
+    insured_name     text NOT NULL,
+    underwriter      text NOT NULL,
+    class_code       text NOT NULL,
+    class_description text NOT NULL,
+    states           text[] NOT NULL,
+    home_state       text NOT NULL,
+    producer         text NOT NULL,
+    effective_date   date NOT NULL,
+    expiration_date  date NOT NULL,
+    premium          numeric(12,2) NOT NULL,
+    claims           int NOT NULL DEFAULT 0,
+    incurred         numeric(12,2) NOT NULL DEFAULT 0,
+    open_claims      int NOT NULL DEFAULT 0,
+    renewal_status   text NOT NULL DEFAULT 'not_started'
+                     CHECK (renewal_status IN ('not_started', 'in_progress', 'renewed', 'non_renewed'))
+);
+CREATE INDEX book_policies_underwriter ON book_policies (underwriter, expiration_date);
+
+INSERT INTO book_policies (policy_number, insured_name, underwriter, class_code, class_description, states, home_state,
+                           producer, effective_date, expiration_date, premium, claims, incurred, open_claims, renewal_status)
+VALUES""")
+print(",\n".join(rows) + ";")
