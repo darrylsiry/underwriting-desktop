@@ -71,3 +71,26 @@ read this to replay the build quickly.
   - Unrateable input (unknown class, state, or limit; mod out of bounds) returns 422 with a readable message.
 - **Dead ends / gotchas:** none significant. Hand-check expected premiums carefully in tests (49,738.26 rounds to 49,738).
 - **How to show it:** http://localhost:8001/docs (Swagger), then POST /rate with the Lone Star Electric example from `tests/test_api.py`. All 8 sample risks rate between about $6K and $400K total.
+
+## step-04: Rating admin UI — versioned, audited rate-table edits
+- **Prompt used:** "Add a rate-table admin UI to the rating service at /admin: clone the active version into a draft, edit each rating variable's table (class rates, every factor, fees/taxes/mod bounds) with changes highlighted against the source version, preview the premium impact on the 8 sample risks, and activate the draft. Audit every change with who/what/before/after."
+- **What was built:**
+  - Admin JSON API under `/admin/api` (create draft, replace one variable's table, impact preview, activate, audit trail) and a single-page UI at `/admin`, both served by the rating service.
+  - Only drafts are editable. Activating one retires the current active version in the same transaction. Every change writes a `rate_table_audit` row with actor (`X-User` header), summary (`TX: 1.1 → 1.21`), and before/after rows.
+  - The impact preview rates a fixed "benchmark book" (the 8 sample risks) on the draft vs. the active version, without writing to `rating_log`.
+  - 4 new API tests (16 total).
+- **Files:** `services/rating/migrations/003_admin_audit.sql`, `services/rating/app/{admin.py,benchmark_risks.json,static/admin.html}`, `services/rating/app/main.py` (router), `services/rating/tests/{conftest.py,test_admin.py}`, `services/rating/tests/test_api.py` (fixture moved to conftest)
+- **Commit:** `step-04: ...`
+- **Decisions:**
+  - The UI is one static HTML file with vanilla JS, served by FastAPI. No build step, no new dependencies, and it stays clearly "a second UI on a separate service".
+  - Edits are **per variable**: `PUT /admin/api/versions/{id}/factors/{factor}` (or `/classes`, `/parameters`) replaces that whole table. This matches the tabbed UI, keeps adding/removing bands simple, and gives one audit row per save. Saving an unchanged table is a no-op (no audit row).
+  - Numbers are compared canonically (`1.60` == `"1.6"`), so the summaries and no-op detection don't trip over formatting.
+  - `rate_versions.based_on` records the clone source. The UI highlights changed cells (with "was …"), added rows, and removed rows against it, and puts a dot on changed tabs.
+  - Validation: factors > 0; band keys must be numeric; schedule/experience mod bounds must stay present and bracket 1.0; duplicate keys rejected; labels unique. Removing a class is allowed, and the impact preview then shows the affected risk as unrateable.
+  - `benchmark_risks.json` was generated once from `samples/ground_truth/*.json` (nulls dropped so engine defaults apply), because the rating service's Docker context can't see `samples/`.
+  - Drafts can already be rated with `POST /rate {"rate_version_id": N}`, so quotes can be test-priced before activation.
+- **Dead ends / gotchas:**
+  - The DB `client` fixture had to move to `tests/conftest.py` with session scope. Importing a module-scoped fixture into a second test file reopens the closed global pool (`PoolClosed`).
+  - `test_admin` activates 2026.2, and the step-03 tests expect 2026.1. A fixture flips 2026.1 back to active after that test.
+  - Don't re-render the table on every input `change` event, because it steals focus when you tab between cells. Highlights refresh on save.
+- **How to show it:** open http://localhost:8001/admin. Click **+ New draft** (label `2026.2`, note "Texas +10%"). Open the **Territory** tab, change TX 1.1 → 1.21 and NY 1.6 → 1.68, then **Save**: the cells turn yellow with "was 1.1". Click **Preview impact**: Lone Star Electric +10.0%, Empire Builders +5.0%, book +2.8%. Click **Activate**: 2026.1 is retired, and the change history shows each step with who made it.

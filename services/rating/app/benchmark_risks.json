@@ -1,0 +1,139 @@
+[
+ {
+  "case": "01-lone-star-electric",
+  "name": "Lone Star Electrical Services LLC",
+  "class_code": "92215",
+  "gross_receipts": 6800000,
+  "states": [
+   "TX"
+  ],
+  "home_state": "TX",
+  "occurrence_limit": 1000000,
+  "aggregate_limit": 2000000,
+  "deductible": 5000,
+  "residential_pct": 0,
+  "subcontracted_pct": 10,
+  "subcontractor_coi_required": true,
+  "max_height_ft": 30
+ },
+ {
+  "case": "02-gulf-coast-roofing",
+  "name": "Gulf Coast Roofing & Restoration Inc.",
+  "class_code": "98677",
+  "gross_receipts": 4200000,
+  "states": [
+   "FL",
+   "GA"
+  ],
+  "home_state": "FL",
+  "occurrence_limit": 1000000,
+  "aggregate_limit": 2000000,
+  "deductible": 10000,
+  "residential_pct": 90,
+  "subcontracted_pct": 45,
+  "subcontractor_coi_required": false,
+  "max_height_ft": 40
+ },
+ {
+  "case": "03-peachtree-plumbing",
+  "name": "Peachtree Commercial Plumbing Co.",
+  "class_code": "98482",
+  "gross_receipts": 11500000,
+  "states": [
+   "GA",
+   "SC"
+  ],
+  "home_state": "GA",
+  "occurrence_limit": 2000000,
+  "aggregate_limit": 4000000,
+  "deductible": 5000,
+  "residential_pct": 0,
+  "subcontracted_pct": 15,
+  "subcontractor_coi_required": true,
+  "max_height_ft": 0
+ },
+ {
+  "case": "04-cascade-carpentry",
+  "name": "Cascade Finish Carpentry LLC",
+  "class_code": "91342",
+  "gross_receipts": 2300000,
+  "states": [
+   "WA"
+  ],
+  "home_state": "WA",
+  "occurrence_limit": 1000000,
+  "aggregate_limit": 2000000,
+  "deductible": 2500,
+  "residential_pct": 100,
+  "subcontracted_pct": 5,
+  "subcontractor_coi_required": true,
+  "max_height_ft": 12
+ },
+ {
+  "case": "05-desert-bloom-painting",
+  "name": "Desert Bloom Painting",
+  "class_code": "98304",
+  "gross_receipts": 650000,
+  "states": [
+   "AZ"
+  ],
+  "home_state": "AZ",
+  "occurrence_limit": 1000000,
+  "aggregate_limit": 2000000,
+  "residential_pct": 100
+ },
+ {
+  "case": "06-empire-builders-gc",
+  "name": "Empire Builders Group Inc.",
+  "class_code": "91583",
+  "gross_receipts": 18500000,
+  "states": [
+   "NY",
+   "NJ"
+  ],
+  "home_state": "NY",
+  "occurrence_limit": 1000000,
+  "aggregate_limit": 2000000,
+  "deductible": 25000,
+  "residential_pct": 20,
+  "subcontracted_pct": 75,
+  "subcontractor_coi_required": true,
+  "max_height_ft": 85
+ },
+ {
+  "case": "07-sonoran-concrete",
+  "name": "Sonoran Concrete Contractors LLC",
+  "class_code": "91560",
+  "gross_receipts": 9200000,
+  "states": [
+   "AZ",
+   "NV"
+  ],
+  "home_state": "AZ",
+  "occurrence_limit": 1000000,
+  "aggregate_limit": 2000000,
+  "deductible": 5000,
+  "residential_pct": 25,
+  "subcontracted_pct": 20,
+  "subcontractor_coi_required": true,
+  "max_height_ft": 0
+ },
+ {
+  "case": "08-front-range-hvac",
+  "name": "Front Range Mechanical & HVAC Inc.",
+  "class_code": "97050",
+  "gross_receipts": 7400000,
+  "states": [
+   "CO",
+   "WY"
+  ],
+  "home_state": "CO",
+  "occurrence_limit": 1000000,
+  "aggregate_limit": 2000000,
+  "deductible": 2500,
+  "residential_pct": 10,
+  "subcontracted_pct": 12,
+  "subcontractor_coi_required": true,
+  "max_height_ft": 45
+ }
+]

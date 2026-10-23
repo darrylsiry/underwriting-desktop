@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from app import db, repository
+from app import admin, db, repository
 from app.engine import RatingError, RatingInput, RatingResult, rate
 
 
@@ -16,6 +16,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Rating Service", description="Contractors GL rating engine", lifespan=lifespan)
+app.include_router(admin.router)
 
 
 @app.get("/health")

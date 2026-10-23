@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rate tables · Admin</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #fff; --ink: #1d2433; --muted: #667085; --line: #e4e7ec;
+    --accent: #2f5bea; --accent-ink: #fff; --changed: #fff4d6; --changed-line: #f5c451;
+    --up: #b42318; --down: #067647; --draft: #b54708; --active: #067647; --retired: #667085;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: var(--bg); }
+  header { display: flex; align-items: center; gap: 16px; padding: 12px 20px; background: #101828; color: #fff; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header .sub { color: #98a2b3; }
+  header label { margin-left: auto; color: #d0d5dd; font-size: 13px; }
+  header input { margin-left: 6px; background: #1d2939; border: 1px solid #344054; color: #fff; border-radius: 6px; padding: 4px 8px; width: 170px; }
+  main { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; padding: 16px 20px; align-items: start; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0; padding: 12px 14px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .versions button.v { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); background: none; padding: 10px 14px; cursor: pointer; font: inherit; color: inherit; }
+  .versions button.v:hover { background: #f9fafb; }
+  .versions button.v.sel { background: #eef2ff; box-shadow: inset 3px 0 var(--accent); }
+  .versions .meta { color: var(--muted); font-size: 12px; }
+  .pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; text-transform: uppercase; letter-spacing: .03em; margin-left: 6px; }
+  .pill.draft { color: var(--draft); } .pill.active { color: var(--active); } .pill.retired { color: var(--retired); }
+  button.btn { font: inherit; font-size: 13px; text-transform: none; letter-spacing: 0; border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+  button.btn:hover:not(:disabled) { border-color: #98a2b3; }
+  button.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button.btn:disabled { opacity: .45; cursor: default; }
+  .vhead { padding: 14px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+  .vhead .title { font-size: 18px; font-weight: 600; }
+  .vhead .notes { color: var(--muted); width: 100%; font-size: 13px; }
+  .vhead .actions { margin-left: auto; display: flex; gap: 8px; }
+  .banner { padding: 8px 16px; background: #f2f4f7; color: var(--muted); font-size: 13px; border-bottom: 1px solid var(--line); }
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 12px 0; border-bottom: 1px solid var(--line); }
+  .tabs button { font: inherit; border: 0; background: none; padding: 6px 10px 8px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; }
+  .tabs button.sel { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .tabs .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--changed-line); margin-left: 6px; vertical-align: middle; pointer-events: none; }
+  .editor { padding: 12px 16px 16px; overflow-x: auto; }
+  .editor .hint { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
+  table { border-collapse: collapse; width: 100%; }
+  th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 4px 8px; border-bottom: 1px solid #f2f4f7; vertical-align: middle; }
+  td.num, th.num { text-align: right; }
+  td input { font: inherit; width: 100%; min-width: 70px; border: 1px solid transparent; border-radius: 5px; padding: 4px 6px; background: transparent; color: inherit; }
+  td input.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td input:not([readonly]) { border-color: var(--line); background: #fff; }
+  td input:focus { outline: 2px solid #c7d7fe; border-color: var(--accent); }
+  td.changed { background: var(--changed); }
+  td.changed input { border-color: var(--changed-line); }
+  .was { font-size: 11px; color: var(--draft); white-space: nowrap; }
+  tr.added td { background: #ecfdf3; }
+  .rowbtn { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 4px; }
+  .rowbtn:hover { color: var(--up); }
+  .toolbar { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+  .toolbar .spacer { flex: 1; }
+  .side { display: grid; gap: 16px; min-width: 0; }
+  .impact td { font-variant-numeric: tabular-nums; padding: 7px 8px; }
+  .up { color: var(--up); font-weight: 600; } .down { color: var(--down); font-weight: 600; }
+  .err { color: var(--up); font-size: 12px; }
+  .audit { list-style: none; margin: 0; padding: 0; }
+  .audit li { padding: 10px 16px; border-bottom: 1px solid #f2f4f7; }
+  .audit .who { color: var(--muted); font-size: 12px; }
+  .audit .act { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--accent); margin-right: 6px; }
+  .empty { padding: 14px 16px; color: var(--muted); }
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #101828; color: #fff; padding: 10px 16px; border-radius: 8px; max-width: 70vw; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #toast.show { opacity: 1; } #toast.bad { background: var(--up); }
+  dialog { border: 1px solid var(--line); border-radius: 10px; padding: 18px; width: 360px; max-width: calc(100vw - 32px); }
+  dialog label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  dialog input, dialog select { font: inherit; width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
+  dialog .toolbar { justify-content: flex-end; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 16px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Rate tables</h1><span class="sub">Contractors GL · rating service admin</span>
+  <label>Signed in as <input id="user" autocomplete="off"></label>
+</header>
+
+<main>
+  <div class="side">
+    <section class="panel versions">
+      <h2>Versions <button class="btn" id="newDraft">+ New draft</button></h2>
+      <div id="versionList"></div>
+    </section>
+  </div>
+
+  <div class="side">
+    <section class="panel" id="versionPanel"><div class="empty">Loading…</div></section>
+    <section class="panel impact" id="impactPanel" hidden></section>
+    <section class="panel">
+      <h2 id="auditTitle">Change history</h2>
+      <ul class="audit" id="auditList"></ul>
+    </section>
+  </div>
+</main>
+
+<dialog id="draftDialog">
+  <form method="dialog">
+    <strong>New draft version</strong>
+    <label for="dLabel">Label</label><input id="dLabel" required placeholder="e.g. 2026.2">
+    <label for="dFrom">Copy rates from</label><select id="dFrom"></select>
+    <label for="dNotes">Notes (why are rates changing?)</label><input id="dNotes" placeholder="e.g. Texas territory +10%">
+    <div class="toolbar"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="ok">Create draft</button></div>
+  </form>
+</dialog>
+<div id="toast"></div>
+
+<script>
+const API = "/admin/api";
+const FACTOR_NAMES = {
+  territory: ["Territory", "State"], ilf: ["Increased limits", "Occurrence / aggregate"],
+  deductible: ["Deductible", "From $"], residential_pct: ["Residential share", "From %"],
+  subcontracted_pct: ["Subcontracted share", "From %"], no_sub_coi: ["Uninsured subs", "Condition"],
+  height_ft: ["Working height", "From ft"],
+};
+const HINTS = {
+  exact: "Matched exactly against the rating input. Territory uses the worst state of operation.",
+  band: "Bands: each row applies from its lower bound up to the next row. Keep a row starting at 0.",
+  classes: "Base premium = base rate × gross receipts / 1,000, floored at the class minimum premium.",
+  parameters: "Mod bounds limit what underwriters can apply. sl_tax.XX is the surplus lines tax rate for home state XX.",
+};
+
+// rows: the working copy of the selected section's table (edits live here until saved)
+const state = { versions: [], current: null, base: null, tab: "classes", rows: null };
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const money = (n) => n == null ? "—" : "$" + Math.round(n).toLocaleString();
+const user = () => $("user").value.trim() || "admin";
+
+try { $("user").value = localStorage.getItem("rateAdminUser") || "uw.manager"; } catch { $("user").value = "uw.manager"; }
+$("user").addEventListener("change", () => { try { localStorage.setItem("rateAdminUser", user()); } catch {} });
+
+async function api(path, opts = {}) {
+  const res = await fetch(API + path, { ...opts, headers: { "Content-Type": "application/json", "X-User": user() } });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const d = body?.detail;
+    throw new Error(Array.isArray(d) ? d.map((e) => `${e.loc.slice(-2).join(" ")}: ${e.msg}`).join("; ") : d || res.statusText);
+  }
+  return body;
+}
+
+function toast(msg, bad = false) {
+  const t = $("toast"); t.textContent = msg; t.className = "show" + (bad ? " bad" : "");
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => (t.className = ""), bad ? 6000 : 4000);
+}
+
+// --- sections: one editable table per rating variable ------------------------
+const order = (f) => { const i = Object.keys(FACTOR_NAMES).indexOf(f); return i < 0 ? 99 : i; }; // worksheet order
+
+function sections(v) {
+  return [
+    { id: "classes", name: "Class rates", key: "class_code", hint: HINTS.classes, path: "/classes", rows: v.classes,
+      cols: [["class_code", "Class"], ["description", "Description"], ["base_rate", "Base rate / $1K", true], ["min_premium", "Min premium", true]] },
+    ...Object.entries(v.factors).sort(([a], [b]) => order(a) - order(b)).map(([f, t]) => ({
+      id: "factor:" + f, name: (FACTOR_NAMES[f] || [f])[0], key: "key", hint: HINTS[t.kind], path: "/factors/" + f, rows: t.entries,
+      cols: [["key", (FACTOR_NAMES[f] || [, "Key"])[1]], ["value", "Factor", true], ["label", "Label"]] })),
+    { id: "parameters", name: "Fees, taxes & mod bounds", key: "name", hint: HINTS.parameters, path: "/parameters", rows: v.parameters,
+      cols: [["name", "Name"], ["value", "Value", true], ["label", "Label"]] },
+  ];
+}
+const section = (v, id) => v && sections(v).find((s) => s.id === id);
+const differs = (a, b, num) => num ? Number(a) !== Number(b) : String(a ?? "") !== String(b ?? "");
+const plain = (rows) => rows.map(({ _new, ...r }) => r);
+const isDirty = (sec) => JSON.stringify(plain(state.rows).map((r) => sec.cols.map(([c]) => String(r[c] ?? ""))))
+                     !== JSON.stringify(sec.rows.map((r) => sec.cols.map(([c]) => String(r[c] ?? ""))));
+
+function changedVsBase(sec, baseSec) {
+  if (!baseSec) return false;
+  const base = Object.fromEntries(baseSec.rows.map((r) => [r[sec.key], r]));
+  return sec.rows.length !== baseSec.rows.length ||
+    sec.rows.some((r) => !base[r[sec.key]] || sec.cols.some(([c, , num]) => differs(r[c], base[r[sec.key]][c], num)));
+}
+
+// --- rendering --------------------------------------------------------------
+function renderVersions() {
+  $("versionList").innerHTML = state.versions.map((v) => `
+    <button class="v ${state.current?.version.id === v.id ? "sel" : ""}" data-id="${v.id}">
+      <strong>${esc(v.label)}</strong><span class="pill ${v.status}">${v.status}</span>
+      <div class="meta">${v.based_on_label ? "from " + esc(v.based_on_label) + " · " : ""}${esc(v.created_by)} · ${new Date(v.created_at).toLocaleDateString()}</div>
+    </button>`).join("");
+}
+
+function renderVersion() {
+  const v = state.current.version;
+  const editable = v.status === "draft";
+  const sec = section(state.current, state.tab) || section(state.current, (state.tab = "classes"));
+  const baseSec = section(state.base, sec.id);
+  const base = baseSec && Object.fromEntries(baseSec.rows.map((r) => [r[sec.key], r]));
+  if (!state.rows) state.rows = sec.rows.map((r) => ({ ...r }));
+
+  const cell = (r, i, [c, , num]) => {
+    const b = base?.[r[sec.key]];
+    const changed = b && differs(r[c], b[c], num);
+    const readonly = !editable || (c === sec.key && !r._new);
+    return `<td class="${num ? "num" : ""} ${changed ? "changed" : ""}">
+      <input class="${num ? "num" : ""}" data-i="${i}" data-c="${c}" value="${esc(r[c])}" ${readonly ? "readonly" : ""} aria-label="${c}">
+      ${changed ? `<div class="was">was ${esc(b[c])}</div>` : ""}</td>`;
+  };
+  const removed = baseSec ? baseSec.rows.filter((r) => !state.rows.some((x) => x[sec.key] === r[sec.key])) : [];
+  const dirty = isDirty(sec);
+
+  $("versionPanel").innerHTML = `
+    <div class="vhead">
+      <span class="title">${esc(v.label)}</span><span class="pill ${v.status}">${v.status}</span>
+      <div class="actions">
+        ${editable || state.base ? `<button class="btn" id="impactBtn">${editable ? "Preview impact" : "Impact vs " + esc(state.base.version.label)}</button>` : ""}
+        ${editable ? `<button class="btn primary" id="activateBtn">Activate</button>` : ""}
+      </div>
+      <div class="notes">${esc(v.notes) || "No notes"}${state.base ? ` · changes highlighted vs <strong>${esc(state.base.version.label)}</strong>` : ""}</div>
+    </div>
+    ${editable ? "" : `<div class="banner">${v.status === "active" ? "This is the live version used for all new ratings." : "Retired version, kept so earlier quotes can be reproduced."} It is read-only; create a draft to change rates.</div>`}
+    <div class="tabs">${sections(state.current).map((s) => `<button data-tab="${s.id}" class="${s.id === sec.id ? "sel" : ""}">${esc(s.name)}${changedVsBase(s, section(state.base, s.id)) ? '<span class="dot" title="Changed"></span>' : ""}</button>`).join("")}</div>
+    <div class="editor">
+      <p class="hint">${esc(sec.hint)}</p>
+      <table>
+        <thead><tr>${sec.cols.map(([, label, num]) => `<th class="${num ? "num" : ""}">${label}</th>`).join("")}${editable ? "<th></th>" : ""}</tr></thead>
+        <tbody>
+          ${state.rows.map((r, i) => `<tr class="${base && !base[r[sec.key]] ? "added" : ""}">${sec.cols.map((c) => cell(r, i, c)).join("")}
+            ${editable ? `<td><button class="rowbtn" data-del="${i}" title="Remove row">×</button></td>` : ""}</tr>`).join("")}
+          ${removed.map((r) => `<tr><td colspan="${sec.cols.length + (editable ? 1 : 0)}" class="was">removed: ${sec.cols.map(([c]) => esc(r[c])).join(" · ")}</td></tr>`).join("")}
+        </tbody>
+      </table>
+      ${editable ? `<div class="toolbar"><button class="btn" id="addRow">+ Add row</button><span class="spacer"></span>
+        <button class="btn" id="revert" ${dirty ? "" : "disabled"}>Discard changes</button>
+        <button class="btn primary" id="save" ${dirty ? "" : "disabled"}>Save ${esc(sec.name.toLowerCase())}</button></div>` : ""}
+    </div>`;
+}
+
+function renderImpact(data) {
+  const p = $("impactPanel"); p.hidden = false;
+  const pct = (x) => x == null ? "—" : `<span class="${x > 0 ? "up" : x < 0 ? "down" : ""}">${x > 0 ? "+" : ""}${Number(x).toFixed(1)}%</span>`;
+  p.innerHTML = `<h2>Impact on the sample book · ${esc(data.version)} vs ${esc(data.against)} <button class="btn" id="closeImpact">Close</button></h2>
+    <div class="editor"><table>
+      <thead><tr><th>Risk</th><th>Class</th><th>States</th><th class="num">${esc(data.against)}</th><th class="num">${esc(data.version)}</th><th class="num">Change</th></tr></thead>
+      <tbody>${data.risks.map((r) => `<tr><td>${esc(r.name)}${r.error ? `<div class="err">${esc(r.error)}</div>` : ""}</td><td>${esc(r.class_code)}</td><td>${esc(r.states.join(", "))}</td>
+        <td class="num">${money(r.base_total)}</td><td class="num">${money(r.new_total)}</td><td class="num">${pct(r.change_pct)}</td></tr>`).join("")}
+      <tr><td colspan="3"><strong>Book total</strong> <span class="was" style="color:var(--muted)">premium + fee + SL tax</span></td><td class="num"><strong>${money(data.base_total)}</strong></td><td class="num"><strong>${money(data.new_total)}</strong></td><td class="num">${pct(data.change_pct)}</td></tr>
+      </tbody></table></div>`;
+  $("closeImpact").onclick = () => (p.hidden = true);
+}
+
+async function renderAudit() {
+  const v = state.current.version;
+  const items = await api(`/audit?version_id=${v.id}`);
+  $("auditTitle").textContent = `Change history · ${v.label}`;
+  $("auditList").innerHTML = items.length ? items.map((a) => `<li><span class="act">${esc(a.action.replace("_", " "))}</span>${esc(a.target === "version" ? "" : a.target.replace("factor:", "") + " · ")}${esc(a.summary)}
+    <div class="who">${esc(a.actor)} · ${new Date(a.created_at).toLocaleString()}</div></li>`).join("") : `<li class="empty">No changes recorded.</li>`;
+}
+
+// --- actions ----------------------------------------------------------------
+// Drafts are compared to the live version; older versions to the one they were cloned from.
+const impactPath = () => `/versions/${state.current.version.id}/impact` +
+  (state.current.version.status === "draft" ? "" : `?against=${state.current.version.based_on}`);
+
+async function loadVersions() { state.versions = await api("/versions"); renderVersions(); }
+
+async function selectVersion(id, keepTab = false) {
+  state.current = await api(`/versions/${id}`);
+  const baseId = state.current.version.based_on;
+  state.base = baseId ? await api(`/versions/${baseId}`) : null;
+  state.rows = null;
+  if (!keepTab) { state.tab = "classes"; $("impactPanel").hidden = true; }
+  renderVersions(); renderVersion(); renderAudit();
+}
+
+$("versionList").addEventListener("click", (e) => {
+  const b = e.target.closest("button.v"); if (b) selectVersion(+b.dataset.id);
+});
+
+$("versionPanel").addEventListener("click", async (e) => {
+  const t = e.target.closest("button"); if (!t) return;
+  const sec = section(state.current, state.tab);
+  if (t.dataset.tab) {
+    if (state.rows && isDirty(sec) && !confirm("Discard unsaved changes to " + sec.name + "?")) return;
+    state.tab = t.dataset.tab; state.rows = null; renderVersion();
+  } else if (t.dataset.del) {
+    state.rows.splice(+t.dataset.del, 1); renderVersion();
+  } else if (t.id === "addRow") {
+    state.rows.push({ ...Object.fromEntries(sec.cols.map(([c]) => [c, ""])), _new: true }); renderVersion();
+    $("versionPanel").querySelector(`input[data-i="${state.rows.length - 1}"]`)?.focus();
+  } else if (t.id === "revert") {
+    state.rows = null; renderVersion();
+  } else if (t.id === "save") {
+    try {
+      const res = await api(`/versions/${state.current.version.id}${sec.path}`, { method: "PUT", body: JSON.stringify({ entries: plain(state.rows) }) });
+      toast(res.changed ? "Saved · " + res.summary : "No changes to save");
+      await selectVersion(state.current.version.id, true);
+      if (!$("impactPanel").hidden) renderImpact(await api(impactPath()));
+    } catch (err) { toast(err.message, true); }
+  } else if (t.id === "impactBtn") {
+    try { renderImpact(await api(impactPath())); $("impactPanel").scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+    catch (err) { toast(err.message, true); }
+  } else if (t.id === "activateBtn") {
+    const active = state.versions.find((v) => v.status === "active");
+    if (!confirm(`Activate ${state.current.version.label}? All new ratings will use it${active ? ` and ${active.label} will be retired` : ""}.`)) return;
+    try {
+      const res = await api(`/versions/${state.current.version.id}/activate`, { method: "POST" });
+      toast(res.summary); await loadVersions(); await selectVersion(state.current.version.id, true);
+    } catch (err) { toast(err.message, true); }
+  }
+});
+
+$("versionPanel").addEventListener("input", (e) => {
+  const { i, c } = e.target.dataset; if (i === undefined) return;
+  state.rows[+i][c] = e.target.value;
+  const dirty = isDirty(section(state.current, state.tab));
+  $("save").disabled = $("revert").disabled = !dirty;
+});
+
+$("newDraft").onclick = () => {
+  $("dFrom").innerHTML = state.versions.map((v) => `<option value="${v.id}" ${v.status === "active" ? "selected" : ""}>${esc(v.label)} (${v.status})</option>`).join("");
+  $("dLabel").value = ""; $("dNotes").value = ""; $("draftDialog").showModal();
+};
+$("draftDialog").addEventListener("close", async () => {
+  if ($("draftDialog").returnValue !== "ok") return;
+  try {
+    const body = { label: $("dLabel").value.trim(), notes: $("dNotes").value.trim(), from_version_id: +$("dFrom").value };
+    const v = await api("/versions", { method: "POST", body: JSON.stringify(body) });
+    toast(`Draft ${v.version.label} created from ${$("dFrom").selectedOptions[0].text.split(" ")[0]}`);
+    await loadVersions(); await selectVersion(v.version.id);
+  } catch (err) { toast(err.message, true); }
+});
+
+(async () => {
+  try {
+    await loadVersions();
+    const first = state.versions.find((v) => v.status === "draft") || state.versions.find((v) => v.status === "active");
+    if (first) await selectVersion(first.id);
+  } catch (err) { $("versionPanel").innerHTML = `<div class="empty">Could not load rate versions: ${esc(err.message)}</div>`; }
+})();
+</script>
+</body>
+</html>
