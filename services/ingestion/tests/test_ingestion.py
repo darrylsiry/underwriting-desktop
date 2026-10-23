@@ -128,3 +128,11 @@ def test_extract_endpoint():
     assert body["fields"]["operations.gross_receipts"]["snippet"] == "GeneralLiability_Hazard_Exposure_A = $6,800,000"
     assert [d["doc_type"] for d in body["documents"]] == ["acord_application", "loss_run"]
     assert client.post("/extract", files=[("files", ("a.xlsx", b"x"))]).json()["warnings"][0].startswith("a.xlsx")
+
+
+def test_missing_class_list_is_reported(monkeypatch):
+    """CR-013: if the rating service's class list is unavailable, say so instead of silently dropping the guard."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setattr(claude, "extract", lambda docs, classes, **_: claude.ClaudeResult([], [], [], "fake", {}))
+    result = pipeline.run(case_files("05"), classes=[])
+    assert any("class list unavailable" in w for w in result["warnings"])

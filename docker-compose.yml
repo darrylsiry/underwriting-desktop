@@ -21,13 +21,20 @@ services:
     ports: ["8001:8000"]
     depends_on:
       db: { condition: service_healthy }
+    healthcheck:   # healthy once migrations ran and the active rate version loads
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 3s
+      retries: 20
 
   ingestion:
     build: ./services/ingestion
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       RATING_SERVICE_URL: http://rating:8000
+      EXTRACTION_MODEL: ${EXTRACTION_MODEL:-claude-opus-5-5}
     ports: ["8002:8000"]
+    depends_on:
+      rating: { condition: service_healthy }   # Claude may only pick rateable class codes from /classes
     volumes:
       - ./samples:/samples:ro   # for `python -m app.score /samples` and demo uploads
 
@@ -41,7 +48,7 @@ services:
     ports: ["3000:3000"]
     depends_on:
       db: { condition: service_healthy }
-      rating: { condition: service_started }
+      rating: { condition: service_healthy }
       ingestion: { condition: service_started }
 
 volumes:

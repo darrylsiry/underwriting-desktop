@@ -27,6 +27,8 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
     to_read = [d for d in docs if not d.has_form_fields]
     claude_info, notes = None, []
     if to_read and use_claude and claude.enabled():
+        if not classes:
+            warnings.append("Rating service class list unavailable; Claude's class code is unchecked against rateable classes")
         try:
             result = claude.extract(to_read, classes, known=list(candidates), known_losses=list(losses))
             candidates += result.fields
