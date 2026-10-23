@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { auditTrail } from "@/lib/audit";
+import { addYears, suggestedSubjectivities } from "@/lib/quote-terms";
+import { quotesForSubmission } from "@/lib/quotes";
 import { getSubmission } from "@/lib/submissions";
 import { currentUser } from "@/lib/user";
 import {
@@ -8,13 +10,13 @@ import {
 } from "@/lib/worksheet";
 import { money, openWorksheet, readiness } from "@/lib/worksheets";
 import { StatusBadge } from "../../status-badge";
-import { clearReferralAction, saveAndRateAction } from "./actions";
+import { clearReferralAction, issueQuoteAction, saveAndRateAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ msg?: string; error?: string }> };
 
-const WORKSHEET_ACTIONS = new Set(["worksheet.opened", "worksheet.input_changed", "worksheet.schedule_changed", "worksheet.rated", "referral.cleared"]);
+const WORKSHEET_ACTIONS = new Set(["worksheet.opened", "worksheet.input_changed", "worksheet.schedule_changed", "worksheet.rated", "referral.cleared", "quote.issued"]);
 
 export default async function WorkbenchPage({ params, searchParams }: Props) {
   const { id } = await params;
@@ -33,6 +35,11 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
   const ws = await openWorksheet(sub, await currentUser());
   const { flags, openReferrals, rated, ready } = readiness(sub, ws);
   const history = (await auditTrail("submission", id)).filter((h) => WORKSHEET_ACTIONS.has(h.action));
+  const quotes = await quotesForSubmission(id);
+  const latest = quotes[0];
+  const effective = latest?.effective_date ?? String(sub.data.policy?.effective_date ?? "");
+  const expiration = latest?.expiration_date ?? (effective ? addYears(effective, 1) : "");
+  const subjectivities = latest?.subjectivities ?? suggestedSubjectivities(flags, sub.data);
   const rating = ws.last_rating;
   const schedule = new Map(ws.schedule.map((s) => [s.category, s]));
   const total = scheduleTotal(ws.schedule);
@@ -109,6 +116,45 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
         </form>
 
         <aside className="space-y-6">
+          <Card title="Quote">
+            <div className="p-4">
+              {quotes.length > 0 && (
+                <ul className="mb-4 space-y-1 text-sm">
+                  {quotes.map((q) => (
+                    <li key={q.id} className={`flex items-center gap-2 ${q.status === "superseded" ? "text-slate-400" : ""}`}>
+                      <span className="font-mono text-xs">{q.quote_number} v{q.version}</span>
+                      <span className="text-xs">{q.status}</span>
+                      <span className="ml-auto tabular-nums">{money(q.total)}</span>
+                      <a href={`/quotes/${q.id}/pdf`} target="_blank" className="text-xs text-indigo-600 hover:underline">PDF</a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {ready ? (
+                <form action={issueQuoteAction.bind(null, id)} className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="flex flex-col gap-1 text-xs text-slate-500">Effective
+                      <input name="effective_date" defaultValue={effective} placeholder="YYYY-MM-DD" required className="rounded border border-slate-300 px-2 py-1 text-sm text-slate-900" />
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs text-slate-500">Expiration
+                      <input name="expiration_date" defaultValue={expiration} placeholder="YYYY-MM-DD" className="rounded border border-slate-300 px-2 py-1 text-sm text-slate-900" />
+                    </label>
+                  </div>
+                  <label className="flex flex-col gap-1 text-xs text-slate-500">Subjectivities (one per line)
+                    <textarea name="subjectivities" rows={4} defaultValue={subjectivities.join("\n")} className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-900" />
+                  </label>
+                  <button className="w-full rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
+                    {latest ? `Issue revised quote (v${latest.version + 1})` : `Issue quote · ${rating ? money(rating.total) : ""}`}
+                  </button>
+                </form>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  {!rated ? "Save & rate the current inputs to quote." : `Clear ${openReferrals.length} open referral${openReferrals.length === 1 ? "" : "s"} to quote.`}
+                </p>
+              )}
+            </div>
+          </Card>
+
           <Card title="Indicative premium">
             {rating ? (
               <div className="p-4">

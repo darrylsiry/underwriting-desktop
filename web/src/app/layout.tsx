@@ -37,6 +37,7 @@ export default async function RootLayout({
           <Link href="/" className="font-semibold">Underwriting Desktop</Link>
           <nav className="flex gap-4 text-slate-600">
             <Link href="/submissions" className="hover:text-slate-900">Submissions</Link>
+            <Link href="/quotes" className="hover:text-slate-900">Quotes</Link>
             <a href={RATING_ADMIN_URL} className="hover:text-slate-900">Rate tables</a>
           </nav>
           <form action={setUserAction} className="ml-auto flex items-center gap-2 text-slate-500">
