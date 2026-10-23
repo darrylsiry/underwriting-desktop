@@ -11,6 +11,7 @@ SAMPLES = Path(os.environ["SAMPLES_DIR"]) if "SAMPLES_DIR" in os.environ else Pa
 def no_claude(monkeypatch):
     """Tests never call the API; Claude parsing is tested with canned replies."""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("UW_ANTHROPIC_API_KEY", raising=False)
 
 
 def case_files(case: str) -> list[tuple[str, bytes]]:

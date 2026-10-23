@@ -101,8 +101,14 @@ class ExtractionError(RuntimeError):
     pass
 
 
+def api_key() -> str | None:
+    # The Claude Code cloud sandbox reserves ANTHROPIC_API_KEY and doesn't pass it into
+    # sessions, so the key is stored there as UW_ANTHROPIC_API_KEY. Compose and Fly use the standard name.
+    return os.environ.get("UW_ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY") or None
+
+
 def enabled() -> bool:
-    return bool(os.environ.get("ANTHROPIC_API_KEY"))
+    return api_key() is not None
 
 
 def _content_block(doc: Document) -> dict:
@@ -129,7 +135,7 @@ def extract(docs: list[Document], classes: list[dict], known: list[FieldValue] =
             known_losses: list[Loss] = ()) -> ClaudeResult:
     filenames = [d.filename for d in docs]
     class_list = "\n".join(f"- {c['class_code']}: {c['description']}" for c in classes) or "(class list unavailable)"
-    client = anthropic.Anthropic(timeout=300.0)
+    client = anthropic.Anthropic(api_key=api_key(), timeout=300.0)
     try:
         response = client.beta.messages.create(
             model=MODEL,
