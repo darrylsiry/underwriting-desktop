@@ -31,3 +31,25 @@ read this to replay the build quickly.
   - Use `scripts/cloud-sandbox-build.sh`, which injects the proxy CA into temporary Dockerfile copies.
   - Stop the sandbox's own Postgres (`service postgresql stop`) so port 5432 is free.
 - **How to show it:** `docker compose up --build`, open http://localhost:3000. Four green status cards.
+
+## step-02: Synthetic submission generator
+- **Prompt used:** "Generate about 8 realistic E&S contractors GL submissions in mixed formats (fillable ACORD-style 125/126 PDFs, a flattened scan-style PDF, broker emails, a supplemental questionnaire, a Word application, loss runs) plus a ground-truth JSON for each."
+- **What was built:** `samples/cases.py` holds the ground-truth data for 8 risks. `samples/generate.py` renders it into broker-style documents under `samples/submissions/<case>/` and writes `samples/ground_truth/<case>.json`.
+- **Files:** `samples/{cases.py,generate.py,README.md}`, `samples/submissions/**`, `samples/ground_truth/*.json`
+- **Commit:** `step-02: ...`
+- **Decisions:**
+  - Canonical submission schema (used by ingestion, web, and rating):
+    - `applicant{name,dba,street,city,state,zip,fein,entity_type,years_in_business,website}`
+    - `producer{agency,contact,email,phone}`
+    - `policy{effective_date,expiration_date,occurrence_limit,aggregate_limit,products_aggregate_limit,deductible}`
+    - `operations{description,class_code,states[],gross_receipts,payroll,employees,subcontracted_pct,subcontractor_coi_required,residential_pct,new_construction_pct,max_height_ft,wrap_up_projects}`
+    - `loss_history[{date,description,incurred,status}]`
+    - `prior{carrier,premium}`
+    - Dates are ISO, money is whole dollars, percentages are 0–100.
+  - Fillable PDFs use ACORD-like AcroForm field names (`NamedInsured_FullName_A`, `GeneralLiability_Hazard_Exposure_A`, ...), so ingestion can map them deterministically.
+  - Class codes are ISO-like but illustrative: 92215 electrical, 98677 residential roofing, 98482 commercial plumbing, 91342 residential carpentry, 98304 painting, 91583 GC/remodel, 91560 concrete, 97050 HVAC.
+  - Generated files are committed so the demo doesn't depend on running the generator.
+- **Dead ends / gotchas:**
+  - ReportLab's appearance stream for the long multiline description field shows on one line in some viewers. The field value is complete, so extraction is unaffected.
+  - Run the generator with `uv run --with ...`; it isn't part of any service's dependencies.
+- **How to show it:** open `samples/submissions/01-lone-star-electric/*.pdf` (a fillable form) next to `03-peachtree-plumbing` (flattened) and `05-desert-bloom-painting` (sparse email).

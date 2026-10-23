@@ -15,6 +15,7 @@ Code in the **live** repo. Claude there will pull the matching step from
 | # | Prompt to type | What they'll see |
 |---|----------------|------------------|
 | 01 | "Scaffold the monorepo from the plan: Next.js web app, FastAPI rating and ingestion services, one Postgres with customer/policy/rating DBs, docker compose, and a status page that health-checks everything." | Four services come up; status page shows all green |
+| 02 | "Generate ~8 realistic contractors GL submissions in mixed formats (fillable ACORD-style PDFs, a flattened PDF, broker emails, a questionnaire, a Word app, loss runs) with ground-truth JSON for each." | A folder of broker-style documents that look real |
 
 ## Things to show off along the way
 - Plan mode before a bigger change

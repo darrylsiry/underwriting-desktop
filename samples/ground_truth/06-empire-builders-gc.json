@@ -1,0 +1,63 @@
+{
+  "applicant": {
+    "name": "Empire Builders Group Inc.",
+    "dba": "",
+    "street": "36-12 Northern Blvd",
+    "city": "Long Island City",
+    "state": "NY",
+    "zip": "11101",
+    "fein": "13-4489201",
+    "entity_type": "Corporation",
+    "years_in_business": 11,
+    "website": "empirebuildersgroup.example"
+  },
+  "producer": {
+    "agency": "Metro Excess & Surplus",
+    "contact": "David Klein",
+    "email": "dklein@metroes.example",
+    "phone": "212-555-0109"
+  },
+  "policy": {
+    "effective_date": "2026-12-01",
+    "expiration_date": "2027-12-01",
+    "occurrence_limit": 1000000,
+    "aggregate_limit": 2000000,
+    "products_aggregate_limit": 2000000,
+    "deductible": 25000
+  },
+  "operations": {
+    "description": "General contractor for interior renovations and gut rehabs of commercial and mixed-use buildings in New York City. Self-performs carpentry and demolition; subcontracts all trades including electrical, plumbing and some scaffolding.",
+    "class_code": "91583",
+    "states": [
+      "NY",
+      "NJ"
+    ],
+    "gross_receipts": 18500000,
+    "payroll": 2600000,
+    "employees": 30,
+    "subcontracted_pct": 75,
+    "subcontractor_coi_required": true,
+    "residential_pct": 20,
+    "new_construction_pct": 10,
+    "max_height_ft": 85,
+    "wrap_up_projects": false
+  },
+  "loss_history": [
+    {
+      "date": "2024-07-09",
+      "description": "Subcontractor employee fall from scaffold (Labor Law 240)",
+      "incurred": 410000,
+      "status": "Open"
+    },
+    {
+      "date": "2025-04-22",
+      "description": "Pedestrian struck by falling debris",
+      "incurred": 35000,
+      "status": "Closed"
+    }
+  ],
+  "prior": {
+    "carrier": "Hudson Specialty Insurance Co.",
+    "premium": 365000
+  }
+}

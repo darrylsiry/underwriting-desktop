@@ -1,0 +1,49 @@
+{
+  "applicant": {
+    "name": "Desert Bloom Painting",
+    "dba": "",
+    "street": "",
+    "city": "Phoenix",
+    "state": "AZ",
+    "zip": "",
+    "fein": "",
+    "entity_type": "",
+    "years_in_business": 3,
+    "website": ""
+  },
+  "producer": {
+    "agency": "Copper State Insurance Group",
+    "contact": "Lena Ruiz",
+    "email": "lruiz@copperstate.example",
+    "phone": "602-555-0181"
+  },
+  "policy": {
+    "effective_date": "2026-11-01",
+    "expiration_date": "2027-11-01",
+    "occurrence_limit": 1000000,
+    "aggregate_limit": 2000000,
+    "products_aggregate_limit": null,
+    "deductible": null
+  },
+  "operations": {
+    "description": "Exterior and interior residential painting, mostly repaints of single family homes and some HOA townhome communities.",
+    "class_code": "98304",
+    "states": [
+      "AZ"
+    ],
+    "gross_receipts": 650000,
+    "payroll": null,
+    "employees": 7,
+    "subcontracted_pct": null,
+    "subcontractor_coi_required": null,
+    "residential_pct": 100,
+    "new_construction_pct": null,
+    "max_height_ft": null,
+    "wrap_up_projects": null
+  },
+  "loss_history": [],
+  "prior": {
+    "carrier": "",
+    "premium": null
+  }
+}

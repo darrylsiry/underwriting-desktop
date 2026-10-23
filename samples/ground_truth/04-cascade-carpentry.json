@@ -1,0 +1,56 @@
+{
+  "applicant": {
+    "name": "Cascade Finish Carpentry LLC",
+    "dba": "",
+    "street": "1519 NW Leary Way",
+    "city": "Seattle",
+    "state": "WA",
+    "zip": "98107",
+    "fein": "91-2275504",
+    "entity_type": "LLC",
+    "years_in_business": 9,
+    "website": ""
+  },
+  "producer": {
+    "agency": "Evergreen Wholesale Brokers",
+    "contact": "Sam Okafor",
+    "email": "sokafor@evergreenwholesale.example",
+    "phone": "206-555-0163"
+  },
+  "policy": {
+    "effective_date": "2026-12-15",
+    "expiration_date": "2027-12-15",
+    "occurrence_limit": 1000000,
+    "aggregate_limit": 2000000,
+    "products_aggregate_limit": 2000000,
+    "deductible": 2500
+  },
+  "operations": {
+    "description": "Interior finish carpentry, custom cabinetry and millwork installation for high-end single family remodels. No framing or structural work.",
+    "class_code": "91342",
+    "states": [
+      "WA"
+    ],
+    "gross_receipts": 2300000,
+    "payroll": 780000,
+    "employees": 12,
+    "subcontracted_pct": 5,
+    "subcontractor_coi_required": true,
+    "residential_pct": 100,
+    "new_construction_pct": 0,
+    "max_height_ft": 12,
+    "wrap_up_projects": false
+  },
+  "loss_history": [
+    {
+      "date": "2025-02-14",
+      "description": "Damaged homeowner flooring during cabinet install",
+      "incurred": 12600,
+      "status": "Closed"
+    }
+  ],
+  "prior": {
+    "carrier": "Rainier Mutual Insurance",
+    "premium": 24800
+  }
+}

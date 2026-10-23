@@ -1,0 +1,50 @@
+{
+  "applicant": {
+    "name": "Front Range Mechanical & HVAC Inc.",
+    "dba": "Front Range HVAC",
+    "street": "5600 Pecos St",
+    "city": "Denver",
+    "state": "CO",
+    "zip": "80221",
+    "fein": "84-1928876",
+    "entity_type": "Corporation",
+    "years_in_business": 19,
+    "website": "frontrangehvac.example"
+  },
+  "producer": {
+    "agency": "Alpine Insurance Brokers",
+    "contact": "Rachel Kim",
+    "email": "rkim@alpinebrokers.example",
+    "phone": "303-555-0126"
+  },
+  "policy": {
+    "effective_date": "2027-01-15",
+    "expiration_date": "2028-01-15",
+    "occurrence_limit": 1000000,
+    "aggregate_limit": 2000000,
+    "products_aggregate_limit": 2000000,
+    "deductible": 2500
+  },
+  "operations": {
+    "description": "HVAC installation, service and maintenance contracts for commercial buildings, restaurants and light industrial. Rooftop unit replacement with crane lifts subcontracted.",
+    "class_code": "97050",
+    "states": [
+      "CO",
+      "WY"
+    ],
+    "gross_receipts": 7400000,
+    "payroll": 2800000,
+    "employees": 46,
+    "subcontracted_pct": 12,
+    "subcontractor_coi_required": true,
+    "residential_pct": 10,
+    "new_construction_pct": 30,
+    "max_height_ft": 45,
+    "wrap_up_projects": false
+  },
+  "loss_history": [],
+  "prior": {
+    "carrier": "Centennial Casualty Co.",
+    "premium": 58000
+  }
+}

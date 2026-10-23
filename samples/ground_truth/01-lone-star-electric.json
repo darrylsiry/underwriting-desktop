@@ -1,0 +1,56 @@
+{
+  "applicant": {
+    "name": "Lone Star Electrical Services LLC",
+    "dba": "",
+    "street": "4410 Industrial Blvd",
+    "city": "Austin",
+    "state": "TX",
+    "zip": "78744",
+    "fein": "74-3810922",
+    "entity_type": "LLC",
+    "years_in_business": 14,
+    "website": "lonestarelectricalsvc.example"
+  },
+  "producer": {
+    "agency": "Hill Country Insurance Partners",
+    "contact": "Maria Delgado",
+    "email": "mdelgado@hcip.example",
+    "phone": "512-555-0142"
+  },
+  "policy": {
+    "effective_date": "2026-12-01",
+    "expiration_date": "2027-12-01",
+    "occurrence_limit": 1000000,
+    "aggregate_limit": 2000000,
+    "products_aggregate_limit": 2000000,
+    "deductible": 5000
+  },
+  "operations": {
+    "description": "Commercial electrical contractor. Tenant finish-out wiring, panel upgrades and lighting retrofits for office and retail buildings. No residential work, no high-voltage utility work.",
+    "class_code": "92215",
+    "states": [
+      "TX"
+    ],
+    "gross_receipts": 6800000,
+    "payroll": 2100000,
+    "employees": 38,
+    "subcontracted_pct": 10,
+    "subcontractor_coi_required": true,
+    "residential_pct": 0,
+    "new_construction_pct": 35,
+    "max_height_ft": 30,
+    "wrap_up_projects": false
+  },
+  "loss_history": [
+    {
+      "date": "2024-03-18",
+      "description": "Customer tripped over cable at job site",
+      "incurred": 8200,
+      "status": "Closed"
+    }
+  ],
+  "prior": {
+    "carrier": "Bluebonnet Specialty Insurance Co.",
+    "premium": 61500
+  }
+}

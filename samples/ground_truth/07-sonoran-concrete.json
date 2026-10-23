@@ -1,0 +1,57 @@
+{
+  "applicant": {
+    "name": "Sonoran Concrete Contractors LLC",
+    "dba": "Sonoran Concrete",
+    "street": "3302 E Broadway Rd",
+    "city": "Mesa",
+    "state": "AZ",
+    "zip": "85204",
+    "fein": "86-3091174",
+    "entity_type": "LLC",
+    "years_in_business": 17,
+    "website": "sonoranconcrete.example"
+  },
+  "producer": {
+    "agency": "Copper State Insurance Group",
+    "contact": "Lena Ruiz",
+    "email": "lruiz@copperstate.example",
+    "phone": "602-555-0181"
+  },
+  "policy": {
+    "effective_date": "2027-02-01",
+    "expiration_date": "2028-02-01",
+    "occurrence_limit": 1000000,
+    "aggregate_limit": 2000000,
+    "products_aggregate_limit": 2000000,
+    "deductible": 5000
+  },
+  "operations": {
+    "description": "Flatwork and foundation concrete: slabs, sidewalks, curbs and parking lots for commercial and light industrial sites. Some residential foundations for regional home builders.",
+    "class_code": "91560",
+    "states": [
+      "AZ",
+      "NV"
+    ],
+    "gross_receipts": 9200000,
+    "payroll": 3100000,
+    "employees": 55,
+    "subcontracted_pct": 20,
+    "subcontractor_coi_required": true,
+    "residential_pct": 25,
+    "new_construction_pct": 90,
+    "max_height_ft": 0,
+    "wrap_up_projects": false
+  },
+  "loss_history": [
+    {
+      "date": "2023-11-30",
+      "description": "Cracked slab, third party property damage claim",
+      "incurred": 54000,
+      "status": "Closed"
+    }
+  ],
+  "prior": {
+    "carrier": "Saguaro Indemnity Co.",
+    "premium": 96000
+  }
+}
