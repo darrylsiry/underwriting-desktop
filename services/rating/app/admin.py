@@ -179,6 +179,8 @@ async def save_section(request: Request, version_id: int, section: str):
             kind, *ident, column = name.split("|") if "|" in name else ("", "")
             if kind not in repository.EDITABLE:
                 continue
+            if len(ident) != len(repository.EDITABLE[kind][1]):  # e.g. "class|a|b|base_rate"
+                return redirect(back, section=section, error=f"Unrecognised field {name!r}")
             edit = edits.setdefault((kind, *ident), repository.Edit(kind, tuple(ident), {}))
             edit.values[column] = Decimal(str(raw).strip())
         changed = await run_in_threadpool(

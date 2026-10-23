@@ -74,6 +74,12 @@ def test_admin_ui_edits_a_variable(client, draft):
     assert "sam" in client.get("/admin").text  # recent changes on the versions page
 
 
+def test_malformed_field_name_is_an_error_not_a_500(client, draft):
+    res = client.post(f"/admin/versions/{draft['id']}/sections/classes", follow_redirects=False,
+                      data={"class|a|b|base_rate": "1", "reason": "x", "actor": "sam"})
+    assert res.status_code == 303 and "Unrecognised+field" in res.headers["location"]
+
+
 def test_activate_retires_previous(client, draft):
     assert client.post(f"/rate-versions/{draft['id']}/activate", json={"actor": "pat", "reason": ""}).status_code == 422
     res = client.post(f"/rate-versions/{draft['id']}/activate", json={"actor": "pat", "reason": "Approved"})
