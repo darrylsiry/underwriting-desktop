@@ -143,7 +143,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
             <div className="space-y-4 p-4">
               {policy && (
                 <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm">
-                  <p className="font-medium text-emerald-800">Bound · {policy.policy_number}</p>
+                  <p className="font-medium text-emerald-800">Bound · <Link href={`/policies/${policy.id}`} className="hover:underline">{policy.policy_number}</Link></p>
                   <p className="mt-0.5 text-xs text-emerald-700">
                     Binder {policy.binder_number} · {policy.quote_number} v{policy.quote_version} · {money(policy.total)} · by {policy.bound_by}
                   </p>
@@ -162,7 +162,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                 <ul className="space-y-1 text-sm">
                   {quotes.map((q) => (
                     <li key={q.id} className={`flex items-center gap-2 ${q.status === "superseded" ? "text-slate-400" : ""}`}>
-                      <span className="font-mono text-xs">{q.quote_number} v{q.version}</span>
+                      <Link href={`/quotes/${q.id}`} className="font-mono text-xs hover:underline">{q.quote_number} v{q.version}</Link>
                       <span className="text-xs">{q.status}</span>
                       <span className="ml-auto tabular-nums">{money(q.total)}</span>
                       <a href={`/quotes/${q.id}/pdf`} target="_blank" className="text-xs text-indigo-600 hover:underline">PDF</a>

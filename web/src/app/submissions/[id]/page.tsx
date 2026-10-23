@@ -36,6 +36,7 @@ export default async function ReviewPage({ params, searchParams }: Props) {
         Received by {sub.received_by} {sub.received_at.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
         {ex.claude && <> · read by {ex.claude.model} ({ex.claude.usage.input_tokens.toLocaleString()} in / {ex.claude.usage.output_tokens.toLocaleString()} out tokens)</>}
         {sub.reviewed_by && <> · accepted by {sub.reviewed_by}</>}
+        {sub.insured_id && <> · <Link href={`/insureds/${sub.insured_id}`} className="text-indigo-600 hover:underline">customer record</Link></>}
       </p>
 
       {msg && <p className="mt-4 rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{msg}</p>}

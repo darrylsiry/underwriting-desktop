@@ -33,17 +33,22 @@ export default async function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <header className="flex items-center gap-6 border-b border-slate-200 bg-white px-6 py-3 text-sm">
-          <Link href="/" className="font-semibold">Underwriting Desktop</Link>
-          <nav className="flex gap-4 text-slate-600">
+        <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-slate-200 bg-white px-6 py-3 text-sm">
+          <Link href="/" className="whitespace-nowrap font-semibold">Underwriting Desktop</Link>
+          <nav className="flex gap-4 whitespace-nowrap text-slate-600">
+            <Link href="/insureds" className="hover:text-slate-900">Customers</Link>
             <Link href="/submissions" className="hover:text-slate-900">Submissions</Link>
             <Link href="/quotes" className="hover:text-slate-900">Quotes</Link>
             <Link href="/policies" className="hover:text-slate-900">Policies</Link>
             <a href={RATING_ADMIN_URL} className="hover:text-slate-900">Rate tables</a>
           </nav>
-          <form action={setUserAction} className="ml-auto flex items-center gap-2 text-slate-500">
-            <label htmlFor="uw-name">Working as</label>
-            <input id="uw-name" name="name" defaultValue={user} size={14}
+          <form action="/search" className="ml-auto">
+            <input name="q" placeholder="Search insureds, SUB-, Q-, GL-…" aria-label="Search"
+              className="w-44 rounded border border-slate-300 px-2 py-1 text-slate-900 lg:w-64" />
+          </form>
+          <form action={setUserAction} className="flex items-center gap-2 text-slate-500">
+            <label htmlFor="uw-name" className="sr-only whitespace-nowrap xl:not-sr-only">Working as</label>
+            <input id="uw-name" name="name" defaultValue={user} size={12}
               className="rounded border border-slate-300 px-2 py-1 text-slate-900" />
             <button className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-50">Set</button>
           </form>

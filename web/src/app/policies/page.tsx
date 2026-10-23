@@ -23,7 +23,7 @@ export default async function PoliciesPage() {
             const open = p.subjectivities.filter((s) => s.status === "open");
             return (
               <tr key={p.id} className="border-t border-slate-100">
-                <td className="whitespace-nowrap px-4 py-2 font-mono text-xs">{p.policy_number}<br /><span className="text-slate-400">{p.quote_number} v{p.quote_version}</span></td>
+                <td className="whitespace-nowrap px-4 py-2 font-mono text-xs"><Link href={`/policies/${p.id}`} className="text-indigo-600 hover:underline">{p.policy_number}</Link><br /><span className="text-slate-400">{p.quote_number} v{p.quote_version}</span></td>
                 <td className="px-4 py-2"><Link href={`/submissions/${p.submission_id}/workbench`} className="hover:underline">{p.insured_name}</Link></td>
                 <td className="whitespace-nowrap px-4 py-2 tabular-nums text-xs">{p.effective_date} → {p.expiration_date}</td>
                 <td className="px-4 py-2 text-right font-medium tabular-nums">{money(p.total)}</td>

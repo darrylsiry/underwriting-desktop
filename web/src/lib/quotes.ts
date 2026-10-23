@@ -4,7 +4,7 @@ import { renderQuotePdf } from "./quote-pdf";
 import { QUOTE_VALID_DAYS, addDays, addYears, formsFor, parseSubjectivities } from "./quote-terms";
 import { RATING_SERVICE_URL } from "./services";
 import type { SubmissionRow } from "./submissions";
-import { scheduleMod } from "./worksheet";
+import { scheduleMod, type RatingInputs, type ScheduleItem } from "./worksheet";
 import { getWorksheet, money, readiness, type Rating } from "./worksheets";
 
 export type QuoteRow = {
@@ -152,4 +152,24 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
     },
   );
   return quote;
+}
+
+export type QuoteDetail = QuoteRow & {
+  insured_id: string | null; rating_inputs: RatingInputs; schedule: ScheduleItem[]; rating: Rating;
+  terms: { insured_address: string[]; producer: string[]; limits: { label: string; amount: number }[]; deductible: number;
+    class_code: string; class_description: string; operations: string; forms: string[] };
+};
+
+/** Everything frozen on a quote except the PDF bytes. */
+export async function getQuote(id: string): Promise<QuoteDetail | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  const { rows } = await policyDb.query<QuoteDetail>(
+    `SELECT ${COLUMNS}, insured_id, rating_inputs, schedule, rating, terms FROM quotes WHERE id = $1`, [id]);
+  return rows[0] ?? null;
+}
+
+export async function quoteVersions(quoteNumber: string): Promise<QuoteRow[]> {
+  const { rows } = await policyDb.query<QuoteRow>(
+    `SELECT ${COLUMNS} FROM quotes WHERE quote_number = $1 ORDER BY version DESC`, [quoteNumber]);
+  return rows;
 }

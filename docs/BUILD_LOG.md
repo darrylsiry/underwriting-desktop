@@ -219,3 +219,28 @@ read this to replay the build quickly.
   - Moving the `pdfSafe` regex between files: its character class contains literal non-ASCII characters (en dash, curly quotes, bullet), so copy the bytes rather than retyping.
   - The browser driver's checkbox clicks both reported the same screen point; verify with `input.checked` before submitting rather than trusting the click log.
 - **How to show it:** open the Desert Bloom workbench (Quoted) → in **Bind Q-2026-0001 v…**, tick "Signed and dated application" and "Confirmation of operations and class code" → **Bind** → the card shows **Bound · GL-26-00001** and the two open subjectivities due in 30 days. Open the Binder PDF (Received / OPEN - due …), then the Policy PDF (declarations plus conditions page). `/policies` lists it with "2 open, due …"; `/quotes` shows the bound version and earlier versions superseded.
+
+## step-10: Search and inspect customers, submissions, quotes and policies
+- **Prompt used:** "Add a search box to the header that searches insureds (name, FEIN), submissions (reference, applicant, broker, class code), quotes (number with version, insured, submission ref) and policies (policy or binder number, insured) across both databases, with exact references jumping straight to the record. Add a Customers list and a customer page with their submissions, quotes, policies and written premium, plus detail pages for a quote (terms, rating worksheet, internal underwriting basis, subjectivities, versions) and a policy (coverage, subjectivity status, documents). Link everything to everything."
+- **What was built:**
+  - Header search box (`GET /search?q=`) and a `/search` page with four result panels and counts.
+    - A full reference (`SUB-0001`, `Q-2026-0001 v2`, `GL-26-00001`, `BND-26-00001`) that matches one record **redirects straight to it** (add `&all=1` to see the list).
+  - `/insureds` list (FEIN, state, submissions, policies, written premium, open subjectivities) and `/insureds/[id]` (stat tiles, then policies, quotes with versions and statuses, and submissions with workbench links).
+  - `/quotes/[id]`: terms (period, limits, deductible, class, receipts, states, forms), the rating worksheet with the rating_id and rate version, the **underwriting basis (internal)** (rating inputs and each schedule credit/debit with its written reason), premium, subjectivities, and all versions of that quote number.
+  - `/policies/[id]`: coverage and premium, each subjectivity received or open with its due date, policy and binder PDFs, and links to the source quote version, workbench and customer.
+  - Cross-links: quote and policy numbers in lists, the workbench Quote card, the policy panel, and the review page ("customer record") now open the detail pages. "Customers" is in the nav.
+  - `components/ui.tsx` (Section, Pill, Empty, RowLink, money, when) for the new pages.
+  - 18 web unit tests (adds query parsing: reference detection and LIKE escaping).
+- **Files:** `web/src/lib/{search,search-terms,search-terms.test,insureds}.ts`, `web/src/lib/{quotes,policies}.ts`, `web/src/components/ui.tsx`, `web/src/app/{search,insureds,insureds/[id],quotes/[id],policies/[id]}/page.tsx`, `web/src/app/{layout.tsx,quotes/page.tsx,policies/page.tsx}`, `web/src/app/submissions/[id]/{page.tsx,workbench/page.tsx}`
+- **Commit:** `step-10: ...`
+- **Decisions:**
+  - **No search index.** Four parallel `ILIKE '%term%'` queries, two per database, each limited to 25 rows. That's plenty at demo scale and keeps step 10 dependency-free; a `pg_trgm` GIN index is the upgrade path.
+  - `parseQuery` (pure): trims to 100 characters, needs at least 2, escapes `%`, `_`, `\` so input is never a wildcard, and recognizes reference shapes (SUB-, Q-yyyy-n [vN], GL-yy-n, BND-yy-n, FEIN `NN-NNNNNNN`, 5-digit class). Exact matches sort first in SQL (`ORDER BY (upper(ref) = upper($2)) DESC`).
+  - Submissions also match by broker agency (`data->'producer'->>'agency'`), exact FEIN, or exact class code from the reviewed JSON.
+  - Customers aggregate across databases in app code: submission counts from customer and policy counts / written premium / open subjectivities from policy (`jsonb_array_elements` count), joined by `insured_id`. "Written premium" is premium without fee and tax, on both the list and detail pages.
+  - The quote page shows the schedule rationales as **internal** (they're not on the broker-facing PDF).
+- **Dead ends / gotchas:**
+  - React fragments inside `.map` need `<Fragment key=…>`, because `<>` can't take a key. ESLint didn't flag it.
+  - The header got crowded once search was added. It now uses `flex-wrap`, a narrower search input below `lg`, and the "Working as" label is `sr-only` (still read by screen readers) until `xl`.
+  - The first version showed written premium including fee and tax on the customer page but premium-only on the list. Pick one definition.
+- **How to show it:** type "copper" in the header (finds Desert Bloom through its broker) → open the customer from `/insureds` → click the bound quote → scroll to the rating worksheet and the internal basis with the "−5% Safety program" reason → then type `BND-26-00001` in search and land on the policy with its open subjectivities.

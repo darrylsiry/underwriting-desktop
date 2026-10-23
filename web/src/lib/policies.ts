@@ -23,6 +23,13 @@ export async function policiesForSubmission(submissionId: string): Promise<Polic
   return rows;
 }
 
+export async function getPolicy(id: string): Promise<(PolicyRow & { insured_id: string | null }) | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  const { rows } = await policyDb.query<PolicyRow & { insured_id: string | null }>(
+    `SELECT ${COLUMNS}, p.insured_id FROM policies p JOIN quotes q ON q.id = p.quote_id WHERE p.id = $1`, [id]);
+  return rows[0] ?? null;
+}
+
 export async function listPolicies(): Promise<PolicyRow[]> {
   const { rows } = await policyDb.query<PolicyRow>(
     `SELECT ${COLUMNS} FROM policies p JOIN quotes q ON q.id = p.quote_id ORDER BY p.bound_at DESC`);

@@ -25,7 +25,7 @@ export default async function QuotesPage() {
         <tbody>
           {quotes.map((q) => (
             <tr key={q.id} className={`border-t border-slate-100 ${q.status === "superseded" ? "text-slate-400" : ""}`}>
-              <td className="whitespace-nowrap px-4 py-2 font-mono text-xs">{q.quote_number} v{q.version}</td>
+              <td className="whitespace-nowrap px-4 py-2 font-mono text-xs"><Link href={`/quotes/${q.id}`} className="text-indigo-600 hover:underline">{q.quote_number} v{q.version}</Link></td>
               <td className="px-4 py-2"><Link href={`/submissions/${q.submission_id}/workbench`} className="hover:underline">{q.insured_name}</Link></td>
               <td className="whitespace-nowrap px-4 py-2 tabular-nums">{q.effective_date}</td>
               <td className="px-4 py-2 text-right tabular-nums">{money(q.premium)}</td>
