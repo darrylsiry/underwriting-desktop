@@ -57,12 +57,28 @@ export function flagsFor(sub: SubmissionRow, ws: WorksheetRow): Flag[] {
   });
 }
 
-/** Ready to quote: a current rating and every "refer" flag cleared. */
-export function readiness(sub: SubmissionRow, ws: WorksheetRow) {
+/** The rating service's active rate version label, or null if it can't be reached. */
+export async function activeRateVersion(): Promise<string | null> {
+  try {
+    const res = await fetch(`${RATING_SERVICE_URL}/health`, { cache: "no-store", signal: AbortSignal.timeout(3000) });
+    return res.ok ? ((await res.json()).active_rate_version ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ready to quote: a rating of the current inputs on the currently active rate version, and every
+ * "refer" flag cleared. `activeVersion` null means the rating service couldn't be asked.
+ */
+export function readiness(sub: SubmissionRow, ws: WorksheetRow, activeVersion: string | null) {
   const flags = flagsFor(sub, ws);
   const open = flags.filter((f) => f.severity === "refer" && !ws.referral_clearances[f.code]);
-  const rated = !!ws.last_rating && ws.rated_inputs_hash === inputsHash(ws.rating_inputs, ws.schedule);
-  return { flags, openReferrals: open, rated, ready: rated && open.length === 0 };
+  const inputsCurrent = !!ws.last_rating && ws.rated_inputs_hash === inputsHash(ws.rating_inputs, ws.schedule);
+  const staleRates = ws.last_rating && activeVersion && ws.last_rating.rate_version !== activeVersion
+    ? { from: ws.last_rating.rate_version, to: activeVersion } : null;
+  const rated = inputsCurrent && !staleRates;
+  return { flags, openReferrals: open, inputsCurrent, staleRates, rated, ready: rated && open.length === 0 };
 }
 
 async function rate(sub: SubmissionRow, inputs: RatingInputs, schedule: ScheduleItem[], actor: string): Promise<Rating> {

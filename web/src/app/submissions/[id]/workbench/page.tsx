@@ -10,7 +10,7 @@ import { currentUser } from "@/lib/user";
 import {
   INPUT_DEFS, MAX_CATEGORY_PCT, SCHEDULE_CATEGORIES, UW_AUTHORITY_PCT, scheduleMod, scheduleTotal, type RatingInputs,
 } from "@/lib/worksheet";
-import { money, openWorksheet, readiness } from "@/lib/worksheets";
+import { activeRateVersion, money, openWorksheet, readiness } from "@/lib/worksheets";
 import { StatusBadge } from "../../status-badge";
 import { bindAction, clearReferralAction, issueQuoteAction, saveAndRateAction } from "./actions";
 
@@ -35,7 +35,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
     );
   }
   const ws = await openWorksheet(sub, await currentUser());
-  const { flags, openReferrals, rated, ready } = readiness(sub, ws);
+  const { flags, openReferrals, rated, ready, staleRates } = readiness(sub, ws, await activeRateVersion());
   const history = (await auditTrail("submission", id)).filter((h) => WORKSHEET_ACTIONS.has(h.action));
   const quotes = await quotesForSubmission(id);
   const latest = quotes[0];
@@ -206,7 +206,11 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
           <Card title="Indicative premium">
             {rating ? (
               <div className="p-4">
-                {!rated && <p className="mb-3 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">Inputs changed since this rating. Save &amp; rate again.</p>}
+                {!rated && (
+                  <p className="mb-3 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                    {staleRates ? `Rates changed since this rating (${staleRates.from} → ${staleRates.to}).` : "Inputs changed since this rating."} Save &amp; rate again.
+                  </p>
+                )}
                 <p className="text-3xl font-semibold tabular-nums">{money(rating.total)}</p>
                 <p className="text-xs text-slate-500">total cost to insured · rates {rating.rate_version}</p>
                 <dl className="mt-4 grid grid-cols-2 gap-y-1 text-sm">

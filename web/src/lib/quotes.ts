@@ -5,7 +5,7 @@ import { QUOTE_VALID_DAYS, addDays, addYears, formsFor, parseSubjectivities } fr
 import { RATING_SERVICE_URL } from "./services";
 import type { SubmissionRow } from "./submissions";
 import { scheduleMod, type RatingInputs, type ScheduleItem } from "./worksheet";
-import { getWorksheet, money, readiness, type Rating } from "./worksheets";
+import { activeRateVersion, getWorksheet, money, readiness, type Rating } from "./worksheets";
 
 export type QuoteRow = {
   id: string; quote_number: string; version: number; status: "issued" | "superseded" | "bound";
@@ -47,7 +47,10 @@ export type QuoteForm = { effective_date: string; expiration_date: string; subje
 export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: string): Promise<QuoteRow> {
   const ws = await getWorksheet(sub.id);
   if (!ws) throw new Error("Open the workbench and rate first");
-  const { ready, openReferrals, rated } = readiness(sub, ws);
+  const active = await activeRateVersion();
+  if (!active) throw new Error("The rating service isn't reachable, so the rate version can't be confirmed. Try again shortly.");
+  const { ready, openReferrals, rated, staleRates } = readiness(sub, ws, active);
+  if (staleRates) throw new Error(`Rates changed since this rating (${staleRates.from} → ${staleRates.to}). Save & rate again.`);
   if (!rated) throw new Error("The worksheet changed since it was rated. Save & rate first.");
   if (!ready) throw new Error(`Clear open referrals first: ${openReferrals.map((f) => f.title).join(", ")}`);
   const seen = ws.last_rating!;
