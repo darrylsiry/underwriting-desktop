@@ -129,6 +129,8 @@ def rate(tables: RateTables, inp: RatingInput) -> RatingResult:
         ("Experience mod", inp.experience_mod, "experience_mod_min", "experience_mod_max"),
         ("Schedule mod", inp.schedule_mod, "schedule_mod_min", "schedule_mod_max"),
     ]:
+        if lo not in p or hi not in p:
+            raise RatingError(f"Rate version {tables.version_label} has no {step.lower()} bounds ({lo}/{hi})")
         if not p[lo] <= mod <= p[hi]:
             raise RatingError(f"{step} {mod} is outside the allowed range {p[lo]}–{p[hi]}")
         apply(step, mod, "Underwriter-selected" if mod != 1 else "None applied")

@@ -86,3 +86,9 @@ def test_schedule_mod_bounds(tables):
 def test_unrateable_inputs(tables, field, value, msg):
     with pytest.raises(RatingError, match=msg):
         rate(tables, make(**{field: value}))
+
+
+def test_missing_mod_bounds_is_a_rating_error(tables):
+    del tables.parameters["experience_mod_max"]
+    with pytest.raises(RatingError, match="no experience mod bounds"):
+        rate(tables, make())

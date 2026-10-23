@@ -1,3 +1,4 @@
+import uuid
 from contextlib import asynccontextmanager
 from decimal import Decimal
 from typing import Annotated, Literal
@@ -25,7 +26,11 @@ app.include_router(admin.router)
 def health():
     with db.pool.connection() as conn:
         conn.execute("SELECT 1")
-    return {"service": "rating", "status": "ok", "database": "ok", "active_rate_version": repository.load_tables().version_label}
+    try:
+        active = repository.load_tables().version_label
+    except LookupError:  # no active version yet: still healthy, nothing to rate with
+        active = None
+    return {"service": "rating", "status": "ok", "database": "ok", "active_rate_version": active}
 
 
 class RateRequest(RatingInput):
@@ -55,8 +60,8 @@ def rate_risk(req: RateRequest):
 
 
 @app.get("/ratings/{rating_id}")
-def get_rating(rating_id: str):
-    row = repository.get_rating(rating_id)
+def get_rating(rating_id: uuid.UUID):
+    row = repository.get_rating(str(rating_id))
     if row is None:
         raise HTTPException(404, "Rating not found")
     return row

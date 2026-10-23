@@ -27,3 +27,8 @@ def test_unknown_class_is_422(client):
 def test_classes(client):
     codes = [c["class_code"] for c in client.get("/classes").json()]
     assert "98677" in codes and len(codes) == 8
+
+
+def test_bad_rating_id_is_422_not_500(client):
+    assert client.get("/ratings/not-a-uuid").status_code == 422
+    assert client.get("/ratings/00000000-0000-0000-0000-000000000000").status_code == 404
