@@ -14,8 +14,9 @@
 #   <prefix>-ingestion  private, http://<prefix>-ingestion.flycast
 #   <prefix>-db         Managed Postgres with databases customer, policy, rating
 #
-# Secrets: ANTHROPIC_API_KEY comes from .env if set there. The Basic auth password is generated
-# on first run and saved to .fly-credentials (git-ignored, mode 600), never printed.
+# Secrets: ANTHROPIC_API_KEY comes from .env if set there. The first user login (underwriter1) is
+# generated on first run and saved to .fly-credentials (git-ignored, mode 600), never printed.
+# More users: scripts/fly-users.sh.
 set -euo pipefail
 
 PREFIX="${FLY_PREFIX:-uwdesk}"
@@ -77,17 +78,18 @@ key="$(grep -E '^ANTHROPIC_API_KEY=' .env 2>/dev/null | head -1 | cut -d= -f2- |
 if has_secret "$INGESTION" ANTHROPIC_API_KEY; then echo "$INGESTION already has ANTHROPIC_API_KEY"
 elif [ -n "$key" ]; then printf 'ANTHROPIC_API_KEY=%s\n' "$key" | fly secrets import --stage -a "$INGESTION"
 else echo "No ANTHROPIC_API_KEY in .env: ingestion will read fillable PDFs only"; fi
-if has_secret "$WEB" BASIC_AUTH_PASSWORD; then echo "$WEB already has Basic auth credentials (see .fly-credentials)"
+if has_secret "$WEB" BASIC_AUTH_USERS || has_secret "$WEB" BASIC_AUTH_PASSWORD; then
+  echo "$WEB already has user logins (see .fly-credentials; add users with scripts/fly-users.sh)"
 elif [ -n "${CI:-}" ]; then
   # A password generated on a CI runner would be lost with the runner; create it from your machine.
-  echo "$WEB has no BASIC_AUTH_PASSWORD. Run scripts/fly-deploy.sh locally once to create it."; exit 1
+  echo "$WEB has no user logins. Run scripts/fly-deploy.sh locally once to create them."; exit 1
 else
-  user="${BASIC_AUTH_USER:-underwriter}"
+  user="${BASIC_AUTH_USER:-underwriter1}"
   pass="$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)"
-  printf 'BASIC_AUTH_USER=%s\nBASIC_AUTH_PASSWORD=%s\n' "$user" "$pass" | fly secrets import --stage -a "$WEB"
+  printf 'BASIC_AUTH_USERS=%s:%s\n' "$user" "$pass" | fly secrets import --stage -a "$WEB"
   umask 077
-  printf 'url=https://%s.fly.dev\nuser=%s\npassword=%s\n' "$WEB" "$user" "$pass" > .fly-credentials
-  echo "Basic auth credentials saved to .fly-credentials"
+  printf 'url=https://%s.fly.dev\n%s=%s\n' "$WEB" "$user" "$pass" > .fly-credentials
+  echo "Login for $user saved to .fly-credentials"
 fi
 
 # Default fly.toml names are uwdesk-*; with another prefix, point the apps at each other.

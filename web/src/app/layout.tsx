@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { setUserAction } from "./submissions/actions";
-import { currentUser } from "@/lib/user";
+import { currentUser, signedInUser } from "@/lib/user";
 import "./globals.css";
 
 // Rate admin is proxied through this app (src/app/admin) so it shares the password gate.
@@ -28,7 +28,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const user = await currentUser();
+  const [user, signedIn] = await Promise.all([currentUser(), signedInUser()]);
   return (
     <html lang="en">
       <body
@@ -48,12 +48,16 @@ export default async function RootLayout({
             <input name="q" placeholder="Search insureds, SUB-, Q-, GL-…" aria-label="Search"
               className="w-44 rounded border border-slate-300 px-2 py-1 text-slate-900 lg:w-64" />
           </form>
-          <form action={setUserAction} className="flex items-center gap-2 text-slate-500">
-            <label htmlFor="uw-name" className="sr-only whitespace-nowrap xl:not-sr-only">Working as</label>
-            <input id="uw-name" name="name" defaultValue={user} size={12}
-              className="rounded border border-slate-300 px-2 py-1 text-slate-900" />
-            <button className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-50">Set</button>
-          </form>
+          {signedIn ? (
+            <span className="whitespace-nowrap text-slate-500">Signed in as <span className="font-medium text-slate-900">{signedIn}</span></span>
+          ) : (
+            <form action={setUserAction} className="flex items-center gap-2 text-slate-500">
+              <label htmlFor="uw-name" className="sr-only whitespace-nowrap xl:not-sr-only">Working as</label>
+              <input id="uw-name" name="name" defaultValue={user} size={12}
+                className="rounded border border-slate-300 px-2 py-1 text-slate-900" />
+              <button className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-50">Set</button>
+            </form>
+          )}
         </header>
         {children}
       </body>

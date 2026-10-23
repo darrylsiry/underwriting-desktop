@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { safeReturnPath } from "@/lib/http";
 import { inboxFiles, listInbox } from "@/lib/inbox";
 import { acceptSubmission, receiveSubmission, saveReview } from "@/lib/submissions";
-import { currentUser, USER_COOKIE } from "@/lib/user";
+import { currentUser, signedInUser, USER_COOKIE } from "@/lib/user";
 
 export type UploadState = { error?: string };
 
@@ -69,7 +69,8 @@ export async function acceptAction(id: string) {
 
 export async function setUserAction(form: FormData) {
   const name = String(form.get("name") ?? "").trim().slice(0, 60);
-  if (name) (await cookies()).set(USER_COOKIE, name, { maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
+  // Signed-in users are who they logged in as; the free-text name is for local dev only.
+  if (name && !(await signedInUser())) (await cookies()).set(USER_COOKIE, name, { maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
   // Back to the page the header form was on (same host, local path only).
   const h = await headers();
   redirect(safeReturnPath(h.get("referer"), h.get("host")));
