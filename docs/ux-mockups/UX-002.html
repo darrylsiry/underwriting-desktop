@@ -1,0 +1,40 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>UX-002 Accept must not drop unsaved edits</title>
+<style>
+body{margin:0;padding:24px;font:14px/1.45 ui-sans-serif,system-ui,-apple-system,sans-serif;color:#0f172a;background:#f8fafc}
+h1{font-size:18px;margin:0 0 4px}p.lead{color:#64748b;margin:0 0 20px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin:0 0 8px}
+.page{display:grid;grid-template-columns:1fr 200px;gap:16px}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.card h3{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin:0;padding:8px 16px;border-bottom:1px solid #f1f5f9;font-weight:500}
+.row{display:grid;grid-template-columns:110px 1fr;gap:8px;padding:8px 16px;border-left:4px solid transparent;border-bottom:1px solid #f1f5f9;align-items:center;font-size:13px}
+.row.edit{border-left-color:#818cf8}
+.in{border:1px solid #cbd5e1;border-radius:4px;padding:4px 8px;background:#fff}
+.btn{display:inline-block;border-radius:6px;padding:8px 14px;font-weight:500;font-size:13px;color:#fff;margin:6px}
+.indigo{background:#4f46e5}.green{background:#059669}.dim{background:#059669;opacity:.5}
+.side{padding:12px;font-size:12px;color:#64748b}
+.side strong{display:block;color:#0f172a;font-size:13px;margin-bottom:4px}
+.warn{color:#b45309;font-size:11px;margin-top:6px}
+</style></head><body>
+<h1>UX-002 — Accept intake must not silently discard unsaved corrections</h1>
+<p class="lead">Intake review. Today the accept button is a separate form: clicking it after typing a FEIN submits only the accept form and the FEIN is lost. Proposed: one form, two submit buttons; Accept saves first.</p>
+<div class="cols">
+<div><h2>Before</h2><div class="page">
+<div class="card"><h3>Applicant</h3>
+<div class="row edit"><span>FEIN</span><span class="in">75-1234567</span></div>
+<div class="row edit"><span>Entity type</span><span class="in">LLC</span></div>
+<div class="row"><span>Years in business</span><span class="in">6</span></div>
+<span class="btn indigo">Save corrections</span>
+</div>
+<div class="card side"><strong>Accept intake</strong>Save corrections first. Accepting links the insured and hands the submission to underwriting.<br><span class="btn green" style="margin:10px 0 0;display:block;text-align:center">Accept intake</span><div class="warn">← separate form: the two edits on the left are discarded</div></div>
+</div></div>
+<div><h2>After</h2><div class="page">
+<div class="card"><h3>Applicant</h3>
+<div class="row edit"><span>FEIN</span><span class="in">75-1234567</span></div>
+<div class="row edit"><span>Entity type</span><span class="in">LLC</span></div>
+<div class="row"><span>Years in business</span><span class="in">6</span></div>
+<span class="btn indigo">Save corrections</span>
+</div>
+<div class="card side"><strong>Accept intake</strong>Saves your corrections, links the insured and hands the file to underwriting.<br><span class="btn green" style="margin:10px 0 0;display:block;text-align:center">Save &amp; accept intake</span><div class="warn" style="color:#059669">same form, <code>formAction</code> runs save then accept</div></div>
+</div></div>
+</div></body></html>

@@ -1,0 +1,39 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>UX-007 Activate shows the live diff</title>
+<style>
+body{margin:0;padding:24px;font:14px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif;color:#0f172a;background:#f8fafc}
+h1{font-size:18px;margin:0 0 4px}p.lead{color:#64748b;margin:0 0 20px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin:0 0 8px}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:16px}
+.row{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-top:10px}
+label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#64748b}
+.in{border:1px solid #cbd5e1;border-radius:6px;padding:6px 8px;background:#fff;color:#94a3b8;min-width:180px;font-size:13px}
+.btn{background:#4f46e5;color:#fff;border-radius:6px;padding:7px 14px;font-size:14px}
+.muted{color:#64748b;font-size:13px}
+ul{margin:8px 0;padding-left:18px;font-size:13px}code{font-size:12px;background:#f1f5f9;padding:0 4px;border-radius:3px}
+.warn{background:#fffbeb;color:#92400e;border-radius:6px;padding:8px 10px;font-size:12px;margin-top:10px}
+.bad{background:#fff1f2;color:#be123c;border-radius:6px;padding:8px 10px;font-size:12px;margin-top:10px}
+strong.d{color:#047857}
+</style></head><body>
+<h1>UX-007 — Before Activate, show what changes against the active version</h1>
+<p class="lead">Rate admin › Version 2026.3 (draft). Left: today's Activate card. Right: the same card listing the differences from the <em>active</em> version and warning about unsaved edits.</p>
+<div class="cols">
+<div><h2>Before</h2><div class="card">
+<h2>Activate</h2>
+<span class="muted">Activating retires the current active version. Existing quotes keep the version they were rated on.</span>
+<div class="row"><label>Reason<span class="in">e.g. Approved by pricing committee</span></label><label>Your name<span class="in" style="min-width:120px">name</span></label><span class="btn">Activate 2026.3</span></div>
+<p class="muted" style="margin:12px 0 0;font-size:12px">then: <code>confirm("Activate 2026.3? New ratings will use it immediately.")</code></p>
+</div></div>
+<div><h2>After</h2><div class="card">
+<h2>Activate 2026.3 · 2 values differ from active 2026.2</h2>
+<ul>
+<li>Territory · <code>FL</code> Florida · 1.35 → <strong class="d">1.45</strong></li>
+<li>Class base rates · <code>98677</code> Roofing - residential · rate per $1,000 42.00 → <strong class="d">46.00</strong></li>
+</ul>
+<span class="muted">Copied from 2026.2 (active). Activating retires 2026.2; existing quotes keep the version they were rated on.</span>
+<div class="warn">Unsaved edits in the editor above are not part of this activation. Save them first.</div>
+<div class="row"><label>Reason<span class="in">e.g. Approved by pricing committee</span></label><label>Your name<span class="in" style="min-width:120px">Darryl</span></label><span class="btn">Activate 2026.3</span></div>
+<p class="muted" style="margin:12px 0 0;font-size:12px">confirm text repeats the list; when the draft was copied from a <em>retired</em> version, a red line names every value that would revert, e.g.</p>
+<div class="bad">Copied from retired 2026.1: activating also reverts Territory FL 1.35 → 1.25.</div>
+</div></div>
+</div></body></html>
