@@ -1,0 +1,50 @@
+{
+  "applicant": {
+    "name": "High Plains Millwork & Trim LLC",
+    "dba": "",
+    "street": "1408 W Lincolnway",
+    "city": "Cheyenne",
+    "state": "WY",
+    "zip": "82001",
+    "fein": "83-0661945",
+    "entity_type": "LLC",
+    "years_in_business": 6,
+    "website": ""
+  },
+  "producer": {
+    "agency": "Big Sky Brokerage Group",
+    "contact": "Wade Halvorsen",
+    "email": "whalvorsen@bigskybrokerage.example",
+    "phone": "307-555-0145"
+  },
+  "policy": {
+    "effective_date": "2026-12-20",
+    "expiration_date": "2027-12-20",
+    "occurrence_limit": 500000,
+    "aggregate_limit": 1000000,
+    "products_aggregate_limit": 1000000,
+    "deductible": 1000
+  },
+  "operations": {
+    "description": "Finish carpentry, trim, built-in cabinetry and stair installation for custom homes and remodels. No framing or structural work.",
+    "class_code": "91342",
+    "states": [
+      "WY",
+      "CO"
+    ],
+    "gross_receipts": 980000,
+    "payroll": 410000,
+    "employees": 8,
+    "subcontracted_pct": 0,
+    "subcontractor_coi_required": true,
+    "residential_pct": 100,
+    "new_construction_pct": 60,
+    "max_height_ft": 14,
+    "wrap_up_projects": false
+  },
+  "loss_history": [],
+  "prior": {
+    "carrier": "Medicine Bow Mutual Insurance",
+    "premium": 9800
+  }
+}

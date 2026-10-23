@@ -1,0 +1,68 @@
+{
+  "applicant": {
+    "name": "Evergreen Summit Roofing Co.",
+    "dba": "",
+    "street": "4402 S Tacoma Way",
+    "city": "Tacoma",
+    "state": "WA",
+    "zip": "98409",
+    "fein": "91-4407726",
+    "entity_type": "Corporation",
+    "years_in_business": 4,
+    "website": "evergreensummitroof.example"
+  },
+  "producer": {
+    "agency": "Puget Sound E&S",
+    "contact": "Grace Lindqvist",
+    "email": "glindqvist@pugetsoundes.example",
+    "phone": "253-555-0133"
+  },
+  "policy": {
+    "effective_date": "2026-12-01",
+    "expiration_date": "2027-12-01",
+    "occurrence_limit": 1000000,
+    "aggregate_limit": 2000000,
+    "products_aggregate_limit": 2000000,
+    "deductible": 5000
+  },
+  "operations": {
+    "description": "Residential re-roofing: tear-off and replacement of composition shingle and metal roofs on single family homes, plus gutter installation. Some steep-slope and two-story work.",
+    "class_code": "98677",
+    "states": [
+      "WA"
+    ],
+    "gross_receipts": 3100000,
+    "payroll": 980000,
+    "employees": 18,
+    "subcontracted_pct": 35,
+    "subcontractor_coi_required": false,
+    "residential_pct": 95,
+    "new_construction_pct": 5,
+    "max_height_ft": 32,
+    "wrap_up_projects": false
+  },
+  "loss_history": [
+    {
+      "date": "2025-01-12",
+      "description": "Tarp failure during storm, interior water damage to home",
+      "incurred": 47500,
+      "status": "Closed"
+    },
+    {
+      "date": "2025-10-02",
+      "description": "Falling debris damaged neighbor's vehicle",
+      "incurred": 6100,
+      "status": "Closed"
+    },
+    {
+      "date": "2026-07-19",
+      "description": "Homeowner slip on loose shingles in driveway",
+      "incurred": 35000,
+      "status": "Open"
+    }
+  ],
+  "prior": {
+    "carrier": "Cascadia Surplus Lines Co.",
+    "premium": 88400
+  }
+}

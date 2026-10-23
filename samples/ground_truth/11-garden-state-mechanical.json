@@ -1,0 +1,57 @@
+{
+  "applicant": {
+    "name": "Garden State Mechanical Plumbing LLC",
+    "dba": "GSM Plumbing",
+    "street": "77 Industrial Ave",
+    "city": "Newark",
+    "state": "NJ",
+    "zip": "07105",
+    "fein": "22-3901457",
+    "entity_type": "LLC",
+    "years_in_business": 23,
+    "website": "gsmplumbing.example"
+  },
+  "producer": {
+    "agency": "Turnpike Risk Partners",
+    "contact": "Daniel Moretti",
+    "email": "dmoretti@turnpikerisk.example",
+    "phone": "973-555-0150"
+  },
+  "policy": {
+    "effective_date": "2027-02-01",
+    "expiration_date": "2028-02-01",
+    "occurrence_limit": 2000000,
+    "aggregate_limit": 4000000,
+    "products_aggregate_limit": 4000000,
+    "deductible": 25000
+  },
+  "operations": {
+    "description": "Commercial and industrial plumbing: domestic water, sanitary and storm piping, medical gas and process piping for hospitals, labs and food plants in northern New Jersey and New York City.",
+    "class_code": "98482",
+    "states": [
+      "NJ",
+      "NY"
+    ],
+    "gross_receipts": 22500000,
+    "payroll": 7800000,
+    "employees": 96,
+    "subcontracted_pct": 12,
+    "subcontractor_coi_required": true,
+    "residential_pct": 0,
+    "new_construction_pct": 55,
+    "max_height_ft": 60,
+    "wrap_up_projects": true
+  },
+  "loss_history": [
+    {
+      "date": "2024-11-30",
+      "description": "Water main test failure flooded hospital basement",
+      "incurred": 238000,
+      "status": "Closed"
+    }
+  ],
+  "prior": {
+    "carrier": "Atlantic Highlands Specialty Ins. Co.",
+    "premium": 214000
+  }
+}

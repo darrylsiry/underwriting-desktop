@@ -19,6 +19,7 @@ export type SubmissionRow = {
   insured_id: string | null;
   received_by: string;
   received_at: Date;
+  inbox_folder: string | null;
   reviewed_by: string | null;
   reviewed_at: Date | null;
 };
@@ -56,8 +57,11 @@ export async function getDocument(submissionId: string, documentId: string) {
   return rows[0] ?? null;
 }
 
-/** Send the files to the ingestion service, then store the submission, its documents, and an audit event. */
-export async function receiveSubmission(files: File[], actor: string): Promise<string> {
+/**
+ * Send the files to the ingestion service, then store the submission, its documents, and an audit event.
+ * `inboxFolder` is set when the files came from the broker drop folder rather than an upload.
+ */
+export async function receiveSubmission(files: File[], actor: string, inboxFolder: string | null = null): Promise<string> {
   const form = new FormData();
   for (const f of files) form.append("files", f, f.name);
   const res = await fetch(`${INGESTION_SERVICE_URL}/extract`, {
@@ -70,10 +74,10 @@ export async function receiveSubmission(files: File[], actor: string): Promise<s
   try {
     await client.query("BEGIN");
     const { rows } = await client.query<{ id: string; reference: string }>(
-      `INSERT INTO submissions (reference, applicant_name, data, extraction, received_by)
-       VALUES ('SUB-' || lpad(nextval('submission_reference_seq')::text, 4, '0'), $1, $2, $3, $4)
+      `INSERT INTO submissions (reference, applicant_name, data, extraction, received_by, inbox_folder)
+       VALUES ('SUB-' || lpad(nextval('submission_reference_seq')::text, 4, '0'), $1, $2, $3, $4, $5)
        RETURNING id, reference`,
-      [extraction.submission.applicant?.name ?? "", extraction.submission, extraction, actor],
+      [extraction.submission.applicant?.name ?? "", extraction.submission, extraction, actor, inboxFolder],
     );
     const { id, reference } = rows[0];
     for (const f of files) {
@@ -86,12 +90,15 @@ export async function receiveSubmission(files: File[], actor: string): Promise<s
     const name = (extraction.submission.applicant?.name as string) || "unnamed applicant";
     await audit({
       actor, action: "submission.received", entityType: "submission", entityId: id,
-      summary: `${reference} received for ${name}: ${files.length} document(s), ${Object.keys(extraction.fields).length} fields extracted`,
-      after: { documents: extraction.documents, missing_for_rating: extraction.missing_for_rating, claude: extraction.claude },
+      summary: `${reference} received for ${name}${inboxFolder ? ` from inbox folder ${inboxFolder}` : ""}: ${files.length} document(s), ${Object.keys(extraction.fields).length} fields extracted`,
+      after: { inbox_folder: inboxFolder, documents: extraction.documents, missing_for_rating: extraction.missing_for_rating, claude: extraction.claude },
     });
     return id;
   } catch (err) {
     await client.query("ROLLBACK");
+    if ((err as { code?: string }).code === "23505" && inboxFolder) {
+      throw new Error(`${inboxFolder} was already picked up from the inbox`);
+    }
     throw err;
   } finally {
     client.release();
