@@ -146,3 +146,11 @@ def test_upload_limits(monkeypatch):
     assert client.post("/extract", files=[("files", ("big.txt", b"x" * 1001))]).status_code == 413
     monkeypatch.setattr(main, "MAX_FILES", 2)
     assert client.post("/extract", files=[("files", (f"{i}.txt", b"x")) for i in range(3)]).status_code == 413
+
+
+def test_api_key_prefers_uw_name_and_falls_back_to_standard(monkeypatch):
+    assert claude.api_key() is None and not claude.enabled()
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "standard")
+    assert claude.api_key() == "standard"
+    monkeypatch.setenv("UW_ANTHROPIC_API_KEY", "sandbox")
+    assert claude.api_key() == "sandbox" and claude.enabled()

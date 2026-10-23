@@ -354,3 +354,13 @@ read this to replay the build quickly.
   - In `next dev`, the first compile of a route force-reloads every open tab. A "stale tab" test passes only after the review route has been compiled once. Production has no such reload.
   - `pkill -f "next dev"` inside a shell command line kills that shell too (the pattern matches its own command). Use `pgrep` and skip `$$`.
 - **How to show it:** open /submissions to see "Inbox · 18 new". Click **Extract →** on Mile High Electric (a Word application): the button reads "Reading documents…", and about 25 s later the intake review opens with every field filled and cited. Go back: the inbox shows 17 and SUB-0001 is under Received. For a fast one, Extract Rio Bravo Concrete (fillable ACORD; only the loss run goes to Claude).
+
+## Fix: read the API key as `UW_ANTHROPIC_API_KEY` too
+- **Prompt used:** "Port the key fallback: the ingestion service should read UW_ANTHROPIC_API_KEY, falling back to ANTHROPIC_API_KEY."
+- **What was built:** `claude.api_key()` returns `UW_ANTHROPIC_API_KEY`, else `ANTHROPIC_API_KEY`. `enabled()` and the Anthropic client both use it. `docker-compose.yml` maps either name into the container's `ANTHROPIC_API_KEY`. 1 new test.
+- **Files:** `services/ingestion/app/claude.py`, `services/ingestion/tests/{conftest.py,test_ingestion.py}`, `docker-compose.yml`
+- **Commit:** `fix: ...`
+- **Decisions:** Fly and `.env` keep the standard `ANTHROPIC_API_KEY` name. Only the cloud sandbox needs the alternate one.
+- **Dead ends / gotchas:**
+  - The Claude Code cloud sandbox reserves the name `ANTHROPIC_API_KEY` and doesn't pass it into sessions. Store the key as `UW_ANTHROPIC_API_KEY` there, or the service silently runs form-fields-only.
+  - Pass `api_key=` to `anthropic.Anthropic()` explicitly, because the SDK only reads the standard name on its own.

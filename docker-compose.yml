@@ -29,7 +29,8 @@ services:
   ingestion:
     build: ./services/ingestion
     environment:
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # The Claude Code cloud sandbox reserves ANTHROPIC_API_KEY; there the key is UW_ANTHROPIC_API_KEY.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-${UW_ANTHROPIC_API_KEY:-}}
       RATING_SERVICE_URL: http://rating:8000
       EXTRACTION_MODEL: ${EXTRACTION_MODEL:-claude-opus-5-5}
     ports: ["127.0.0.1:8002:8000"]
