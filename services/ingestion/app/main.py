@@ -8,6 +8,9 @@ from starlette.concurrency import run_in_threadpool
 from app import claude, pipeline
 
 RATING_SERVICE_URL = os.environ.get("RATING_SERVICE_URL", "http://localhost:8001")
+# One broker submission is a handful of documents; cap direct callers like the web tier does (25 MB).
+MAX_FILES = int(os.environ.get("MAX_UPLOAD_FILES", "20"))
+MAX_TOTAL_BYTES = int(os.environ.get("MAX_UPLOAD_MB", "25")) * 1024 * 1024
 
 app = FastAPI(
     title="Ingestion Service",
@@ -41,7 +44,15 @@ async def extract(files: list[UploadFile] = File(..., description="Every documen
 
     Fillable ACORD-style PDFs are read from their form fields; everything else goes to Claude.
     """
-    uploads = [(f.filename or "upload", await f.read()) for f in files]
+    if len(files) > MAX_FILES:
+        raise HTTPException(413, f"At most {MAX_FILES} files per submission")
+    uploads, total = [], 0
+    for f in files:
+        data = await f.read(MAX_TOTAL_BYTES - total + 1)  # never buffer more than the limit
+        total += len(data)
+        if total > MAX_TOTAL_BYTES:
+            raise HTTPException(413, f"Uploads exceed {MAX_TOTAL_BYTES // (1024 * 1024)} MB in total")
+        uploads.append((f.filename or "upload", data))
     if not any(data for _, data in uploads):
         raise HTTPException(422, "No file content uploaded")
     # Parsing and the Claude call are synchronous and can take minutes; run them in the threadpool

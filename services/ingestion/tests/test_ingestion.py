@@ -136,3 +136,13 @@ def test_missing_class_list_is_reported(monkeypatch):
     monkeypatch.setattr(claude, "extract", lambda docs, classes, **_: claude.ClaudeResult([], [], [], "fake", {}))
     result = pipeline.run(case_files("05"), classes=[])
     assert any("class list unavailable" in w for w in result["warnings"])
+
+
+def test_upload_limits(monkeypatch):
+    """CR-016: direct callers can't post unbounded uploads."""
+    import app.main as main
+    client = TestClient(app)
+    monkeypatch.setattr(main, "MAX_TOTAL_BYTES", 1000)
+    assert client.post("/extract", files=[("files", ("big.txt", b"x" * 1001))]).status_code == 413
+    monkeypatch.setattr(main, "MAX_FILES", 2)
+    assert client.post("/extract", files=[("files", (f"{i}.txt", b"x")) for i in range(3)]).status_code == 413
