@@ -32,13 +32,28 @@ def health():
     }
 
 
-def rateable_classes() -> list[dict]:
-    """Class codes from the rating service, so Claude only picks codes we can rate."""
-    try:
-        with urllib.request.urlopen(f"{RATING_SERVICE_URL}/classes", timeout=3) as r:
-            return json.load(r)
-    except (OSError, ValueError):
-        return []
+# Last class list the rating service returned. Class codes change only when a rate version is
+# activated, so a recent copy is a much better fallback than no list at all.
+_last_classes: list[dict] = []
+
+
+def rateable_classes(attempts: int = 2, timeout: float = 10) -> list[dict]:
+    """Class codes from the rating service, so Claude only picks codes we can rate.
+
+    On Fly the rating machine auto-stops when idle and takes a few seconds to start on the first
+    request, so wait long enough for a cold start and retry once before falling back.
+    """
+    global _last_classes
+    for _ in range(attempts):
+        try:
+            with urllib.request.urlopen(f"{RATING_SERVICE_URL}/classes", timeout=timeout) as r:
+                classes = json.load(r)
+            if classes:
+                _last_classes = classes
+                return classes
+        except (OSError, ValueError):
+            pass
+    return _last_classes
 
 
 async def read_uploads(files: list[UploadFile]) -> list[tuple[str, bytes]]:

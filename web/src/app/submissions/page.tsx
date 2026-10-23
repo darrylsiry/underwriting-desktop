@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { after } from "next/server";
 import { listInbox } from "@/lib/inbox";
+import { wakeServices } from "@/lib/services";
 import { listSubmissions, missingForRating } from "@/lib/submissions";
 import { FIELD_DEFS, attention, getPath } from "@/lib/submission";
 import { InboxList } from "./inbox-list";
@@ -10,6 +12,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SubmissionsPage() {
   const [submissions, inbox] = await Promise.all([listSubmissions(), listInbox()]);
+  after(wakeServices); // after the page is sent, so it never slows the page down
   return (
     <main className="mx-auto max-w-6xl p-8">
       <h1 className="text-2xl font-semibold">Submissions</h1>

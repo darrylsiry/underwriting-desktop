@@ -180,3 +180,27 @@ def test_live_field_parser_waits_for_complete_values():
     m = claude._FIELD_RE.search(partial + '.98,"source_document":"a.pdf"')
     assert (m[1], claude._unescape(m[2]), m[3], m[4]) == ("applicant.name", 'Lone "Star" LLC', "stated", "0.98")
     assert not claude._LOSS_RE.search('{"date":"2025-01-02","description":"x","incurred":12,"status":"Clo')
+
+
+def test_class_list_survives_a_cold_start_and_falls_back_to_the_last_good_copy(monkeypatch):
+    """The rating machine auto-stops on Fly; the first request can fail while it starts."""
+    import io
+    import app.main as main
+    classes = [{"class_code": "92215", "description": "Electrical"}]
+    calls = []
+
+    def flaky(url, timeout):
+        calls.append(timeout)
+        if len(calls) == 1:
+            raise TimeoutError("machine still starting")
+        return io.BytesIO(json.dumps(classes).encode())
+
+    monkeypatch.setattr(main, "_last_classes", [])
+    monkeypatch.setattr(main.urllib.request, "urlopen", flaky)
+    assert main.rateable_classes() == classes and calls == [10, 10]
+
+    def down(url, timeout):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(main.urllib.request, "urlopen", down)
+    assert main.rateable_classes() == classes  # last good copy
