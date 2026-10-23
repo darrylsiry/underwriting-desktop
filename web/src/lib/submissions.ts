@@ -42,7 +42,11 @@ export async function listDocuments(submissionId: string): Promise<DocumentRow[]
   return rows;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function getDocument(submissionId: string, documentId: string) {
+  // Both ids are path segments; anything that isn't a uuid is a 404, not a Postgres cast error.
+  if (!UUID.test(submissionId) || !UUID.test(documentId)) return null;
   const { rows } = await customerDb.query<{ filename: string; content_type: string; content: Buffer }>(
     "SELECT filename, content_type, content FROM submission_documents WHERE submission_id = $1 AND id = $2",
     [submissionId, documentId],
