@@ -42,7 +42,8 @@
   - Unstructured documents (emails, questionnaires, loss runs) go to
     **Claude**, which returns structured JSON with a confidence value and a
     source snippet for each field.
-  - This needs `ANTHROPIC_API_KEY`. Without it, the service falls back to
+  - This needs `ANTHROPIC_API_KEY` (or `UW_ANTHROPIC_API_KEY` in the Claude
+    Code cloud sandbox, which reserves the standard name). Without it, the service falls back to
     the deterministic path only.
 - **Rating:**
   - Formula: `base rate (class) × exposure (revenue or payroll) / 1000 ×

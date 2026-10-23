@@ -9,7 +9,7 @@ build plan.
 |-----------|-------|-----------|
 | `web` (UW Desktop) | Next.js, TypeScript, Tailwind | http://localhost:3000 |
 | `services/rating` | Python, FastAPI | http://localhost:8001 (rate-table admin at `/admin`, API at `/docs`) |
-| `services/ingestion` | Python, FastAPI | http://localhost:8002 |
+| `services/ingestion` | Python, FastAPI, Claude | http://localhost:8002 (upload page at `/`, API at `/docs`) |
 | `db` | Postgres 16 (`customer`, `policy`, `rating` databases) | localhost:5432 |
 
 ## Run it

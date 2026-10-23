@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Submission ingestion</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #fff; --ink: #1d2433; --muted: #667085; --line: #e4e7ec;
+    --accent: #2f5bea; --high: #067647; --mid: #b54708; --low: #b42318; --warn-bg: #fffaeb;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: var(--bg); }
+  header { display: flex; align-items: center; gap: 16px; padding: 12px 20px; background: #101828; color: #fff; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header .sub { color: #98a2b3; }
+  header .status { margin-left: auto; color: #d0d5dd; font-size: 13px; }
+  main { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 16px; padding: 16px 20px; align-items: start; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0; padding: 12px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 8px; }
+  .side { display: grid; gap: 16px; min-width: 0; }
+  #drop { display: block; margin: 14px; border: 2px dashed var(--line); border-radius: 10px; padding: 24px 12px; text-align: center; color: var(--muted); cursor: pointer; }
+  #drop.over { border-color: var(--accent); background: #eef2ff; color: var(--ink); }
+  #drop b { color: var(--ink); }
+  .btn { font: inherit; font-size: 13px; border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: 6px; padding: 6px 14px; cursor: pointer; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .picked { padding: 0 14px 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
+  .doc { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .doc:last-child { border-bottom: 0; }
+  .doc .name { font-weight: 600; word-break: break-all; }
+  .doc .meta { color: var(--muted); font-size: 12px; }
+  .doc.child { padding-left: 30px; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: #eef2ff; color: var(--accent); margin-right: 6px; }
+  .flags { padding: 10px 14px; display: grid; gap: 6px; font-size: 13px; }
+  .flag { padding: 6px 10px; border-radius: 6px; background: var(--warn-bg); border: 1px solid #fedf89; }
+  .flag.ok { background: #ecfdf3; border-color: #abefc6; }
+  .summary { padding: 10px 14px; color: var(--muted); font-size: 13px; }
+  table { border-collapse: collapse; width: 100%; }
+  th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 6px 10px; border-bottom: 1px solid #f2f4f7; vertical-align: top; }
+  tr.section td { background: #f9fafb; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  td.path { white-space: nowrap; color: var(--muted); }
+  td.val { font-weight: 500; max-width: 340px; }
+  td.val.blank { color: #98a2b3; font-weight: 400; font-style: italic; }
+  td.src { color: var(--muted); font-size: 12px; max-width: 420px; }
+  td.src .from { color: #98a2b3; }
+  .alt { color: var(--low); font-size: 12px; }
+  .conf { display: flex; align-items: center; gap: 6px; white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 12px; }
+  .bar { width: 54px; height: 6px; border-radius: 3px; background: #f2f4f7; overflow: hidden; }
+  .bar i { display: block; height: 100%; }
+  .method { font-size: 11px; color: var(--muted); }
+  .scroll { overflow-x: auto; }
+  pre { margin: 0; padding: 12px 14px; font-size: 12px; max-height: 420px; overflow: auto; background: #101828; color: #d0d5dd; }
+  .empty { padding: 40px 14px; text-align: center; color: var(--muted); }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #c7d7fe; border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Submission ingestion</h1>
+  <span class="sub">upload → classify → extract → submission JSON</span>
+  <span class="status" id="status"></span>
+</header>
+<main>
+  <div class="side">
+    <section class="panel">
+      <h2>Upload a submission</h2>
+      <label id="drop">
+        <input type="file" id="file" multiple hidden accept=".pdf,.eml,.docx,.txt">
+        <b>Drop files here</b> or click to choose<br>
+        <small>PDF (fillable or flattened), .eml, .docx, .txt. All files for one submission.</small>
+      </label>
+      <div class="picked"><span id="picked">No files chosen</span><button class="btn" id="go" disabled>Extract</button></div>
+    </section>
+    <section class="panel" id="docsPanel" hidden><h2>Documents</h2><div id="docs"></div></section>
+    <section class="panel" id="flagsPanel" hidden><h2>Review</h2><div class="flags" id="flags"></div></section>
+  </div>
+  <section class="panel">
+    <h2><span>Extracted submission</span><span id="toggle" hidden><a href="#" id="showJson">JSON</a></span></h2>
+    <div id="out"><div class="empty">Upload documents to see the extracted fields, each with a confidence and the text it came from.</div></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+let files = [], last = null, jsonView = false;
+
+fetch("health").then((r) => r.json()).then((h) => {
+  $("status").textContent = h.claude_extraction === "enabled" ? `Claude extraction on · ${h.model}` : "Claude extraction off (no API key): fillable PDFs only";
+});
+
+function pick(list) {
+  files = [...list];
+  $("picked").textContent = files.length ? files.map((f) => f.name).join(", ") : "No files chosen";
+  $("go").disabled = !files.length;
+}
+$("file").onchange = (e) => pick(e.target.files);
+const drop = $("drop");
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); pick(e.dataTransfer.files); };
+
+$("go").onclick = async () => {
+  const fd = new FormData();
+  files.forEach((f) => fd.append("files", f));
+  $("go").disabled = true;
+  $("out").innerHTML = `<div class="empty"><span class="spinner"></span>Classifying and extracting…</div>`;
+  try {
+    const r = await fetch("ingest", { method: "POST", body: fd });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.detail || r.statusText);
+    last = body; jsonView = false; render();
+  } catch (err) {
+    $("out").innerHTML = `<div class="empty">Failed: ${esc(err.message)}</div>`;
+  } finally { $("go").disabled = false; }
+};
+$("showJson").onclick = (e) => { e.preventDefault(); jsonView = !jsonView; render(); };
+
+function confColor(c) { return c >= 0.9 ? "var(--high)" : c >= 0.8 ? "var(--mid)" : "var(--low)"; }
+function fmt(v) {
+  if (Array.isArray(v)) return v.join(", ");
+  if (typeof v === "boolean") return v ? "Yes" : "No";
+  if (typeof v === "number" && v >= 1000) return v.toLocaleString("en-US");
+  return v;
+}
+
+function render() {
+  const r = last;
+  $("docsPanel").hidden = $("flagsPanel").hidden = $("toggle").hidden = false;
+  $("showJson").textContent = jsonView ? "Fields" : "JSON";
+  $("docs").innerHTML = r.documents.map((d) => `
+    <div class="doc ${d.parent ? "child" : ""}">
+      <div class="name">${d.parent ? "↳ " : ""}${esc(d.filename)}</div>
+      <div class="meta"><span class="tag">${esc(d.doc_type_label)}</span>${Math.round(d.confidence * 100)}% · ${esc(d.reason)}</div>
+    </div>`).join("");
+
+  const flags = [];
+  r.warnings.forEach((w) => flags.push(`<div class="flag">${esc(w)}</div>`));
+  if (r.missing_for_rating.length) flags.push(`<div class="flag">Missing for rating: ${r.missing_for_rating.map(esc).join(", ")}</div>`);
+  if (r.conflicts.length) flags.push(`<div class="flag">Documents disagree on: ${r.conflicts.map(esc).join(", ")}</div>`);
+  if (r.low_confidence.length) flags.push(`<div class="flag">Check (confidence &lt; 80%): ${r.low_confidence.map(esc).join(", ")}</div>`);
+  if (!flags.length) flags.push(`<div class="flag ok">Everything needed to rate was found with high confidence.</div>`);
+  const c = r.claude;
+  flags.push(`<div class="summary">${c.used ? `Claude (${esc(c.model)}): ${c.usage.input_tokens.toLocaleString()} in / ${c.usage.output_tokens.toLocaleString()} out tokens · ` : ""}${(r.elapsed_ms / 1000).toFixed(1)}s</div>`);
+  $("flags").innerHTML = flags.join("");
+
+  if (jsonView) { $("out").innerHTML = `<pre>${esc(JSON.stringify(r.submission, null, 2))}</pre>`; return; }
+
+  let section = "", rows = "";
+  for (const f of r.fields) {
+    const [sec, key] = f.path.split(".");
+    if (sec !== section) { section = sec; rows += `<tr class="section"><td colspan="4">${esc(sec)}</td></tr>`; }
+    const blank = f.value === null || f.value === "" || (Array.isArray(f.value) && !f.value.length);
+    const alts = (f.alternatives || []).map((a) => `<div class="alt">also ${esc(fmt(a.value))} in ${esc(a.document)} (${Math.round(a.confidence * 100)}%)</div>`).join("");
+    rows += `<tr>
+      <td class="path">${esc(key)}</td>
+      <td class="val ${blank ? "blank" : ""}">${blank ? "not found" : esc(fmt(f.value))}${alts}</td>
+      <td>${blank ? "" : `<div class="conf"><span class="bar"><i style="width:${f.confidence * 100}%;background:${confColor(f.confidence)}"></i></span>${Math.round(f.confidence * 100)}%</div><div class="method">${esc(f.method)}</div>`}</td>
+      <td class="src">${blank ? "" : `${esc(f.source)}<div class="from">${esc(f.document)}</div>`}</td>
+    </tr>`;
+  }
+  rows += `<tr class="section"><td colspan="4">loss history (${r.loss_history.length})</td></tr>`;
+  rows += r.loss_history.map((l) => `<tr>
+      <td class="path">${esc(l.date)}</td>
+      <td class="val">$${esc(fmt(l.incurred))} · ${esc(l.status)}<div class="method">${esc(l.description)}</div></td>
+      <td><div class="conf"><span class="bar"><i style="width:${l.confidence * 100}%;background:${confColor(l.confidence)}"></i></span>${Math.round(l.confidence * 100)}%</div><div class="method">${esc(l.method)}</div></td>
+      <td class="src">${esc(l.source)}<div class="from">${esc(l.document)}</div></td>
+    </tr>`).join("") || `<tr><td colspan="4" class="val blank">No losses reported</td></tr>`;
+  $("out").innerHTML = `<div class="scroll"><table><thead><tr><th>Field</th><th>Value</th><th>Confidence</th><th>Source</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+</script>
+</body>
+</html>
