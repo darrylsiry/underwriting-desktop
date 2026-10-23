@@ -141,13 +141,16 @@ def create_draft(base_version_id: int, label: str, notes: str, actor: str) -> in
             (label, notes, actor, base_version_id),
         ).fetchone()["id"]
         conn.execute(
-            "INSERT INTO class_rates SELECT %s, class_code, description, base_rate, min_premium"
+            "INSERT INTO class_rates (version_id, class_code, description, base_rate, min_premium)"
+            " SELECT %s, class_code, description, base_rate, min_premium"
             " FROM class_rates WHERE version_id = %s", (new_id, base_version_id))
         conn.execute(
-            "INSERT INTO factors SELECT %s, factor, kind, key, value, label FROM factors WHERE version_id = %s",
+            "INSERT INTO factors (version_id, factor, kind, key, value, label)"
+            " SELECT %s, factor, kind, key, value, label FROM factors WHERE version_id = %s",
             (new_id, base_version_id))
         conn.execute(
-            "INSERT INTO parameters SELECT %s, name, value, label FROM parameters WHERE version_id = %s",
+            "INSERT INTO parameters (version_id, name, value, label)"
+            " SELECT %s, name, value, label FROM parameters WHERE version_id = %s",
             (new_id, base_version_id))
         _audit(conn, new_id, actor, "create_draft", after={"label": label, "based_on": base["label"]}, reason=notes)
     return new_id
