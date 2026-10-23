@@ -103,6 +103,14 @@ export default async function ReviewPage({ params, searchParams }: Props) {
             </form>
           )}
 
+          {!editable && (
+            <Link href={`/submissions/${id}/workbench`}
+              className="block rounded-lg bg-indigo-600 p-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-500">
+              Open underwriting workbench →
+              <span className="mt-1 block text-xs font-normal text-indigo-100">Rating inputs, schedule credits/debits, referrals, indicative premium</span>
+            </Link>
+          )}
+
           <Panel title="Documents">
             <ul className="space-y-2 text-sm">
               {documents.map((d) => (
