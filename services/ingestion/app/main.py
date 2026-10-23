@@ -3,6 +3,7 @@ import os
 import urllib.request
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from app import claude, pipeline
 
@@ -43,4 +44,7 @@ async def extract(files: list[UploadFile] = File(..., description="Every documen
     uploads = [(f.filename or "upload", await f.read()) for f in files]
     if not any(data for _, data in uploads):
         raise HTTPException(422, "No file content uploaded")
-    return pipeline.run(uploads, rateable_classes(), use_claude=use_claude)
+    # Parsing and the Claude call are synchronous and can take minutes; run them in the threadpool
+    # so /health and other requests keep being served meanwhile.
+    classes = await run_in_threadpool(rateable_classes)
+    return await run_in_threadpool(pipeline.run, uploads, classes, use_claude=use_claude)
