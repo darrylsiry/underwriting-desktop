@@ -7,3 +7,4 @@ __pycache__/
 .pytest_cache/
 storage/
 **/.sandbox-ca.crt
+.claude/security-review/
