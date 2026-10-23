@@ -419,3 +419,15 @@ read this to replay the build quickly.
   - **This container has no `ss`.** `kill $(ss … :8002 …)` silently killed nothing, the new server failed with "address already in use", and testing hit the old code. Check the server log for `Errno 98` after every restart. Find processes with `pgrep -f`, and for Next standalone match `next-server` plus the working directory.
   - Claude's reasoning summary arrives in bursts after a quiet spell of several seconds, so the panel needs the "reading and reasoning" line and a running timer, or it looks stuck.
 - **How to show it:** see DEMO_PLAYBOOK row 14. Case 12 (form plus questionnaire) shows the contrast best. Case 10 (email plus attached loss run) is all Claude.
+
+## Fix: "Rating service class list unavailable" after the services sat idle on Fly
+- **Prompt used:** "The app is showing an error in rating, can you check it out?" (The warning appeared on SUB-0007 in intake review.)
+- **Cause (from Fly logs):** rating auto-stopped at 18:16:38 after idling. At 18:21:47 an extraction asked it for `/classes`, Fly started the machine, and it was ready at 18:21:51. Ingestion's 3 s timeout had already expired, so Claude chose a class code without the rateable list. Ingestion itself took 6.3 s to wake for the same click.
+- **What was built:**
+  - `rateable_classes()` in ingestion waits up to 10 s and tries twice, enough for a cold start. It also keeps the last list it got and falls back to it if rating is unreachable; class codes change only when a rate version is activated.
+  - The Submissions page calls `wakeServices()` via Next's `after()` once the page is sent. It pings rating's and ingestion's `/health` so Fly starts them while the underwriter is still reading the inbox.
+  - 1 new ingestion test (fails once then succeeds; falls back to the cached list when rating is down).
+- **Files:** `services/ingestion/app/main.py`, `services/ingestion/tests/test_ingestion.py`, `web/src/lib/services.ts`, `web/src/app/submissions/page.tsx`
+- **Commit:** `fix: ...`
+- **Decisions:** Fixed in code rather than with `min_machines_running = 1`, which would keep a machine running and billing all day. Raise it on demo day if the first click must be instant.
+- **Gotcha:** any service-to-service call on Fly with auto-stop needs a timeout longer than a cold start (about 4–6 s here). The web status page's 3 s health timeout has the same issue; it only affects that page's colors, and the wake-up ping usually starts the services first anyway.
