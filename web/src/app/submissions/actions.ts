@@ -32,7 +32,7 @@ export async function saveReviewAction(id: string, form: FormData) {
   );
   let changed: number;
   try {
-    changed = await saveReview(id, inputs, await currentUser());
+    changed = await saveReview(id, inputs, await currentUser(), String(form.get("_fingerprint") ?? ""));
   } catch (err) {
     back(id, { error: (err as Error).message });
   }

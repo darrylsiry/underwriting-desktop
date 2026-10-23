@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { auditTrail } from "@/lib/audit";
-import { getSubmission, listDocuments, missingForRating } from "@/lib/submissions";
+import { dataFingerprint, getSubmission, listDocuments, missingForRating } from "@/lib/submissions";
 import {
   SECTIONS, attention, formatValue, getPath, toInput, type FieldDef, type FieldMeta, type Value,
 } from "@/lib/submission";
@@ -50,6 +50,7 @@ export default async function ReviewPage({ params, searchParams }: Props) {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <form action={saveReviewAction.bind(null, id)} className="space-y-6">
+          <input type="hidden" name="_fingerprint" value={dataFingerprint(sub.data)} />
           {SECTIONS.map((section) => (
             <section key={section.key} className="rounded-lg border border-slate-200 bg-white shadow-sm">
               <h2 className="border-b border-slate-100 px-4 py-2 text-xs font-medium uppercase tracking-wide text-slate-500">{section.title}</h2>

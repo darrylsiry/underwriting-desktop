@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import type { PoolClient } from "pg";
 import { audit } from "./audit";
 import { customerDb } from "./db";
 import { INGESTION_SERVICE_URL } from "./services";
@@ -96,36 +98,72 @@ export async function receiveSubmission(files: File[], actor: string): Promise<s
   }
 }
 
-/** Apply the underwriter's edits; each changed field is audited with before/after. Returns how many changed. */
-export async function saveReview(id: string, inputs: Record<string, string>, actor: string): Promise<number> {
-  const sub = await getSubmission(id);
-  if (!sub) throw new Error("Submission not found");
-  if (sub.status !== "needs_review") throw new Error(`${sub.reference} is already accepted`);
-
-  const data = structuredClone(sub.data);
-  const changes: { path: string; before: Value; after: Value }[] = [];
-  for (const def of FIELD_DEFS) {
-    if (!(def.path in inputs)) continue;
-    const after = fromInput(def, inputs[def.path]);
-    const before = getPath(data, def.path);
-    if (!sameValue(before, after)) {
-      setPath(data, def.path, after);
-      changes.push({ path: def.path, before, after });
-    }
+/**
+ * Run `fn` on a submission still in intake review, inside a transaction holding its row lock,
+ * so concurrent saves and a save racing an accept can't overwrite each other.
+ */
+async function withReviewLock<T>(id: string, fn: (client: PoolClient, sub: SubmissionRow) => Promise<T>): Promise<T> {
+  const client = await customerDb.connect();
+  try {
+    await client.query("BEGIN");
+    const sub = (await client.query<SubmissionRow>("SELECT * FROM submissions WHERE id = $1 FOR UPDATE", [id])).rows[0];
+    if (!sub) throw new Error("Submission not found");
+    if (sub.status !== "needs_review") throw new Error(`${sub.reference} is already accepted`);
+    const result = await fn(client, sub);
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
   }
-  if (!changes.length) return 0;
+}
 
-  const corrected = [...new Set([...sub.corrected_fields, ...changes.map((c) => c.path)])];
-  await customerDb.query(
-    "UPDATE submissions SET data = $2, corrected_fields = $3, applicant_name = $4 WHERE id = $1",
-    [id, data, corrected, (data.applicant?.name as string) ?? ""],
-  );
-  const correlationId = crypto.randomUUID();
-  await audit(...changes.map((c) => ({
-    actor, action: "submission.field_corrected", entityType: "submission" as const, entityId: id,
-    summary: `${sub.reference}: ${c.path} corrected`, before: { [c.path]: c.before }, after: { [c.path]: c.after },
-    correlationId,
-  })));
+/** Fingerprint of the data a review form was rendered from (jsonb comes back in a stable order). */
+export function dataFingerprint(data: SubmissionData): string {
+  return createHash("sha256").update(JSON.stringify(data)).digest("hex").slice(0, 16);
+}
+
+/**
+ * Apply the underwriter's edits; each changed field is audited with before/after. Returns how many changed.
+ * `fingerprint` is the data the form showed: if someone saved since, refuse rather than revert their edits.
+ */
+export async function saveReview(id: string, inputs: Record<string, string>, actor: string, fingerprint?: string): Promise<number> {
+  const { reference, changes } = await withReviewLock(id, async (client, sub) => {
+    if (fingerprint && fingerprint !== dataFingerprint(sub.data)) {
+      throw new Error(`${sub.reference} was changed by someone else since you opened it. Reload to see their edits, then save again.`);
+    }
+    const data = structuredClone(sub.data);
+    const changes: { path: string; before: Value; after: Value }[] = [];
+    for (const def of FIELD_DEFS) {
+      if (!(def.path in inputs)) continue;
+      const after = fromInput(def, inputs[def.path]);
+      const before = getPath(data, def.path);
+      if (!sameValue(before, after)) {
+        setPath(data, def.path, after);
+        changes.push({ path: def.path, before, after });
+      }
+    }
+    if (changes.length) {
+      const corrected = [...new Set([...sub.corrected_fields, ...changes.map((c) => c.path)])];
+      await client.query(
+        `UPDATE submissions SET data = $2, corrected_fields = $3, applicant_name = $4
+         WHERE id = $1 AND status = 'needs_review'`,
+        [id, data, corrected, (data.applicant?.name as string) ?? ""],
+      );
+    }
+    return { reference: sub.reference, changes };
+  });
+
+  if (changes.length) {
+    const correlationId = crypto.randomUUID();
+    await audit(...changes.map((c) => ({
+      actor, action: "submission.field_corrected", entityType: "submission" as const, entityId: id,
+      summary: `${reference}: ${c.path} corrected`, before: { [c.path]: c.before }, after: { [c.path]: c.after },
+      correlationId,
+    })));
+  }
   return changes.length;
 }
 
@@ -135,48 +173,39 @@ export function missingForRating(data: SubmissionData): string[] {
 
 /** Accept the intake: link (or create) the insured and lock the extracted data for underwriting. */
 export async function acceptSubmission(id: string, actor: string): Promise<void> {
-  const sub = await getSubmission(id);
-  if (!sub) throw new Error("Submission not found");
-  if (sub.status !== "needs_review") throw new Error(`${sub.reference} is already accepted`);
-  const missing = missingForRating(sub.data);
-  if (missing.length) throw new Error(`Fill in before accepting: ${missing.join(", ")}`);
+  const r = await withReviewLock(id, async (client, sub) => {
+    const missing = missingForRating(sub.data);
+    if (missing.length) throw new Error(`Fill in before accepting: ${missing.join(", ")}`);
+    const a = sub.data.applicant;
+    const name = String(a.name ?? "").trim();
+    if (!name) throw new Error("Fill in the named insured before accepting");
+    const fein = String(a.fein ?? "").trim();
+    const state = String(a.state ?? "");
 
-  const a = sub.data.applicant;
-  const name = String(a.name ?? "").trim();
-  if (!name) throw new Error("Fill in the named insured before accepting");
-  const fein = String(a.fein ?? "").trim();
-  const client = await customerDb.connect();
-  let insuredId: string;
-  try {
-    await client.query("BEGIN");
     const existing = fein
       ? (await client.query<{ id: string }>("SELECT id FROM insureds WHERE fein = $1", [fein])).rows[0]
       : undefined;
-    insuredId = existing?.id ?? (await client.query<{ id: string }>(
-      "INSERT INTO insureds (name, fein, state) VALUES ($1, $2, $3) RETURNING id",
-      [name, fein, String(a.state ?? "")],
+    const insuredId = existing?.id ?? (await client.query<{ id: string }>(
+      "INSERT INTO insureds (name, fein, state) VALUES ($1, $2, $3) RETURNING id", [name, fein, state],
     )).rows[0].id;
     await client.query(
-      "UPDATE submissions SET status = 'accepted', insured_id = $2, reviewed_by = $3, reviewed_at = now() WHERE id = $1",
+      `UPDATE submissions SET status = 'accepted', insured_id = $2, reviewed_by = $3, reviewed_at = now()
+       WHERE id = $1 AND status = 'needs_review'`,
       [id, insuredId, actor],
     );
-    await client.query("COMMIT");
-    const correlationId = crypto.randomUUID();
-    await audit(
-      ...(existing ? [] : [{
-        actor, action: "insured.created", entityType: "insured" as const, entityId: insuredId,
-        summary: `Insured ${name} created from ${sub.reference}`, after: { name, fein, state: a.state }, correlationId,
-      }]),
-      {
-        actor, action: "submission.accepted", entityType: "submission", entityId: id,
-        summary: `${sub.reference} intake accepted (${sub.corrected_fields.length} field(s) corrected)`,
-        after: { insured_id: insuredId, corrected_fields: sub.corrected_fields }, correlationId,
-      },
-    );
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw err;
-  } finally {
-    client.release();
-  }
+    return { sub, insuredId, created: !existing, name, fein, state };
+  });
+
+  const correlationId = crypto.randomUUID();
+  await audit(
+    ...(r.created ? [{
+      actor, action: "insured.created", entityType: "insured" as const, entityId: r.insuredId,
+      summary: `Insured ${r.name} created from ${r.sub.reference}`, after: { name: r.name, fein: r.fein, state: r.state }, correlationId,
+    }] : []),
+    {
+      actor, action: "submission.accepted", entityType: "submission", entityId: id,
+      summary: `${r.sub.reference} intake accepted (${r.sub.corrected_fields.length} field(s) corrected)`,
+      after: { insured_id: r.insuredId, corrected_fields: r.sub.corrected_fields }, correlationId,
+    },
+  );
 }
