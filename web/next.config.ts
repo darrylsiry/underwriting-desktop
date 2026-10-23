@@ -4,6 +4,17 @@ const nextConfig: NextConfig = {
   output: "standalone",
   // Broker submissions arrive as several PDFs; the default 1 MB server-action limit is too small.
   experimental: { serverActions: { bodySizeLimit: "25mb" } },
+  async headers() {
+    return [{
+      source: "/:path*",
+      headers: [
+        { key: "X-Frame-Options", value: "DENY" },
+        { key: "X-Content-Type-Options", value: "nosniff" },
+        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+      ],
+    }];
+  },
 };
 
 export default nextConfig;

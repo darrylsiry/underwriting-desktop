@@ -8,3 +8,5 @@ __pycache__/
 storage/
 **/.sandbox-ca.crt
 .claude/security-review/
+.fly-credentials
+.claude/ux-review/

@@ -1,0 +1,23 @@
+# Rating service: private. No public IPs; reached by web at http://<app>.flycast (Fly's private
+# proxy, so machines can stop when idle and start on demand). Deploy with scripts/fly-deploy.sh.
+app = "uwdesk-rating"
+primary_region = "iad"
+
+[http_service]
+  internal_port = 8000
+  force_https = false          # Flycast is private plain HTTP
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

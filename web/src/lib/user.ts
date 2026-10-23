@@ -5,5 +5,5 @@ import { cookies } from "next/headers";
 export const USER_COOKIE = "uw_user";
 
 export async function currentUser(): Promise<string> {
-  return (await cookies()).get(USER_COOKIE)?.value || "underwriter";
+  return (await cookies()).get(USER_COOKIE)?.value || process.env.BASIC_AUTH_USER || "underwriter";
 }

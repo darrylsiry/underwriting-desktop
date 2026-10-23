@@ -5,7 +5,7 @@ import { applyFilters, changes, display, groupByCorrelation, type TimelineEvent 
 
 export const dynamic = "force-dynamic";
 
-const RATING_ADMIN_URL = process.env.RATING_ADMIN_URL ?? "http://localhost:8001/admin";
+const RATING_ADMIN_URL = process.env.RATING_ADMIN_URL ?? "/admin";
 
 const SOURCES: Record<string, { label: string; style: string }> = {
   desktop: { label: "UW Desktop", style: "bg-indigo-50 text-indigo-700" },

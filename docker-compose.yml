@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_USER: uw
       POSTGRES_PASSWORD: uw
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"]   # localhost only: never expose the demo database on the network
     volumes:
       - ./db/init:/docker-entrypoint-initdb.d:ro
       - pgdata:/var/lib/postgresql/data
@@ -18,7 +18,7 @@ services:
     build: ./services/rating
     environment:
       DATABASE_URL: postgresql://uw:uw@db:5432/rating
-    ports: ["8001:8000"]
+    ports: ["127.0.0.1:8001:8000"]
     depends_on:
       db: { condition: service_healthy }
     healthcheck:   # healthy once migrations ran and the active rate version loads
@@ -32,7 +32,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       RATING_SERVICE_URL: http://rating:8000
       EXTRACTION_MODEL: ${EXTRACTION_MODEL:-claude-opus-5-5}
-    ports: ["8002:8000"]
+    ports: ["127.0.0.1:8002:8000"]
     depends_on:
       rating: { condition: service_healthy }   # Claude may only pick rateable class codes from /classes
     volumes:
@@ -45,7 +45,7 @@ services:
       POLICY_DATABASE_URL: postgresql://uw:uw@db:5432/policy
       RATING_SERVICE_URL: http://rating:8000
       INGESTION_SERVICE_URL: http://ingestion:8000
-    ports: ["3000:3000"]
+    ports: ["127.0.0.1:3000:3000"]
     depends_on:
       db: { condition: service_healthy }
       rating: { condition: service_healthy }

@@ -5,7 +5,8 @@ import { setUserAction } from "./submissions/actions";
 import { currentUser } from "@/lib/user";
 import "./globals.css";
 
-const RATING_ADMIN_URL = process.env.RATING_ADMIN_URL ?? "http://localhost:8001/admin";
+// Rate admin is proxied through this app (src/app/admin) so it shares the password gate.
+const RATING_ADMIN_URL = process.env.RATING_ADMIN_URL ?? "/admin";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
