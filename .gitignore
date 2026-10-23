@@ -9,4 +9,7 @@ storage/
 **/.sandbox-ca.crt
 .claude/security-review/
 .fly-credentials
+# web/inbox is a deploy-time copy of samples/submissions (see scripts/fly-deploy.sh)
+web/inbox/*
+!web/inbox/.gitkeep
 .claude/ux-review/

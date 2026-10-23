@@ -1,0 +1,50 @@
+{
+  "applicant": {
+    "name": "Mile High Electrical Contractors Inc.",
+    "dba": "",
+    "street": "5600 Brighton Blvd",
+    "city": "Denver",
+    "state": "CO",
+    "zip": "80216",
+    "fein": "84-2216053",
+    "entity_type": "Corporation",
+    "years_in_business": 17,
+    "website": "milehighelectric.example"
+  },
+  "producer": {
+    "agency": "Front Range Wholesale",
+    "contact": "Marcus Webb",
+    "email": "mwebb@frontrangewholesale.example",
+    "phone": "303-555-0119"
+  },
+  "policy": {
+    "effective_date": "2027-03-01",
+    "expiration_date": "2028-03-01",
+    "occurrence_limit": 1000000,
+    "aggregate_limit": 3000000,
+    "products_aggregate_limit": 3000000,
+    "deductible": 5000
+  },
+  "operations": {
+    "description": "Electrical contractor for commercial tenant improvements, data center build-outs and EV charging installations. Low-voltage and fire alarm work included; no utility or high-voltage line work.",
+    "class_code": "92215",
+    "states": [
+      "CO",
+      "WY"
+    ],
+    "gross_receipts": 9600000,
+    "payroll": 3500000,
+    "employees": 54,
+    "subcontracted_pct": 8,
+    "subcontractor_coi_required": true,
+    "residential_pct": 5,
+    "new_construction_pct": 40,
+    "max_height_ft": 40,
+    "wrap_up_projects": false
+  },
+  "loss_history": [],
+  "prior": {
+    "carrier": "Rocky Mountain Indemnity Co.",
+    "premium": 72900
+  }
+}

@@ -101,6 +101,9 @@ for pair in "$RATING:services/rating" "$INGESTION:services/ingestion"; do
 done
 
 step "Deploy web (public)"
+# The Submissions inbox reads a drop folder; on Fly it's baked into the web image from samples/.
+find "$ROOT/web/inbox" -mindepth 1 ! -name .gitkeep -exec rm -rf {} +
+cp -R "$ROOT/samples/submissions/." "$ROOT/web/inbox/"
 fly deploy web --config "$ROOT/web/fly.toml" --app "$WEB" --ha=false ${overrides[@]+"${overrides[@]}"}
 
 step "Done"

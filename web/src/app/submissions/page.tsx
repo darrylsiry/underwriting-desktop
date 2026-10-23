@@ -1,21 +1,37 @@
 import Link from "next/link";
+import { listInbox } from "@/lib/inbox";
 import { listSubmissions, missingForRating } from "@/lib/submissions";
 import { FIELD_DEFS, attention, getPath } from "@/lib/submission";
+import { InboxList } from "./inbox-list";
 import { StatusBadge } from "./status-badge";
 import { UploadForm } from "./upload-form";
 
 export const dynamic = "force-dynamic";
 
 export default async function SubmissionsPage() {
-  const submissions = await listSubmissions();
+  const [submissions, inbox] = await Promise.all([listSubmissions(), listInbox()]);
   return (
     <main className="mx-auto max-w-6xl p-8">
-      <h1 className="text-2xl font-semibold">Submission inbox</h1>
-      <p className="mt-1 text-sm text-slate-500">Upload a broker submission; review what was extracted before it goes to underwriting.</p>
+      <h1 className="text-2xl font-semibold">Submissions</h1>
+      <p className="mt-1 text-sm text-slate-500">Pick a broker submission from the inbox (or upload one); review what was extracted before it goes to underwriting.</p>
 
-      <div className="mt-6"><UploadForm /></div>
+      <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-baseline justify-between border-b border-slate-100 bg-slate-50 px-4 py-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Inbox · {inbox.length} new</h2>
+          <span className="text-xs text-slate-400">From the broker drop folder, not yet extracted. Fillable forms read instantly; the rest takes Claude 20–40 s.</span>
+        </div>
+        {inbox.length ? <InboxList items={inbox} /> : (
+          <p className="px-4 py-6 text-center text-sm text-slate-400">Inbox is empty: every submission in the drop folder has been extracted.</p>
+        )}
+      </section>
 
-      <table className="mt-8 w-full overflow-hidden rounded-lg border border-slate-200 bg-white text-sm shadow-sm">
+      <details className="mt-4">
+        <summary className="cursor-pointer text-sm text-slate-500 hover:text-slate-700">Or upload documents yourself</summary>
+        <div className="mt-2"><UploadForm /></div>
+      </details>
+
+      <h2 className="mt-8 text-xs font-semibold uppercase tracking-wide text-slate-500">Received · {submissions.length}</h2>
+      <table className="mt-2 w-full overflow-hidden rounded-lg border border-slate-200 bg-white text-sm shadow-sm">
         <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
           <tr>
             <th className="px-4 py-2">Ref</th><th className="px-4 py-2">Applicant</th><th className="px-4 py-2">Class</th>
@@ -53,7 +69,7 @@ export default async function SubmissionsPage() {
             );
           })}
           {!submissions.length && (
-            <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">No submissions yet. Upload one above (try samples/submissions/05-desert-bloom-painting).</td></tr>
+            <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">No submissions yet. Extract one from the inbox above.</td></tr>
           )}
         </tbody>
       </table>

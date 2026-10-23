@@ -1,0 +1,63 @@
+{
+  "applicant": {
+    "name": "Peach State Flatwork Inc.",
+    "dba": "",
+    "street": "655 Fulton Industrial Blvd SW",
+    "city": "Atlanta",
+    "state": "GA",
+    "zip": "30336",
+    "fein": "58-3320914",
+    "entity_type": "Corporation",
+    "years_in_business": 5,
+    "website": ""
+  },
+  "producer": {
+    "agency": "Southern Risk Advisors",
+    "contact": "Angela Brooks",
+    "email": "abrooks@southernrisk.example",
+    "phone": "404-555-0117"
+  },
+  "policy": {
+    "effective_date": "2026-12-15",
+    "expiration_date": "2027-12-15",
+    "occurrence_limit": 1000000,
+    "aggregate_limit": 2000000,
+    "products_aggregate_limit": 2000000,
+    "deductible": 5000
+  },
+  "operations": {
+    "description": "Concrete flatwork: driveways, sidewalks, patios and curb and gutter for homebuilders and municipalities in metro Atlanta and upstate South Carolina.",
+    "class_code": "91560",
+    "states": [
+      "GA",
+      "SC"
+    ],
+    "gross_receipts": 2700000,
+    "payroll": 1050000,
+    "employees": 23,
+    "subcontracted_pct": 30,
+    "subcontractor_coi_required": false,
+    "residential_pct": 65,
+    "new_construction_pct": 85,
+    "max_height_ft": 6,
+    "wrap_up_projects": false
+  },
+  "loss_history": [
+    {
+      "date": "2024-02-27",
+      "description": "Pedestrian trip on unmarked sidewalk pour",
+      "incurred": 41000,
+      "status": "Closed"
+    },
+    {
+      "date": "2026-03-14",
+      "description": "Concrete washout damaged homeowner landscaping",
+      "incurred": 7200,
+      "status": "Open"
+    }
+  ],
+  "prior": {
+    "carrier": "Chattahoochee Specialty Insurance Co.",
+    "premium": 36900
+  }
+}

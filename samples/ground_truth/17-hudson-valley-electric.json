@@ -1,0 +1,56 @@
+{
+  "applicant": {
+    "name": "Hudson Valley Electric & Solar Corp.",
+    "dba": "",
+    "street": "212 Route 9W",
+    "city": "Newburgh",
+    "state": "NY",
+    "zip": "12550",
+    "fein": "14-6603318",
+    "entity_type": "Corporation",
+    "years_in_business": 12,
+    "website": "hvelectricsolar.example"
+  },
+  "producer": {
+    "agency": "Catskill Specialty Agency",
+    "contact": "Rachel Okonkwo",
+    "email": "rokonkwo@catskillspecialty.example",
+    "phone": "845-555-0131"
+  },
+  "policy": {
+    "effective_date": "2027-01-01",
+    "expiration_date": "2028-01-01",
+    "occurrence_limit": 1000000,
+    "aggregate_limit": 2000000,
+    "products_aggregate_limit": 2000000,
+    "deductible": 2500
+  },
+  "operations": {
+    "description": "Electrical contractor: residential service upgrades and rooftop solar installations, plus light commercial wiring for retail and offices in the Hudson Valley.",
+    "class_code": "92215",
+    "states": [
+      "NY"
+    ],
+    "gross_receipts": 4400000,
+    "payroll": 1600000,
+    "employees": 27,
+    "subcontracted_pct": 25,
+    "subcontractor_coi_required": true,
+    "residential_pct": 60,
+    "new_construction_pct": 20,
+    "max_height_ft": 35,
+    "wrap_up_projects": false
+  },
+  "loss_history": [
+    {
+      "date": "2025-04-08",
+      "description": "Roof leak at solar array penetration, interior damage",
+      "incurred": 28300,
+      "status": "Closed"
+    }
+  ],
+  "prior": {
+    "carrier": "Empire Mutual Specialty Co.",
+    "premium": 58600
+  }
+}

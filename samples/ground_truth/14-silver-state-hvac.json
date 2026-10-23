@@ -1,0 +1,49 @@
+{
+  "applicant": {
+    "name": "Silver State Air & Heating",
+    "dba": "",
+    "street": "",
+    "city": "Henderson",
+    "state": "NV",
+    "zip": "",
+    "fein": "",
+    "entity_type": "",
+    "years_in_business": 2,
+    "website": ""
+  },
+  "producer": {
+    "agency": "Desert Peak Insurance Services",
+    "contact": "Tony Akana",
+    "email": "takana@desertpeakins.example",
+    "phone": "702-555-0172"
+  },
+  "policy": {
+    "effective_date": "2026-11-15",
+    "expiration_date": "2027-11-15",
+    "occurrence_limit": 1000000,
+    "aggregate_limit": 2000000,
+    "products_aggregate_limit": null,
+    "deductible": null
+  },
+  "operations": {
+    "description": "Commercial HVAC service and rooftop unit replacement for restaurants, retail strip centers and small office buildings around Las Vegas and Henderson.",
+    "class_code": "97050",
+    "states": [
+      "NV"
+    ],
+    "gross_receipts": 1200000,
+    "payroll": null,
+    "employees": 9,
+    "subcontracted_pct": null,
+    "subcontractor_coi_required": null,
+    "residential_pct": 0,
+    "new_construction_pct": null,
+    "max_height_ft": null,
+    "wrap_up_projects": null
+  },
+  "loss_history": [],
+  "prior": {
+    "carrier": "",
+    "premium": null
+  }
+}

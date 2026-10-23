@@ -10,6 +10,7 @@ The ACORD-style forms only imitate the layout and field naming of ACORD
 """
 import json
 import shutil
+import sys
 from datetime import date
 from email.message import EmailMessage
 from pathlib import Path
@@ -255,7 +256,7 @@ def email_body(c, sparse):
     if sparse:
         return f"""Hi team,
 
-Quick one for you - new venture-ish painting contractor out of {a['city']}, {a['name']}.
+Quick one for you - newer contractor out of {a['city']}, {a['name']}.
 Been in business about {a['years_in_business']} years, {ops['employees']} guys, roughly {money(ops['gross_receipts'])} in sales.
 {ops['description']}
 
@@ -268,21 +269,33 @@ Thanks,
 {p['phone']}
 """
     loss = c["loss_history"]
-    loss_line = (f"One claim in the last five years ({money(loss[0]['incurred'])}, closed) - loss runs attached."
-                 if loss else "Clean loss history, loss runs attached.")
+    open_claims = sum(1 for l in loss if l["status"] == "Open")
+    if not loss:
+        loss_line = "Clean loss history, loss runs attached."
+    elif len(loss) == 1:
+        loss_line = f"One claim in the last five years ({money(loss[0]['incurred'])}, {loss[0]['status'].lower()}) - loss runs attached."
+    else:
+        loss_line = (f"{len(loss)} claims in the last five years, {money(sum(l['incurred'] for l in loss))} total incurred"
+                     f"{f', {open_claims} still open' if open_claims else ', all closed'} - loss runs attached.")
+    prior_line = (f"Renewal currently with {c['prior']['carrier']}\nat {money(c['prior']['premium'])}, they're non-renewing the class so we're marketing it."
+                  if c["prior"]["carrier"] else "No prior GL coverage - they've been on a project-specific policy through the GC.")
+    new = ops["new_construction_pct"]
+    work = "essentially all remodel (no new construction)" if not new else f"about {new}% new construction"
+    subs = (f"subs maybe {ops['subcontracted_pct']}% of costs and they collect COIs" if ops["subcontractor_coi_required"]
+            else f"subs about {ops['subcontracted_pct']}% of costs; they don't always get certificates")
     return f"""Hi there,
 
-Please see below for a new submission I'd like you to quote. Renewal currently with {c['prior']['carrier']}
-at {money(c['prior']['premium'])}, they're non-renewing the class so we're marketing it.
+Please see below for a new submission I'd like you to quote. {prior_line}
 
 Insured: {a['name']}
 Address: {a['street']}, {a['city']}, {a['state']} {a['zip']}
 FEIN: {a['fein']} - {a['entity_type']}, in business {a['years_in_business']} years
 
 Operations: {ops['description']}
-Work is {ops['residential_pct']}% residential, essentially all remodel (no new construction).
-They self-perform almost everything - subs maybe {ops['subcontracted_pct']}% of costs and they collect COIs.
-Max working height is about {ops['max_height_ft']} ft (ladders only). Operates in {', '.join(ops['states'])} only.
+Work is {ops['residential_pct']}% residential, {work}.
+They self-perform most of it - {subs}.
+Max working height is about {ops['max_height_ft']} ft. Operates in {', '.join(ops['states'])} only.
+{'Some larger jobs are written under OCIP/CCIP wrap-ups.' if ops['wrap_up_projects'] else 'No wrap-up (OCIP/CCIP) projects.'}
 
 Projected gross receipts: {money(ops['gross_receipts'])}
 Payroll: {money(ops['payroll'])}, {ops['employees']} employees
@@ -305,7 +318,7 @@ def broker_email(c, path, attachments=(), sparse=False):
     msg["From"] = f"{c['producer']['contact']} <{c['producer']['email']}>"
     msg["To"] = "submissions@underwriting-desk.example"
     msg["Subject"] = f"New submission - {c['applicant']['name']} - Contractors GL"
-    msg["Date"] = "Thu, 22 Oct 2026 09:14:00 -0500"
+    msg["Date"] = c.get("received", "Thu, 22 Oct 2026 09:14:00 -0500")
     msg.set_content(email_body(c, sparse))
     for att in attachments:
         msg.add_attachment(att.read_bytes(), maintype="application", subtype="pdf", filename=att.name)
@@ -329,7 +342,7 @@ def questionnaire_pdf(c, path):
          f"{ops['residential_pct']}% residential / {100 - ops['residential_pct']}% commercial. "
          f"{ops['new_construction_pct']}% new construction / {100 - ops['new_construction_pct']}% renovation and remodel."),
         ("Maximum height at which work is performed? Is scaffolding used?",
-         f"Up to {ops['max_height_ft']} feet on exterior facade work. Scaffolding is erected by a licensed subcontractor."),
+         f"Up to {ops['max_height_ft']} feet" + (" on exterior facade work. Scaffolding is erected by a licensed subcontractor." if ops["max_height_ft"] >= 40 else ". Ladders and lifts only, no scaffolding.")),
         ("States in which you operate.", ", ".join(ops["states"])),
         ("Do you participate in wrap-up (OCIP/CCIP) programs?", "Yes" if ops["wrap_up_projects"] else "No"),
         ("Are any projects subject to New York Labor Law 240/241?", "Yes, NYC projects are subject to Labor Law 240/241." if "NY" in ops["states"] else "No"),
@@ -396,7 +409,7 @@ def word_application(c, path):
         ("COIs obtained from subs?", "Yes" if ops["subcontractor_coi_required"] else "No"),
         ("Residential work", pct(ops["residential_pct"])),
         ("New construction", pct(ops["new_construction_pct"])),
-        ("Maximum height", f"{ops['max_height_ft']} ft (ground level flatwork)"),
+        ("Maximum height", f"{ops['max_height_ft']} ft" + (" (ground level flatwork)" if ops["max_height_ft"] <= 10 else "")),
         ("Wrap-up projects?", "Yes" if ops["wrap_up_projects"] else "No"),
     ])
     table("Prior insurance", [("Carrier", c["prior"]["carrier"]), ("Expiring premium", money(c["prior"]["premium"]))])
@@ -432,18 +445,27 @@ def build(c):
         loss_run.unlink()  # it travels inside the email
     if "broker_email_sparse" in fmts:
         broker_email(c, d / f"{slug}-submission-email.eml", sparse=True)
-    truth = {k: v for k, v in c.items() if k not in ("id", "formats")}
+    truth = {k: v for k, v in c.items() if k not in ("id", "formats", "received")}
     (TRUTH / f"{c['id']}.json").write_text(json.dumps(truth, indent=2) + "\n")
 
 
-def main():
-    for p in (OUT, TRUTH):
-        shutil.rmtree(p, ignore_errors=True)
-        p.mkdir()
-    for c in CASES:
+def main(prefixes):
+    """No arguments: rebuild every case. With case-id prefixes (e.g. 09 10): rebuild just those,
+    leaving the other cases' files untouched (the PDFs embed today's date)."""
+    if prefixes:
+        cases = [c for c in CASES if c["id"].startswith(tuple(prefixes))]
+        for c in cases:
+            shutil.rmtree(OUT / c["id"], ignore_errors=True)
+            (TRUTH / f"{c['id']}.json").unlink(missing_ok=True)
+    else:
+        cases = CASES
+        for p in (OUT, TRUTH):
+            shutil.rmtree(p, ignore_errors=True)
+            p.mkdir()
+    for c in cases:
         build(c)
         print(f"{c['id']}: {', '.join(sorted(f.name for f in (OUT / c['id']).iterdir()))}")
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
