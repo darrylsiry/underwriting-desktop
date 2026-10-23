@@ -23,3 +23,34 @@ export function basicAuthOk(header: string | null, user: string, password: strin
   const passOk = same(decoded.slice(i + 1), password);
   return userOk && passOk;
 }
+
+/** Request header middleware.ts sets to the signed-in username (and strips from client requests). */
+export const AUTH_USER_HEADER = "x-uw-signed-in-user";
+
+/** username -> password. Empty means the password gate is off (local dev). */
+export type Users = Map<string, string>;
+
+/**
+ * BASIC_AUTH_USERS="underwriter1:pw1,underwriter2:pw2" (comma-separated; a password may contain ":"
+ * but not ","). Falls back to the single BASIC_AUTH_USER / BASIC_AUTH_PASSWORD pair.
+ */
+export function loadUsers(env: Record<string, string | undefined>): Users {
+  const users: Users = new Map();
+  for (const entry of (env.BASIC_AUTH_USERS ?? "").split(",")) {
+    const i = entry.indexOf(":");
+    const name = entry.slice(0, i).trim();
+    const password = entry.slice(i + 1).trim();
+    if (i > 0 && name && password) users.set(name, password);
+  }
+  if (!users.size && env.BASIC_AUTH_PASSWORD) users.set(env.BASIC_AUTH_USER || "underwriter1", env.BASIC_AUTH_PASSWORD);
+  return users;
+}
+
+/** The username whose credentials `header` carries, or null. Checks every user so timing doesn't reveal which names exist. */
+export function authenticate(header: string | null, users: Users): string | null {
+  let match: string | null = null;
+  for (const [name, password] of users) {
+    if (basicAuthOk(header, name, password)) match = name;
+  }
+  return match;
+}

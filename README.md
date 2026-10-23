@@ -37,7 +37,7 @@ Creating them starts billing on your Fly.io account.
 
 | App | Exposure | Notes |
 |-----|----------|-------|
-| `<prefix>-web` | public `https://<prefix>-web.fly.dev` | HTTP Basic auth; credentials generated into `.fly-credentials` (git-ignored) |
+| `<prefix>-web` | public `https://<prefix>-web.fly.dev` | HTTP Basic auth, one login per user (`BASIC_AUTH_USERS`); passwords kept in `.fly-credentials` (git-ignored). Add users with `scripts/fly-users.sh underwriter2 …` |
 | `<prefix>-rating` | private `http://<prefix>-rating.flycast` | no public IPs; rate admin reached through web at `/admin` |
 | `<prefix>-ingestion` | private `http://<prefix>-ingestion.flycast` | `ANTHROPIC_API_KEY` secret copied from `.env` |
 | `<prefix>-db` | Managed Postgres | databases `customer`, `policy`, `rating`, attached as secrets |

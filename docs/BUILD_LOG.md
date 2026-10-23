@@ -378,3 +378,22 @@ read this to replay the build quickly.
 - **Dead ends / gotchas:**
   - Don't deploy from a Claude Code cloud sandbox. Its egress proxy blocks Fly's Depot builder (`api.depot.dev`), and the Fly remote builder needs WireGuard or builder DNS, which the sandbox lacks. The workaround on 2026-10-23 was to build locally with base images from `mirror.gcr.io` (Docker Hub returned 429), pass the sandbox CA only as a build-only bind mount so it never lands in the image, and run `fly deploy --image … --local-only`. Merging to `main` now deploys from GitHub instead.
   - Deploying an auto-stopped app leaves its machines stopped. They start on the next request.
+
+## Users: one login per underwriter (underwriter1–underwriter9)
+- **Prompt used:** "Create 8 additional users named underwriter2 through underwriter9, and rename the current user underwriter1."
+- **What was built:**
+  - The password gate accepts several logins from `BASIC_AUTH_USERS` (`name:password,name:password`; a password may contain `:` but not `,`). The old single `BASIC_AUTH_USER`/`BASIC_AUTH_PASSWORD` pair still works when `BASIC_AUTH_USERS` is unset.
+  - **Who you are comes from your login.** After checking the password, `middleware.ts` passes the username to the app in the `x-uw-signed-in-user` request header, after deleting any copy the client sent. `currentUser()` reads it, so the audit trail, "Received by", ratings, quotes and binds record the person who actually signed in. The header shows "Signed in as underwriter3" instead of the free-text "Working as" box.
+  - Locally (no logins configured) nothing changes: the "Working as" box and its cookie still choose the name, now defaulting to `underwriter1`.
+  - `scripts/fly-users.sh name …` adds logins. It generates passwords into `.fly-credentials` (git-ignored, mode 600, `name=password` lines) and sets `BASIC_AUTH_USERS` from the whole file. `fly-deploy.sh` now creates `underwriter1` that way on a fresh setup.
+- **Files:** `web/src/lib/{basic-auth.ts,basic-auth.test.ts,user.ts}`, `web/src/middleware.ts`, `web/src/app/layout.tsx`, `web/src/app/submissions/actions.ts`, `scripts/{fly-users.sh,fly-deploy.sh}`, `README.md`
+- **Commit:** `users: ...`
+- **Decisions:**
+  - Basic auth rather than a login page and sessions: it was already the gate, it needs no session store, and every browser handles it. To switch users, use a private window (browsers cache Basic credentials per site).
+  - `authenticate()` checks the presented credentials against every user with constant-time compares, so response time doesn't reveal which usernames exist.
+  - Existing audit rows keep the name they were written with (`underwriter`). Audit history isn't rewritten.
+  - `fly-users.sh` never removes the legacy `BASIC_AUTH_USER`/`BASIC_AUTH_PASSWORD` secrets. A web release older than this change with those removed would run with *no* password. Unset them by hand once this release is live.
+- **Dead ends / gotchas:**
+  - The trusted identity header must be deleted from every incoming request, including when no logins are configured. Otherwise a client could send it and pick their own name.
+  - Next's standalone server shows up as `next-server` in the process list, not `node server.js`. A test server left running on the port made a new build look like it ignored auth (every request 200). Check `prod.log` for `EADDRINUSE` before trusting results.
+- **Still open (security review, on hold):** the rate admin's own "actor" field is free text (SEC-006); it doesn't use the signed-in user yet.
