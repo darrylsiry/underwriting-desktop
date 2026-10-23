@@ -1,0 +1,68 @@
+{
+  "applicant": {
+    "name": "Biscayne Bay Builders Group LLC",
+    "dba": "",
+    "street": "3050 Biscayne Blvd Ste 400",
+    "city": "Miami",
+    "state": "FL",
+    "zip": "33137",
+    "fein": "65-1774302",
+    "entity_type": "LLC",
+    "years_in_business": 9,
+    "website": "biscaynebaybuilders.example"
+  },
+  "producer": {
+    "agency": "Coral Gables Excess & Surplus",
+    "contact": "Isabel Ferrer",
+    "email": "iferrer@cgexcess.example",
+    "phone": "305-555-0186"
+  },
+  "policy": {
+    "effective_date": "2027-01-01",
+    "expiration_date": "2028-01-01",
+    "occurrence_limit": 2000000,
+    "aggregate_limit": 4000000,
+    "products_aggregate_limit": 4000000,
+    "deductible": 25000
+  },
+  "operations": {
+    "description": "General contractor for condominium renovations, restaurant build-outs and hurricane-hardening retrofits (impact windows, roof straps) in Miami-Dade and Broward. Subcontracts all MEP, roofing and glazing.",
+    "class_code": "91583",
+    "states": [
+      "FL"
+    ],
+    "gross_receipts": 26000000,
+    "payroll": 2900000,
+    "employees": 34,
+    "subcontracted_pct": 80,
+    "subcontractor_coi_required": true,
+    "residential_pct": 45,
+    "new_construction_pct": 15,
+    "max_height_ft": 120,
+    "wrap_up_projects": true
+  },
+  "loss_history": [
+    {
+      "date": "2023-10-04",
+      "description": "Water intrusion after window retrofit, condo unit damage",
+      "incurred": 92000,
+      "status": "Closed"
+    },
+    {
+      "date": "2024-09-26",
+      "description": "Subcontractor fall from balcony, third-party over action",
+      "incurred": 525000,
+      "status": "Open"
+    },
+    {
+      "date": "2025-12-11",
+      "description": "Dropped materials damaged lobby finishes",
+      "incurred": 18700,
+      "status": "Closed"
+    }
+  ],
+  "prior": {
+    "carrier": "Keys Specialty Underwriters Ins. Co.",
+    "premium": 402000
+  }
+}

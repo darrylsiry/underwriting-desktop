@@ -1,0 +1,63 @@
+{
+  "applicant": {
+    "name": "Palmetto Pro Painting Inc.",
+    "dba": "",
+    "street": "1820 Savannah Hwy",
+    "city": "Charleston",
+    "state": "SC",
+    "zip": "29407",
+    "fein": "57-1189340",
+    "entity_type": "Corporation",
+    "years_in_business": 8,
+    "website": ""
+  },
+  "producer": {
+    "agency": "Lowcountry Wholesale Insurance",
+    "contact": "Brianna Cole",
+    "email": "bcole@lowcountrywholesale.example",
+    "phone": "843-555-0127"
+  },
+  "policy": {
+    "effective_date": "2026-12-10",
+    "expiration_date": "2027-12-10",
+    "occurrence_limit": 1000000,
+    "aggregate_limit": 2000000,
+    "products_aggregate_limit": 2000000,
+    "deductible": 2500
+  },
+  "operations": {
+    "description": "Interior and exterior painting and pressure washing for apartment complexes, HOA communities and single family homes.",
+    "class_code": "98304",
+    "states": [
+      "SC",
+      "GA"
+    ],
+    "gross_receipts": 1850000,
+    "payroll": 690000,
+    "employees": 21,
+    "subcontracted_pct": 15,
+    "subcontractor_coi_required": true,
+    "residential_pct": 70,
+    "new_construction_pct": 0,
+    "max_height_ft": 35,
+    "wrap_up_projects": false
+  },
+  "loss_history": [
+    {
+      "date": "2024-06-03",
+      "description": "Overspray on parked vehicles at apartment complex",
+      "incurred": 9400,
+      "status": "Closed"
+    },
+    {
+      "date": "2025-09-17",
+      "description": "Ladder fell through homeowner sunroom roof",
+      "incurred": 22800,
+      "status": "Closed"
+    }
+  ],
+  "prior": {
+    "carrier": "Magnolia Casualty Company",
+    "premium": 31200
+  }
+}

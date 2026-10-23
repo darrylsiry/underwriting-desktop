@@ -46,6 +46,9 @@ services:
       POLICY_DATABASE_URL: postgresql://uw:uw@db:5432/policy
       RATING_SERVICE_URL: http://rating:8000
       INGESTION_SERVICE_URL: http://ingestion:8000
+      SUBMISSION_INBOX_DIR: /inbox
+    volumes:
+      - ./samples/submissions:/inbox:ro   # broker drop folder shown in the Submissions inbox
     ports: ["127.0.0.1:3000:3000"]
     depends_on:
       db: { condition: service_healthy }

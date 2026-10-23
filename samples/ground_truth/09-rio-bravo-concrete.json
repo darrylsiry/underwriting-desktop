@@ -1,0 +1,62 @@
+{
+  "applicant": {
+    "name": "Rio Bravo Concrete Works LLC",
+    "dba": "",
+    "street": "9150 Pan American Dr",
+    "city": "San Antonio",
+    "state": "TX",
+    "zip": "78223",
+    "fein": "46-5512089",
+    "entity_type": "LLC",
+    "years_in_business": 11,
+    "website": "riobravoconcrete.example"
+  },
+  "producer": {
+    "agency": "Alamo Specialty Brokers",
+    "contact": "Hector Salinas",
+    "email": "hsalinas@alamospecialty.example",
+    "phone": "210-555-0164"
+  },
+  "policy": {
+    "effective_date": "2027-01-15",
+    "expiration_date": "2028-01-15",
+    "occurrence_limit": 1000000,
+    "aggregate_limit": 2000000,
+    "products_aggregate_limit": 2000000,
+    "deductible": 10000
+  },
+  "operations": {
+    "description": "Commercial concrete contractor. Tilt-wall panels, slabs-on-grade and parking structures for warehouses and distribution centers. No residential foundations.",
+    "class_code": "91560",
+    "states": [
+      "TX"
+    ],
+    "gross_receipts": 14200000,
+    "payroll": 4300000,
+    "employees": 72,
+    "subcontracted_pct": 20,
+    "subcontractor_coi_required": true,
+    "residential_pct": 0,
+    "new_construction_pct": 90,
+    "max_height_ft": 45,
+    "wrap_up_projects": true
+  },
+  "loss_history": [
+    {
+      "date": "2023-08-09",
+      "description": "Pump truck boom struck adjacent building facade",
+      "incurred": 61000,
+      "status": "Closed"
+    },
+    {
+      "date": "2025-05-21",
+      "description": "Slab cracking claim from GC, alleged improper curing",
+      "incurred": 145000,
+      "status": "Open"
+    }
+  ],
+  "prior": {
+    "carrier": "Lone Prairie Specialty Insurance Co.",
+    "premium": 118000
+  }
+}
