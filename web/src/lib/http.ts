@@ -8,3 +8,20 @@ export function contentDisposition(filename: string, disposition: "inline" | "at
   const ascii = filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "") || "download";
   return `${disposition}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
+
+/**
+ * Where to send the user back to after a header form post: the Referer's path, but only
+ * when the Referer is a well-formed URL on this host and the path is local ("/x", not "//x").
+ */
+export function safeReturnPath(referer: string | null, host: string | null, fallback = "/submissions"): string {
+  if (!referer) return fallback;
+  let url: URL;
+  try {
+    url = new URL(referer);
+  } catch {
+    return fallback;
+  }
+  if (host && url.host !== host) return fallback;
+  const path = url.pathname;
+  return path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/\\") ? path : fallback;
+}

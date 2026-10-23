@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { safeReturnPath } from "@/lib/http";
 import { acceptSubmission, receiveSubmission, saveReview } from "@/lib/submissions";
 import { currentUser, USER_COOKIE } from "@/lib/user";
 
@@ -52,8 +53,7 @@ export async function acceptAction(id: string) {
 export async function setUserAction(form: FormData) {
   const name = String(form.get("name") ?? "").trim().slice(0, 60);
   if (name) (await cookies()).set(USER_COOKIE, name, { maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
-  // Back to the page the header form was on (same-origin path only).
-  const referer = (await headers()).get("referer");
-  const path = referer ? new URL(referer).pathname : "/submissions";
-  redirect(path.startsWith("/") ? path : "/submissions");
+  // Back to the page the header form was on (same host, local path only).
+  const h = await headers();
+  redirect(safeReturnPath(h.get("referer"), h.get("host")));
 }
