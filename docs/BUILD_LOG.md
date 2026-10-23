@@ -329,3 +329,13 @@ read this to replay the build quickly.
   - `fly deploy <dir> --config <path>` resolves the config path relative to `<dir>`, so pass it absolute.
   - `fly mpg create` and `fly mpg attach` print the full connection string, password included. The script now sends their output to /dev/null; rotate the password if it was shown (`fly mpg users rotate-password` prints the new one and does not update app secrets).
   - `fly proxy <port> -a <app>` targets `<app>.internal` (IPv6), which an app bound to 0.0.0.0 doesn't answer. Tunnel to the Flycast address: `fly proxy 18002:80 <app>.flycast -a <app>`.
+
+## Fix: read the API key as `UW_ANTHROPIC_API_KEY` too
+- **Prompt used:** "Port the key fallback: the ingestion service should read UW_ANTHROPIC_API_KEY, falling back to ANTHROPIC_API_KEY."
+- **What was built:** `claude.api_key()` returns `UW_ANTHROPIC_API_KEY`, else `ANTHROPIC_API_KEY`. `enabled()` and the Anthropic client both use it. `docker-compose.yml` maps either name into the container's `ANTHROPIC_API_KEY`. 1 new test.
+- **Files:** `services/ingestion/app/claude.py`, `services/ingestion/tests/{conftest.py,test_ingestion.py}`, `docker-compose.yml`
+- **Commit:** `fix: ...`
+- **Decisions:** Fly and `.env` keep the standard `ANTHROPIC_API_KEY` name. Only the cloud sandbox needs the alternate one.
+- **Dead ends / gotchas:**
+  - The Claude Code cloud sandbox reserves the name `ANTHROPIC_API_KEY` and doesn't pass it into sessions. Store the key as `UW_ANTHROPIC_API_KEY` there, or the service silently runs form-fields-only.
+  - Pass `api_key=` to `anthropic.Anthropic()` explicitly, because the SDK only reads the standard name on its own.
