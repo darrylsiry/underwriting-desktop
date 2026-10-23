@@ -1,9 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
+import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { InboxFolder } from "@/lib/inbox-files";
-import { extractFromInbox, type UploadState } from "./actions";
+import { ActivityPanel, appendEvent, type ActivityEvent } from "./activity-panel";
 
 const KIND: Record<string, string> = {
   "application/pdf": "PDF",
@@ -12,42 +12,85 @@ const KIND: Record<string, string> = {
   "text/plain": "Text",
 };
 
-function ExtractButton() {
-  const { pending } = useFormStatus();
-  return (
-    <button disabled={pending}
-      className="whitespace-nowrap rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-60">
-      {pending ? "Reading documents…" : "Extract →"}
-    </button>
-  );
-}
-
-function InboxRow({ item }: { item: InboxFolder }) {
-  const [state, action] = useActionState<UploadState, FormData>(extractFromInbox.bind(null, item.folder), {});
-  return (
-    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-      <div className="min-w-0 flex-1">
-        <div className="font-medium">{item.title}</div>
-        <div className="mt-1 flex flex-wrap gap-1.5">
-          {item.files.map((f) => (
-            <span key={f.name} title={`${f.name} · ${(f.size / 1024).toFixed(0)} KB`}
-              className="inline-flex max-w-full items-center gap-1 truncate rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
-              <span className="font-semibold text-slate-500">{KIND[f.contentType] ?? "File"}</span>{f.name}
-            </span>
-          ))}
-        </div>
-        {state.error && <p className="mt-2 rounded bg-rose-50 px-2 py-1 text-xs text-rose-700">{state.error}</p>}
-      </div>
-      <span className="font-mono text-xs text-slate-400">{item.folder}</span>
-      <form action={action}><ExtractButton /></form>
-    </li>
-  );
-}
+/** Seconds the finished activity log stays up before intake review opens, so a demo audience can read it. */
+const SHOW_DONE_FOR_MS = 2500;
 
 export function InboxList({ items }: { items: InboxFolder[] }) {
+  const router = useRouter();
+  const [active, setActive] = useState<InboxFolder | null>(null);
+  const [events, setEvents] = useState<ActivityEvent[]>([]);
+  const [running, setRunning] = useState(false);
+  const abort = useRef<AbortController | null>(null);
+
+  async function extract(item: InboxFolder) {
+    const controller = new AbortController();
+    abort.current = controller;
+    setActive(item);
+    setEvents([]);
+    setRunning(true);
+    try {
+      const res = await fetch(`/submissions/inbox/${encodeURIComponent(item.folder)}/extract`, {
+        method: "POST", signal: controller.signal,
+      });
+      if (!res.ok || !res.body) throw new Error(`Request failed (${res.status})`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      for (let r = await reader.read(); !r.done; r = await reader.read()) {
+        buffer += decoder.decode(r.value, { stream: true });
+        let newline: number;
+        while ((newline = buffer.indexOf("\n")) >= 0) {
+          const line = buffer.slice(0, newline).trim();
+          buffer = buffer.slice(newline + 1);
+          if (!line) continue;
+          const event: ActivityEvent = JSON.parse(line);
+          setEvents((prev) => appendEvent(prev, event));
+          if (event.type === "stored" && event.id) {
+            const id = event.id;
+            setTimeout(() => { if (!controller.signal.aborted) router.push(`/submissions/${id}`); }, SHOW_DONE_FOR_MS);
+          }
+        }
+      }
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        setEvents((prev) => [...prev, { type: "error", t: prev.at(-1)?.t ?? 0, message: (err as Error).message }]);
+      }
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  function close() {
+    abort.current?.abort();
+    setActive(null);
+    router.refresh();
+  }
+
   return (
-    <ul className="divide-y divide-slate-100">
-      {items.map((item) => <InboxRow key={item.folder} item={item} />)}
-    </ul>
+    <>
+      <ul className="divide-y divide-slate-100">
+        {items.map((item) => (
+          <li key={item.folder} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+            <div className="min-w-0 flex-1">
+              <div className="font-medium">{item.title}</div>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {item.files.map((f) => (
+                  <span key={f.name} title={`${f.name} · ${(f.size / 1024).toFixed(0)} KB`}
+                    className="inline-flex max-w-full items-center gap-1 truncate rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
+                    <span className="font-semibold text-slate-500">{KIND[f.contentType] ?? "File"}</span>{f.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <span className="font-mono text-xs text-slate-400">{item.folder}</span>
+            <button onClick={() => extract(item)} disabled={running}
+              className="whitespace-nowrap rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-60">
+              Extract →
+            </button>
+          </li>
+        ))}
+      </ul>
+      {active && <ActivityPanel title={active.title} events={events} running={running} onClose={close} />}
+    </>
   );
 }

@@ -4,12 +4,30 @@ from app.documents import Document, UnsupportedDocument, load
 from app.schema import REQUIRED_FOR_RATING, FieldValue, Loss, build_submission
 
 
-def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = True) -> dict:
+DOC_TYPE_LABELS = {
+    "acord_application": "ACORD-style application", "acord_application_flattened": "flattened ACORD-style application",
+    "loss_run": "loss run", "supplemental_questionnaire": "supplemental questionnaire", "broker_email": "broker email",
+    "application": "application", "other": "unrecognized document",
+}
+
+
+def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = True,
+        emit: claude.Emit | None = None) -> dict:
+    """`emit`, when given, receives a live activity feed (steps, fields, losses, Claude's reasoning)."""
+    emit = emit or (lambda _e: None)
+    step = lambda stage, message: emit({"type": "step", "stage": stage, "message": message})  # noqa: E731
     docs: list[Document] = []
     warnings: list[str] = []
+    step("receive", f"Received {len(files)} file(s): " + ", ".join(f"{n} ({len(d) / 1024:.0f} KB)" for n, d in files))
     for name, data in files:
         try:
-            docs += load(name, data)
+            loaded = load(name, data)
+            docs += loaded
+            for d in loaded:
+                how = ("has filled form fields, reading them directly" if d.has_form_fields
+                       else "no form fields, Claude will read it")
+                where = f" (attached to {d.parent})" if d.parent else ""
+                step("classify", f"{d.filename}{where}: {DOC_TYPE_LABELS.get(d.doc_type, d.doc_type)}; {how}")
         except UnsupportedDocument as e:
             warnings.append(str(e))
         except Exception as e:  # corrupt file: report it, keep going with the rest
@@ -20,6 +38,13 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
     for doc in docs:
         if doc.has_form_fields:
             values, rows, w = acord.extract(doc)
+            for fv in values:
+                emit({"type": "field", "path": fv.path, "value": fv.value, "basis": "stated",
+                      "confidence": 1.0, "method": "form_field"})
+            for loss in rows:
+                emit({"type": "loss", "date": loss.date, "description": loss.description,
+                      "incurred": loss.incurred, "status": loss.status, "method": "form_field"})
+            step("form", f"Read {len(values)} fields and {len(rows)} loss row(s) from {doc.filename}'s form fields")
             candidates += values
             losses += rows
             warnings += w
@@ -29,8 +54,14 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
     if to_read and use_claude and claude.enabled():
         if not classes:
             warnings.append("Rating service class list unavailable; Claude's class code is unchecked against rateable classes")
+        step("claude", f"Sending {len(to_read)} document(s) to Claude ({claude.MODEL}): "
+             + ", ".join(d.filename for d in to_read) + f"; {len(classes)} rateable class codes as context")
         try:
-            result = claude.extract(to_read, classes, known=list(candidates), known_losses=list(losses))
+            result = claude.extract(to_read, classes, known=list(candidates), known_losses=list(losses), on_event=emit)
+            tokens = result.usage or {}
+            step("claude", f"Claude returned {len(result.fields)} fields, {len(result.losses)} loss row(s), "
+                 f"{len(result.notes)} note(s) ({tokens.get('input_tokens', 0):,} tokens in, "
+                 f"{tokens.get('output_tokens', 0):,} out)")
             candidates += result.fields
             losses += result.losses
             notes, warnings = result.notes, warnings + result.warnings
@@ -42,11 +73,17 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
         warnings.append(f"Claude extraction {reason}; not read: {', '.join(d.filename for d in to_read)}")
 
     chosen, conflicts = merge(candidates)
+    missing = [p for p in REQUIRED_FOR_RATING if p not in chosen]
+    step("merge", f"Merged into {len(chosen)} fields"
+         + (f"; {len(conflicts)} conflict(s) between documents" if conflicts else "")
+         + (f"; missing for rating: {', '.join(missing)}" if missing else "; everything rating needs is present"))
+    for w in warnings:
+        emit({"type": "warning", "message": w})
     return {
         "submission": build_submission(chosen, dedupe_losses(losses, docs)),
         "fields": {path: {k: v for k, v in fv.to_dict().items() if k != "path"} for path, fv in chosen.items()},
         "conflicts": conflicts,
-        "missing_for_rating": [p for p in REQUIRED_FOR_RATING if p not in chosen],
+        "missing_for_rating": missing,
         "documents": [d.summary() for d in docs],
         "notes": notes,
         "warnings": warnings,

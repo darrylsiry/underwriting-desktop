@@ -154,3 +154,29 @@ def test_api_key_prefers_uw_name_and_falls_back_to_standard(monkeypatch):
     assert claude.api_key() == "standard"
     monkeypatch.setenv("UW_ANTHROPIC_API_KEY", "sandbox")
     assert claude.api_key() == "sandbox" and claude.enabled()
+
+
+def test_extract_stream_reports_progress_then_the_result():
+    """The streaming endpoint narrates the run (for the demo's activity panel) and ends with the /extract body."""
+    client = TestClient(app)
+    files = [("files", (name, data)) for name, data in case_files("01")]
+    with client.stream("POST", "/extract/stream", files=files) as res:
+        assert res.headers["content-type"].startswith("application/x-ndjson")
+        events = [json.loads(line) for line in res.iter_lines() if line]
+    kinds = [e["type"] for e in events]
+    assert kinds[-1] == "result" and "error" not in kinds
+    stages = [e["stage"] for e in events if e["type"] == "step"]
+    assert stages[:3] == ["classes", "receive", "classify"] and "form" in stages and stages[-1] == "merge"
+    fields = [e for e in events if e["type"] == "field"]
+    assert {"path": "applicant.name", "value": "Lone Star Electrical Services LLC", "method": "form_field"}.items() \
+        <= next(f for f in fields if f["path"] == "applicant.name").items()
+    assert all(e["t"] >= 0 for e in events)
+    assert events[-1]["result"]["submission"]["applicant"]["name"] == "Lone Star Electrical Services LLC"
+
+
+def test_live_field_parser_waits_for_complete_values():
+    partial = '{"fields":[{"path":"applicant.name","value":"Lone \\"Star\\" LLC","basis":"stated","confidence":0'
+    assert not claude._FIELD_RE.search(partial)  # "0" may still become "0.98"
+    m = claude._FIELD_RE.search(partial + '.98,"source_document":"a.pdf"')
+    assert (m[1], claude._unescape(m[2]), m[3], m[4]) == ("applicant.name", 'Lone "Star" LLC', "stated", "0.98")
+    assert not claude._LOSS_RE.search('{"date":"2025-01-02","description":"x","incurred":12,"status":"Clo')
