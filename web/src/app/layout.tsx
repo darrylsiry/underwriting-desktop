@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Link from "next/link";
+import { setUserAction } from "./submissions/actions";
+import { currentUser } from "@/lib/user";
 import "./globals.css";
+
+const RATING_ADMIN_URL = process.env.RATING_ADMIN_URL ?? "http://localhost:8001/admin";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,16 +22,30 @@ export const metadata: Metadata = {
   description: "E&S contractors GL underwriting workbench",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const user = await currentUser();
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <header className="flex items-center gap-6 border-b border-slate-200 bg-white px-6 py-3 text-sm">
+          <Link href="/" className="font-semibold">Underwriting Desktop</Link>
+          <nav className="flex gap-4 text-slate-600">
+            <Link href="/submissions" className="hover:text-slate-900">Submissions</Link>
+            <a href={RATING_ADMIN_URL} className="hover:text-slate-900">Rate tables</a>
+          </nav>
+          <form action={setUserAction} className="ml-auto flex items-center gap-2 text-slate-500">
+            <label htmlFor="uw-name">Working as</label>
+            <input id="uw-name" name="name" defaultValue={user} size={14}
+              className="rounded border border-slate-300 px-2 py-1 text-slate-900" />
+            <button className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-50">Set</button>
+          </form>
+        </header>
         {children}
       </body>
     </html>

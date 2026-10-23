@@ -120,3 +120,31 @@ read this to replay the build quickly.
   - Default a path from `__file__` lazily: `Path(...).parents[3]` raises inside a container even when `SAMPLES_DIR` is set.
   - Compose mounts `./samples` read-only into ingestion at `/samples` for the scorer and demo uploads, and sets `RATING_SERVICE_URL`.
 - **How to show it:** http://localhost:8002/docs → `POST /extract` → upload `samples/submissions/05-desert-bloom-painting/*.eml` (a sparse email). Point out the inferred class code 98304 with its snippet, `missing_for_rating: []`, and the notes. Then upload case 06 (ACORD + questionnaire): form fields at 1.0, questionnaire fields from Claude, and notes flagging the open $410K Labor Law 240 claim. Finish with `docker compose exec ingestion python -m app.score /samples` for the 250/251 table.
+
+## step-06: UW Desktop submission inbox and intake review
+- **Prompt used:** "In the web app, build a submission inbox: upload a broker submission's documents, send them to the ingestion service, and store the submission, its original files, and the extraction in the customer DB. Add an intake review page that shows every field with its confidence, stated/inferred badge, source document and snippet, highlights what needs attention, lets the underwriter correct fields (validated, each correction audited with before/after), and accept the intake once the rating-required fields are present, creating the insured. Audit events go to an append-only table in the policy DB."
+- **What was built:**
+  - `/submissions` inbox: an upload form ("Reading documents…" while ingestion runs) and a table with reference, applicant, class, states, receipts, review flags ("2 missing", "5 to check", "looks complete"), status, and received time.
+  - `/submissions/[id]` review:
+    - The fields grouped by section, each with a confidence pill ("100% form", "85% Claude"), an "inferred" tag, an attention reason, and the quoted snippet with its source document and type. A colored left border marks red = required for rating, amber = check, indigo = corrected.
+    - Loss history (open claims in red).
+    - Side panels for accept, documents (original files, PDFs open inline), Claude's underwriting notes, document conflicts, and history.
+  - `/submissions/[id]/documents/[docId]` serves the original uploads.
+  - Header: nav (Submissions, Rate tables → rating `/admin`) and a "Working as" name stored in a cookie, which the audit trail records.
+- **Files:** `web/migrations/customer/001_submissions.sql`, `web/migrations/policy/001_audit_events.sql`, `web/src/lib/{submission,submissions,audit,user}.ts`, `web/src/app/submissions/{page,upload-form,status-badge,actions}.tsx|ts`, `web/src/app/submissions/[id]/page.tsx`, `web/src/app/submissions/[id]/documents/[docId]/route.ts`, `web/src/app/{layout,page}.tsx`, `web/next.config.ts`
+- **Commit:** `step-06: ...`
+- **Decisions:**
+  - `submissions.extraction` stores the full `/extract` response and is never edited; `submissions.data` is the reviewed copy. `corrected_fields` lists the paths the underwriter changed, so the UI can show "extracted value: X" next to a correction. Original files are stored as `bytea` in `submission_documents`.
+  - References are `SUB-0001` from a sequence. Accepting needs the six rating-required fields and a named insured. It finds the insured by FEIN or creates one, sets `status = accepted`, and makes the page read-only (step 07 edits rating inputs on the workbench).
+  - `audit_events` (policy DB, per the plan) is generic: actor, action (`submission.received`, `submission.field_corrected`, `insured.created`, `submission.accepted`), entity, summary, before/after JSON, and a correlation ID shared by the events from one click. Step 11 builds the unified viewer on it.
+  - Server actions plus plain forms; redirects carry `?msg=`/`?error=`. The upload form is the only client component (`useActionState`/`useFormStatus` for the pending state).
+  - The TypeScript field list (`SECTIONS`) mirrors ingestion's `FIELDS`, with display types (money, pct) and input parsing/validation (`fromInput`): 2-letter states, numbers, 0–100 percentages, yes/no, YYYY-MM-DD.
+  - "Needs attention" means: empty and required for rating, documents disagree, inferred, or confidence < 0.9.
+- **Dead ends / gotchas:**
+  - Next.js server actions reject request bodies over 1 MB by default. Set `experimental.serverActions.bodySizeLimit: "25mb"` or multi-PDF uploads fail.
+  - The page files can only export the page (Next.js 15 type check). Shared components like `StatusBadge` go in their own module.
+  - Grids with `1fr` columns grow to fit `truncate`d one-line snippets (min-content width) and push the page sideways. Use `minmax(0,1fr)`.
+  - `await` inside a JSX prop trips `jsx-ast-utils` in ESLint. Assign it to a variable first.
+  - Locally: `npm --prefix web ci`, then `npx next dev --port 3100` in `web/` against the compose DB/services (port 3000 may be taken). The env defaults point at localhost.
+  - Browser automation can't use a native file picker. For testing, serve `samples/submissions` with CORS and set `input.files` from a `DataTransfer` in page script.
+- **How to show it:** http://localhost:3000 → Open the submission inbox → upload `samples/submissions/05-desert-bloom-painting/*.eml` → after about 20 s the review page shows inferred class 98304, low-confidence flags, and Claude's notes. Type a FEIN and entity type "from the broker's call" → Save corrections (marked "Corrected by underwriter") → Accept intake → the History panel shows each correction with before → after. Then upload case 01's two PDFs: everything is "100% form" and the inbox says "looks complete".
