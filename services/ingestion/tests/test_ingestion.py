@@ -106,6 +106,18 @@ def test_loss_from_application_and_loss_run_counted_once():
     assert kept.description == "Trip (loss run)"
 
 
+def test_same_day_same_amount_claims_on_one_loss_run_both_survive():
+    """CR-012: two claimants from one incident are two claims, not a duplicate."""
+    docs = [d for name, data in case_files("01") for d in load(name, data)]
+    from app.schema import Loss
+    loss_run = docs[1].filename
+    losses = [Loss("2024-05-02", "Claimant A", 5000, "Closed", loss_run),
+              Loss("2024-05-02", "Claimant B", 5000, "Closed", loss_run),
+              Loss("2024-05-02", "Same incident (app)", 5000, "Closed", docs[0].filename)]
+    kept = pipeline.dedupe_losses(losses, docs)
+    assert sorted(l.description for l in kept) == ["Claimant A", "Claimant B"]
+
+
 def test_extract_endpoint():
     client = TestClient(app)
     files = [("files", (name, data)) for name, data in case_files("01")]

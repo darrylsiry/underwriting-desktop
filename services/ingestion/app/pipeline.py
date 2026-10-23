@@ -75,9 +75,19 @@ def _same_value(a, b) -> bool:
 
 
 def dedupe_losses(losses: list[Loss], docs: list[Document]) -> list[Loss]:
-    """The same claim often appears on the application and the loss run; keep the loss run's version."""
+    """The same claim often appears on the application and the loss run; keep one document's version.
+
+    Rows are grouped by (date, incurred). Within a group, every row from one document is kept
+    (two claimants hurt the same day for the same amount are two claims), but the same claim
+    repeated on another document is dropped, preferring the loss run's rows.
+    """
     loss_runs = {d.filename for d in docs if d.doc_type == "loss_run"}
-    unique: dict[tuple, Loss] = {}
-    for loss in sorted(losses, key=lambda l: l.source_document not in loss_runs):
-        unique.setdefault((loss.date, loss.incurred), loss)
-    return list(unique.values())
+    groups: dict[tuple, list[Loss]] = {}
+    for loss in losses:
+        groups.setdefault((loss.date, loss.incurred), []).append(loss)
+    kept = []
+    for rows in groups.values():
+        sources = list(dict.fromkeys(r.source_document for r in rows))
+        source = next((s for s in sources if s in loss_runs), sources[0])
+        kept += [r for r in rows if r.source_document == source]
+    return kept
