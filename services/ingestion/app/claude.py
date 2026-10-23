@@ -9,6 +9,8 @@ and a quoted snippet so the underwriter can check it.
 import base64
 import json
 import os
+import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import anthropic
@@ -131,24 +133,65 @@ def _known_section(known: list[FieldValue], known_losses: list[Loss]) -> str:
             + "\n".join(lines) + "\n\n")
 
 
+# Completed field / loss objects inside the partially streamed JSON reply, for the live activity feed.
+_FIELD_RE = re.compile(r'\{\s*"path"\s*:\s*"([^"]+)"\s*,\s*"value"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,'
+                       r'\s*"basis"\s*:\s*"(\w+)"\s*,\s*"confidence"\s*:\s*([0-9.]+)\s*,')  # the comma: number complete
+_LOSS_RE = re.compile(r'\{\s*"date"\s*:\s*"([^"]*)"\s*,\s*"description"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,'
+                      r'\s*"incurred"\s*:\s*(\d+)\s*,\s*"status"\s*:\s*"((?:[^"\\]|\\.)*)"')
+
+Emit = Callable[[dict], None]
+
+
+def _unescape(s: str) -> str:
+    try:
+        return json.loads(f'"{s}"')
+    except ValueError:
+        return s
+
+
 def extract(docs: list[Document], classes: list[dict], known: list[FieldValue] = (),
-            known_losses: list[Loss] = ()) -> ClaudeResult:
+            known_losses: list[Loss] = (), on_event: Emit | None = None) -> ClaudeResult:
+    """One streamed Claude call over the documents. `on_event` gets live activity: Claude's reasoning
+    summary as it thinks, and each field / loss row as soon as it appears in the reply."""
+    emit = on_event or (lambda _e: None)
     filenames = [d.filename for d in docs]
     class_list = "\n".join(f"- {c['class_code']}: {c['description']}" for c in classes) or "(class list unavailable)"
     client = anthropic.Anthropic(api_key=api_key(), timeout=300.0)
     try:
-        response = client.beta.messages.create(
+        with client.beta.messages.stream(
             model=MODEL,
             max_tokens=16000,
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
+            # Summarized thinking costs nothing extra (thinking runs either way); it feeds the activity stream.
+            thinking={"type": "adaptive", "display": "summarized"},
             output_config={"effort": "medium", "format": {"type": "json_schema", "schema": response_schema(filenames)}},
             system=SYSTEM,
             messages=[{"role": "user", "content": [
                 *(_content_block(d) for d in docs),
                 {"type": "text", "text": INSTRUCTIONS.format(classes=class_list, known=_known_section(known, known_losses))},
             ]}],
-        )
+        ) as stream:
+            reply, fields_seen, losses_seen, writing = "", 0, 0, False
+            for event in stream:
+                if event.type != "content_block_delta":
+                    continue
+                if event.delta.type == "thinking_delta" and event.delta.thinking:
+                    emit({"type": "thinking", "text": event.delta.thinking})
+                elif event.delta.type == "text_delta":
+                    if not writing:
+                        writing = True
+                        emit({"type": "step", "stage": "claude", "message": "Claude is writing the extraction"})
+                    reply += event.delta.text
+                    for m in list(_FIELD_RE.finditer(reply))[fields_seen:]:
+                        fields_seen += 1
+                        emit({"type": "field", "path": m[1], "value": _unescape(m[2]), "basis": m[3],
+                              "confidence": float(m[4]), "method": "claude"})
+                    for m in list(_LOSS_RE.finditer(reply))[losses_seen:]:
+                        losses_seen += 1
+                        emit({"type": "loss", "date": m[1], "description": _unescape(m[2]),
+                              "incurred": int(m[3]), "status": m[4], "method": "claude"})
+            response = stream.get_final_message()
     except anthropic.APIStatusError as e:
         raise ExtractionError(f"Claude API error {e.status_code}: {e.message}") from e
     except anthropic.APIConnectionError as e:

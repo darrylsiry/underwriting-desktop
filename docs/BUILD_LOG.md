@@ -397,3 +397,25 @@ read this to replay the build quickly.
   - The trusted identity header must be deleted from every incoming request, including when no logins are configured. Otherwise a client could send it and pick their own name.
   - Next's standalone server shows up as `next-server` in the process list, not `node server.js`. A test server left running on the port made a new build look like it ignored auth (every request 200). Check `prod.log` for `EADDRINUSE` before trusting results.
 - **Still open (security review, on hold):** the rate admin's own "actor" field is free text (SEC-006); it doesn't use the signed-in user yet.
+
+## step-14: Live activity stream while a submission is extracted
+- **Prompt used:** "On the submissions page, can we show a verbose activity stream while the submission is being extracted, so the user can see what is going on? This is really for the purposes of demo."
+- **What was built:**
+  - **Ingestion `POST /extract/stream`:** same input as `/extract`, but it streams newline-delimited JSON as it works. Event types: `step` (stage plus message: class list loaded, files received, each document's type and whether Claude or form fields will read it, form fields read, documents sent to Claude, Claude writing, Claude's token counts, merge result), `field` (path, value, confidence, stated/inferred, form or Claude), `loss`, `thinking` (Claude's reasoning summary), `warning`, then one `result` (the `/extract` body) or `error`. Every event has `t`, seconds since the request started.
+  - **The Claude call now streams** (`client.beta.messages.stream`) with `thinking: {type: "adaptive", display: "summarized"}`. Fields and losses are picked out of the partial JSON with a regex as they're written. Both `/extract` and the stream use the same code; `on_event` is just `None` for the plain endpoint.
+  - **Web route `POST /submissions/inbox/[folder]/extract`:** checks that the folder is still in the inbox, relays ingestion's events to the browser as they arrive (re-timed from the click), stores the submission, and ends with `stored` (id and reference).
+  - **Activity panel** (`activity-panel.tsx`): a dark modal with a running timer and counters (fields from forms vs Claude, losses). Each event is a row; consecutive `thinking` deltas merge into one italic paragraph. While Claude is quiet it shows "Claude is reading the documents and reasoning about them…". When done it shows "Saved as SUB-…" and opens intake review after 2.5 s (or click "Open"). Cancel aborts the request, which aborts the ingestion call.
+  - The inbox's Extract button now uses this route. The old `extractFromInbox` server action is gone. Upload still uses the plain path.
+- **Files:** `services/ingestion/app/{main.py,pipeline.py,claude.py}`, `services/ingestion/tests/test_ingestion.py`, `web/src/app/submissions/{activity-panel.tsx,inbox-list.tsx,actions.ts}`, `web/src/app/submissions/inbox/[folder]/extract/route.ts`, `web/src/lib/submissions.ts` (`receiveSubmission` split into `filesForm` + `storeSubmission`)
+- **Commit:** `step-14: ...`
+- **Decisions:**
+  - NDJSON over a `fetch` body reader, not SSE or WebSockets. It's one POST, works through Next route handlers and the Fly proxy, and needs no extra libraries. Responses send `Cache-Control: no-cache, no-transform` (so compression doesn't buffer) and `X-Accel-Buffering: no`.
+  - On the ingestion side, the pipeline runs in a thread and pushes events onto a `queue.Queue`. A sync generator drains it, and Starlette iterates sync generators in its threadpool, so nothing blocks the event loop.
+  - Summarized thinking costs nothing extra: the model thinks either way, and `display` only controls whether the summary is returned. Re-scored cases 03, 07 and 15 after the switch to streaming: all still 100%.
+  - Live field parsing only accepts a `confidence` followed by its comma. The number streams in pieces, so `0` may still become `0.97`.
+- **Dead ends / gotchas:**
+  - The first version showed many fields at **0%** confidence: the regex matched `"confidence":0` before `.97` had arrived. Fixed by requiring the comma, with a unit test.
+  - Format only money with thousands separators. A generic "4+ digit number" rule turned ZIP 29407 into "29,407" and class code 98304 into "98,304".
+  - **This container has no `ss`.** `kill $(ss … :8002 …)` silently killed nothing, the new server failed with "address already in use", and testing hit the old code. Check the server log for `Errno 98` after every restart. Find processes with `pgrep -f`, and for Next standalone match `next-server` plus the working directory.
+  - Claude's reasoning summary arrives in bursts after a quiet spell of several seconds, so the panel needs the "reading and reasoning" line and a running timer, or it looks stuck.
+- **How to show it:** see DEMO_PLAYBOOK row 14. Case 12 (form plus questionnaire) shows the contrast best. Case 10 (email plus attached loss run) is all Claude.

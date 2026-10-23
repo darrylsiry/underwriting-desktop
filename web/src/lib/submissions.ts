@@ -62,14 +62,23 @@ export async function getDocument(submissionId: string, documentId: string) {
  * `inboxFolder` is set when the files came from the broker drop folder rather than an upload.
  */
 export async function receiveSubmission(files: File[], actor: string, inboxFolder: string | null = null): Promise<string> {
-  const form = new FormData();
-  for (const f of files) form.append("files", f, f.name);
   const res = await fetch(`${INGESTION_SERVICE_URL}/extract`, {
-    method: "POST", body: form, signal: AbortSignal.timeout(300_000),
+    method: "POST", body: filesForm(files), signal: AbortSignal.timeout(300_000),
   });
   if (!res.ok) throw new Error(`Ingestion service returned ${res.status}: ${await res.text()}`);
-  const extraction: Extraction = await res.json();
+  return (await storeSubmission(files, await res.json(), actor, inboxFolder)).id;
+}
 
+export function filesForm(files: File[]): FormData {
+  const form = new FormData();
+  for (const f of files) form.append("files", f, f.name);
+  return form;
+}
+
+/** Store an extraction with its documents and audit it. Used by uploads and the streaming inbox route. */
+export async function storeSubmission(
+  files: File[], extraction: Extraction, actor: string, inboxFolder: string | null,
+): Promise<{ id: string; reference: string }> {
   const client = await customerDb.connect();
   try {
     await client.query("BEGIN");
@@ -93,7 +102,7 @@ export async function receiveSubmission(files: File[], actor: string, inboxFolde
       summary: `${reference} received for ${name}${inboxFolder ? ` from inbox folder ${inboxFolder}` : ""}: ${files.length} document(s), ${Object.keys(extraction.fields).length} fields extracted`,
       after: { inbox_folder: inboxFolder, documents: extraction.documents, missing_for_rating: extraction.missing_for_rating, claude: extraction.claude },
     });
-    return id;
+    return { id, reference };
   } catch (err) {
     await client.query("ROLLBACK");
     if ((err as { code?: string }).code === "23505" && inboxFolder) {
