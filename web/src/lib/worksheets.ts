@@ -1,6 +1,6 @@
 import { audit } from "./audit";
 import { customerDb } from "./db";
-import { referralFlags, type Flag } from "./referrals";
+import { clearanceStatus, referralFlags, type Flag } from "./referrals";
 import { RATING_SERVICE_URL } from "./services";
 import type { SubmissionRow } from "./submissions";
 import {
@@ -73,7 +73,7 @@ export async function activeRateVersion(): Promise<string | null> {
  */
 export function readiness(sub: SubmissionRow, ws: WorksheetRow, activeVersion: string | null) {
   const flags = flagsFor(sub, ws);
-  const open = flags.filter((f) => f.severity === "refer" && !ws.referral_clearances[f.code]);
+  const open = flags.filter((f) => f.severity === "refer" && clearanceStatus(f, ws.referral_clearances[f.code]) !== "cleared");
   const inputsCurrent = !!ws.last_rating && ws.rated_inputs_hash === inputsHash(ws.rating_inputs, ws.schedule);
   const staleRates = ws.last_rating && activeVersion && ws.last_rating.rate_version !== activeVersion
     ? { from: ws.last_rating.rate_version, to: activeVersion } : null;
@@ -145,7 +145,7 @@ export async function clearReferral(sub: SubmissionRow, code: string, note: stri
   const flag = flagsFor(sub, ws).find((f) => f.code === code);
   if (!flag) throw new Error(`No ${code} flag applies to ${sub.reference}`);
   if (note.trim().length < 10) throw new Error("Write a note explaining why this is acceptable");
-  const clearance: Clearance = { by: actor, at: new Date().toISOString(), note: note.trim() };
+  const clearance: Clearance = { by: actor, at: new Date().toISOString(), note: note.trim(), detail: flag.detail };
   await customerDb.query(
     "UPDATE worksheets SET referral_clearances = referral_clearances || jsonb_build_object($2::text, $3::jsonb) WHERE submission_id = $1",
     [sub.id, code, clearance],

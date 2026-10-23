@@ -19,7 +19,8 @@ export type RatingInputs = {
 };
 
 export type ScheduleItem = { category: string; pct: number; rationale: string };
-export type Clearance = { by: string; at: string; note: string };
+/** `detail` is the flag text that was cleared; older clearances (before CR-005) have none. */
+export type Clearance = { by: string; at: string; note: string; detail?: string };
 
 /** Schedule rating categories (IRPM-style). Each allows a credit or debit up to MAX_CATEGORY_PCT. */
 export const SCHEDULE_CATEGORIES = [

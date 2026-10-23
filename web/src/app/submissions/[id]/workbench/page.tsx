@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { auditTrail } from "@/lib/audit";
 import { addYears, suggestedSubjectivities } from "@/lib/quote-terms";
 import { bindBlockers } from "@/lib/bind-rules";
+import { clearanceStatus } from "@/lib/referrals";
 import { policiesForSubmission } from "@/lib/policies";
 import { quotesForSubmission } from "@/lib/quotes";
 import { getSubmission } from "@/lib/submissions";
@@ -239,21 +240,28 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
           <Card title={`Referrals · ${flags.filter((f) => f.severity === "refer").length} refer, ${flags.filter((f) => f.severity === "warn").length} warn`}>
             <ul className="divide-y divide-slate-100">
               {flags.map((f) => {
-                const cleared = ws.referral_clearances[f.code];
+                const clearance = ws.referral_clearances[f.code];
+                const status = clearanceStatus(f, clearance);
                 return (
                   <li key={f.code} className="p-4 text-sm">
                     <div className="flex items-center gap-2">
-                      <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${cleared ? "bg-slate-100 text-slate-500" : f.severity === "refer" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}`}>
-                        {cleared ? "cleared" : f.severity}
+                      <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${status === "cleared" ? "bg-slate-100 text-slate-500" : f.severity === "refer" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}`}>
+                        {status === "cleared" ? "cleared" : f.severity}
                       </span>
                       <span className="font-medium">{f.title}</span>
                     </div>
                     <p className="mt-1 text-xs text-slate-600">{f.detail}</p>
-                    {cleared ? (
+                    {status === "cleared" && clearance && (
                       <p className="mt-2 text-xs text-slate-500">
-                        <span className="font-medium text-slate-700">{cleared.by}</span>: “{cleared.note}”
+                        <span className="font-medium text-slate-700">{clearance.by}</span>: “{clearance.note}”
                       </p>
-                    ) : f.severity === "refer" && (
+                    )}
+                    {status === "stale" && clearance && (
+                      <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                        {clearance.by} cleared this for {clearance.detail ? `“${clearance.detail}”` : "earlier facts"}; the facts changed, so it needs clearing again.
+                      </p>
+                    )}
+                    {status !== "cleared" && f.severity === "refer" && (
                       <form action={clearReferralAction.bind(null, id, f.code)} className="mt-2 flex gap-2">
                         <input name="note" required minLength={10} placeholder="Why this is acceptable (authority, mitigation)"
                           className="min-w-0 flex-1 rounded border border-slate-300 px-2 py-1 text-xs" />

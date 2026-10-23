@@ -2,7 +2,7 @@
 // "refer" flags must be cleared with a written note before quoting; "warn" flags
 // are things to look at. Pure module (type-only imports) so node:test can load it.
 import type { Extraction, Loss, SubmissionData } from "./submission";
-import type { RatingInputs, ScheduleItem } from "./worksheet";
+import type { Clearance, RatingInputs, ScheduleItem } from "./worksheet";
 
 export type Flag = { code: string; severity: "refer" | "warn"; title: string; detail: string };
 
@@ -27,6 +27,15 @@ export const LIMITS = {
   scheduleAuthorityPct: 15,
   newVentureYears: 3,
 };
+
+/**
+ * A clearance only covers the facts it was given for: if the flag's detail changed since
+ * (height 55 ft -> 150 ft, receipts $15M -> $80M), the referral is open again.
+ */
+export function clearanceStatus(flag: Flag, clearance: Clearance | undefined): "cleared" | "stale" | "open" {
+  if (!clearance) return "open";
+  return clearance.detail === flag.detail ? "cleared" : "stale";
+}
 
 export function referralFlags(ctx: ReferralContext): Flag[] {
   const { data, inputs, schedule } = ctx;

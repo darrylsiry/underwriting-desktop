@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { referralFlags, type ReferralContext } from "./referrals.ts";
+import { clearanceStatus, referralFlags, type ReferralContext } from "./referrals.ts";
 import { inputsHash, parseSchedule, scheduleKey, scheduleMod } from "./worksheet.ts";
 import type { SubmissionData } from "./submission.ts";
 
@@ -81,4 +81,13 @@ test("schedule comparison ignores jsonb key order (CR-001)", () => {
   const fromJsonb = [{ pct: -5, category: "safety", rationale: "Written program" }];
   assert.equal(scheduleKey(fromJsonb), scheduleKey(parsed));
   assert.notEqual(scheduleKey([{ ...parsed[0], pct: -6 }]), scheduleKey(parsed));
+});
+
+test("a clearance stops covering a flag whose facts changed (CR-005)", () => {
+  const at55 = referralFlags(ctx({ inputs: { ...inputs, max_height_ft: 55 } })).find((f) => f.code === "HEIGHT")!;
+  const clearance = { by: "pat", at: "2026-10-23", note: "Window cleaning only, rope access certified", detail: at55.detail };
+  assert.equal(clearanceStatus(at55, clearance), "cleared");
+  const at120 = referralFlags(ctx({ inputs: { ...inputs, max_height_ft: 120 } })).find((f) => f.code === "HEIGHT")!;
+  assert.equal(clearanceStatus(at120, clearance), "stale");
+  assert.equal(clearanceStatus(at120, undefined), "open");
 });
