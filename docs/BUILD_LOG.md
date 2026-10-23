@@ -53,3 +53,21 @@ read this to replay the build quickly.
   - ReportLab's appearance stream for the long multiline description field shows on one line in some viewers. The field value is complete, so extraction is unaffected.
   - Run the generator with `uv run --with ...`; it isn't part of any service's dependencies.
 - **How to show it:** open `samples/submissions/01-lone-star-electric/*.pdf` (a fillable form) next to `03-peachtree-plumbing` (flattened) and `05-desert-bloom-painting` (sparse email).
+
+## step-03: Rating engine with versioned rate tables
+- **Prompt used:** "Build the rating service: versioned rate tables in the rating DB (class base rates per $1,000 receipts, territory, ILF, deductible, residential, subcontracting, height, uninsured-sub load, schedule/experience mod bounds, policy fee, surplus lines tax by state), a POST /rate endpoint that returns a step-by-step worksheet and logs every call, and tests."
+- **What was built:**
+  - A pure `rate(tables, input)` function plus a DB-backed API: `POST /rate`, `GET /ratings/{id}`, `GET /classes`, `GET /rate-versions`.
+  - Every call is stored in `rating_log` with its request, result, rate version, reference, and requester.
+  - 12 tests: engine unit tests plus API tests against a throwaway `rating_test` DB.
+- **Files:** `services/rating/migrations/{001_schema,002_seed_rates_2026_1}.sql`, `services/rating/app/{engine,repository,main}.py`, `services/rating/tests/{test_engine,test_api}.py`
+- **Commit:** `step-03: ...`
+- **Decisions:**
+  - Formula: `base_rate × receipts/1000 × territory(worst state) × ILF(occ/agg) × deductible × residential × subcontracting × [no-sub-COI 1.25] × height × experience mod × schedule mod`, floored at the class minimum. Total = premium + $250 fee + surplus lines tax (home state) on both.
+  - Factors live in one `factors` table with `kind` `exact` (territory, ILF) or `band` (largest lower bound ≤ input).
+  - Scalar settings live in `parameters`; tax keys are `sl_tax.<STATE>`.
+  - `Decimal` throughout, rounded to whole dollars.
+  - Exactly one `active` version (partial unique index). Requests can pin `rate_version_id`, and quotes will store it.
+  - Unrateable input (unknown class, state, or limit; mod out of bounds) returns 422 with a readable message.
+- **Dead ends / gotchas:** none significant. Hand-check expected premiums carefully in tests (49,738.26 rounds to 49,738).
+- **How to show it:** http://localhost:8001/docs (Swagger), then POST /rate with the Lone Star Electric example from `tests/test_api.py`. All 8 sample risks rate between about $6K and $400K total.
