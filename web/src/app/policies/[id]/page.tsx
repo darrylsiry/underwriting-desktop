@@ -24,6 +24,7 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
         {" · "}from <RowLink href={`/quotes/${p.quote_id}`}>{p.quote_number} v{p.quote_version}</RowLink>
         {" · "}<RowLink href={`/submissions/${p.submission_id}/workbench`}>workbench</RowLink>
         {" · "}bound by {p.bound_by} {when(p.bound_at)}
+        {" · "}<RowLink href={`/audit?submission=${p.submission_id}`}>case history</RowLink>
       </p>
 
       <div className="mt-6 grid gap-6 md:grid-cols-2">

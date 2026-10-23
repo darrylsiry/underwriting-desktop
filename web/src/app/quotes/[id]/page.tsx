@@ -30,6 +30,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
         {" · "}<RowLink href={`/submissions/${q.submission_id}/workbench`}>{q.submission_ref}</RowLink>
         {" · "}issued by {q.issued_by} {when(q.issued_at)} · valid until {q.valid_until}
         {policy && <> · bound as <RowLink href={`/policies/${policy.id}`}>{policy.policy_number}</RowLink></>}
+        {" · "}<RowLink href={`/audit?submission=${q.submission_id}`}>case history</RowLink>
       </p>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">

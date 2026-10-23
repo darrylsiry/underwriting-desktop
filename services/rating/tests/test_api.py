@@ -32,3 +32,11 @@ def test_classes(client):
 def test_bad_rating_id_is_422_not_500(client):
     assert client.get("/ratings/not-a-uuid").status_code == 422
     assert client.get("/ratings/00000000-0000-0000-0000-000000000000").status_code == 404
+
+
+def test_list_ratings_filters_by_reference(client):
+    client.post("/rate", json=ELECTRICAL | {"reference": "Q-2026-9999 v1"})
+    rows = client.get("/ratings", params={"reference_prefix": "Q-2026-9999"}).json()
+    assert len(rows) == 1 and rows[0]["reference"] == "Q-2026-9999 v1" and rows[0]["total"]
+    assert rows[0]["rate_version"] == "2026.1" and rows[0]["class_code"] == "92215"
+    assert client.get("/ratings", params={"limit": 0}).status_code == 422

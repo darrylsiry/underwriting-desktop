@@ -256,3 +256,24 @@ read this to replay the build quickly.
 - Validate every id path segment before it reaches a uuid cast; type FastAPI ids as `uuid.UUID`. Make redirects from Referer same-host and local-path only. (CR-007, CR-008, CR-016)
 - Name the target columns in `INSERT … SELECT`. Dedupe loss rows across documents, never within one. Compose healthchecks: ingestion and web wait for a healthy rating service. Cap `/extract` uploads. (CR-010 … CR-013, CR-016)
 - Not done: CR-014 (broader test suites; each fix above added its own regression test) and CR-015 (a shared `schema.json` contract test between Python and TypeScript).
+
+## step-11: Unified audit trail viewer
+- **Prompt used:** "Build one audit timeline across services: UW Desktop events (policy.audit_events), rate-table changes and every rating call (from the rating service API). Filter by text, source, record type, person and date; group events from one click by correlation id; show before → after per field; and add a case view for one submission (its quotes, policies, insured and rating calls), linked from the workbench, review, quote and policy pages."
+- **What was built:**
+  - `/audit` (nav: **Audit**): filter bar (search, source, record, who, from/to), counts per source, and a newest-first list of cards. Each card shows time, a source badge (UW Desktop / Rate admin / Rating engine), actor, action, a link to the record (SUB-…, Q-… vN, GL-…, insured, or the rate version's admin page), the summary, and a field table with **before (struck through) → after**. Events from one click share a card ("One action by … · N events").
+  - **Case view** `/audit?submission=<id>`: the submission, all its quote versions, its policy and insured, plus rating calls referencing `SUB-…` or its quote numbers. Linked as "Case history" from the workbench, review, quote and policy pages.
+  - Rating service: `GET /ratings?reference_prefix=&limit=` (rating calls with rate version label, class, premium, total) and a `limit` on `GET /rate-table-audit`. 26 rating tests.
+  - `lib/timeline-merge.ts` (pure, 7 tests): normalizes the three sources into one `TimelineEvent`, merges newest first, computes field-level `changes`, groups by correlation, applies filters, and formats values for display.
+- **Files:** `services/rating/app/{main,repository}.py`, `services/rating/tests/test_api.py`, `web/src/lib/{timeline,timeline-merge,timeline-merge.test}.ts`, `web/src/app/audit/page.tsx`, `web/src/app/{layout.tsx,quotes/[id]/page.tsx,policies/[id]/page.tsx}`, `web/src/app/submissions/[id]/{page.tsx,workbench/page.tsx}`
+- **Commit:** `step-11: ...`
+- **Decisions:**
+  - **The web app reads the rating service's audit data over its API**, not its database. Each service owns its database (PLAN.md), so the viewer works however the rating service stores things. If rating is unreachable the page still loads with UW Desktop events and a warning.
+  - Merged in app code (at most 500 per source, filtered in memory) rather than a cross-database view. Fine at demo scale; a real system would ship events to one store (an outbox or log pipeline) and query that.
+  - Case scope: desktop events where `(entity_type, entity_id)` is in {submission, its quotes, policies, insured} via `unnest`; rating calls by reference prefix (`SUB-0003`, `Q-2026-0001`, so all versions).
+  - **Grouping across services:** rating calls carry no correlation id, so an uncorrelated event that sits between two events of the same action, within 5 s, joins that action. Save & rate then reads as schedule changed → engine rated → worksheet rated, as one card.
+  - Display: schedules as "safety -5%", subjectivities as "text: open (due …)", other objects as compact JSON (cut at 140 chars).
+- **Dead ends / gotchas:**
+  - The first version showed one Save & rate as three cards, because the engine call in the middle broke the correlation run. Hence the sandwich rule (tested).
+  - psycopg: a literal `%` in SQL with named parameters must be doubled (`LIKE %(p)s || '%%'`).
+  - Events recorded before the CR-001 fix still include false `schedule_changed` rows; the audit is append-only, so they stay.
+- **How to show it:** open the roofing workbench → **Case history →**. The top card is the last Save & rate as one action (schedule +18% → +20%, the engine call, the rating), then referral clearances with who and why. Filter Source = Rate admin to see the Florida territory change (1.25 → 1.35) with its reason and activation. Search "bound" in Desert Bloom's case history to see quote v3 bound as GL-26-00001, with subjectivities received/open.

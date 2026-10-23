@@ -51,6 +51,19 @@ def get_rating(rating_id: str) -> dict | None:
         return conn.execute("SELECT * FROM rating_log WHERE id = %s", (rating_id,)).fetchone()
 
 
+def list_ratings(reference_prefix: str | None = None, limit: int = 200) -> list[dict]:
+    """Recent rating calls (summary only) for the audit timeline; optionally only one reference family."""
+    with pool.connection() as conn:
+        return conn.execute(
+            "SELECT r.id, r.created_at, r.requested_by, r.reference, v.label AS rate_version,"
+            " r.request->>'class_code' AS class_code, r.result->>'premium' AS premium, r.result->>'total' AS total"
+            " FROM rating_log r JOIN rate_versions v ON v.id = r.version_id"
+            " WHERE %(p)s::text IS NULL OR r.reference LIKE %(p)s || '%%'"
+            " ORDER BY r.created_at DESC LIMIT %(n)s",
+            {"p": reference_prefix, "n": limit},
+        ).fetchall()
+
+
 def list_versions() -> list[dict]:
     with pool.connection() as conn:
         return conn.execute("SELECT * FROM rate_versions ORDER BY id DESC").fetchall()

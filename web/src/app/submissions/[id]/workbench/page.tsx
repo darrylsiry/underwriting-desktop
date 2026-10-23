@@ -79,7 +79,10 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
           {policy ? `Bound · ${policy.policy_number}` : ready ? (latest ? `Quoted · ${latest.quote_number} v${latest.version}` : "Ready to quote") : !rated ? "Not rated" : `${openReferrals.length} referral${openReferrals.length === 1 ? "" : "s"} open`}
         </span>
       </div>
-      <p className="mt-1 text-sm text-slate-500">Underwriting workbench · {String(sub.data.operations?.description ?? "")}</p>
+      <p className="mt-1 text-sm text-slate-500">
+        Underwriting workbench · {String(sub.data.operations?.description ?? "")} ·{" "}
+        <Link href={`/audit?submission=${id}`} className="text-indigo-600 hover:underline">Case history →</Link>
+      </p>
 
       {msg && <p className="mt-4 rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{msg}</p>}
       {error && <p className="mt-4 rounded bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}

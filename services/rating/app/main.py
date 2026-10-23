@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app import admin, db, repository
@@ -172,5 +172,11 @@ def activate(version_id: int, req: Activation):
 
 
 @app.get("/rate-table-audit")
-def rate_table_audit(version_id: int | None = None):
-    return repository.audit_trail(version_id)
+def rate_table_audit(version_id: int | None = None, limit: int = Query(200, ge=1, le=1000)):
+    return repository.audit_trail(version_id, limit)
+
+
+@app.get("/ratings")
+def list_ratings(reference_prefix: str | None = None, limit: int = Query(200, ge=1, le=1000)):
+    """Rating calls, newest first: who rated what, on which rate version, for which reference (SUB-/Q-)."""
+    return repository.list_ratings(reference_prefix, limit)
