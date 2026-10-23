@@ -71,3 +71,26 @@ read this to replay the build quickly.
   - Unrateable input (unknown class, state, or limit; mod out of bounds) returns 422 with a readable message.
 - **Dead ends / gotchas:** none significant. Hand-check expected premiums carefully in tests (49,738.26 rounds to 49,738).
 - **How to show it:** http://localhost:8001/docs (Swagger), then POST /rate with the Lone Star Electric example from `tests/test_api.py`. All 8 sample risks rate between about $6K and $400K total.
+
+## step-04: Rating admin UI with versioned, audited rate edits
+- **Prompt used:** "Add a rate-table admin UI to the rating service at /admin: copy the active version into a draft, edit values one rating variable at a time (class rates, territory, ILF, deductible, ...) with a required reason, show what changed vs the base version, audit every change with before/after, and activate the draft to make it live. Add the same operations to the JSON API, with tests."
+- **What was built:**
+  - Server-rendered admin UI at http://localhost:8001/admin: version list, "new draft from" form, a per-variable editor with "was X" highlights and a changed-count per variable, an activate form, and a change history.
+  - JSON API: `GET /rate-versions/{id}`, `POST /rate-versions` (draft), `POST /rate-versions/{id}/edits` (batch of class/factor/parameter edits), `POST /rate-versions/{id}/activate`, `GET /rate-table-audit`.
+  - Migration `003` adds `rate_versions.based_on` and the append-only `rate_table_audit` table.
+  - 10 new tests (22 total).
+- **Files:** `services/rating/migrations/003_rate_table_audit.sql`, `services/rating/app/{repository,main,admin}.py`, `services/rating/app/templates/{base,versions,version,_audit}.html`, `services/rating/tests/{conftest,test_api,test_rate_admin}.py`, `services/rating/{pyproject.toml,uv.lock}`
+- **Commit:** `step-04: ...`
+- **Decisions:**
+  - The admin UI lives **in the rating service** (FastAPI + Jinja2, plain HTML forms, no JS build), per the plan: the service that owns the rate tables owns their admin. Both the UI and the API call the same repository functions.
+  - Only drafts are editable; active and retired versions are frozen (409). Activation retires the old active version in the same transaction, so `POST /rate` never sees a half-edited table. Drafts can be rated before go-live by passing `rate_version_id`.
+  - One reason per save covers all values changed in that variable; each changed row gets its own audit row (`entity` like `territory:FL`, before/after as strings). Unchanged values are skipped, not audited.
+  - "Who" is a free-text name remembered in a cookie (no auth yet; the demo can't depend on accounts).
+  - Values must be > 0. Editing adds no new keys (no new states or classes); that would be a later step.
+- **Dead ends / gotchas:**
+  - The API test fixture moved to `tests/conftest.py` with session scope: psycopg's pool can't be reopened, so two module-scoped fixtures each starting the app fails.
+  - `test_rate_admin.py` activates 2026.2, so it must sort after `test_api.py` (which expects 2026.1 active).
+  - FastAPI serializes raw `Decimal`s in dict responses as JSON numbers (`1.35`), while audit before/after are stored as strings.
+  - ILF keys contain `/`; form field names use `|` as the separator (`factor|ilf|1000000/2000000|value`).
+  - Locally without uv, relock inside a container: `docker run --rm -v "$PWD":/app -w /app python:3.12-slim sh -c "pip install uv==0.11.32 && uv lock"`.
+- **How to show it:** http://localhost:8001/admin → Create draft (2026.2) → Territory → change FL 1.25 → 1.35, give a reason, Save (the row shows "was 1.25", nav shows "1 changed") → Activate → the versions page shows 2026.1 retired and the audit trail. Then `POST /rate` for a Florida risk at :8001/docs shows 1.35 in the worksheet.

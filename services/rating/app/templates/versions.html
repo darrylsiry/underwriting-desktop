@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Rate versions</h1>
+<p class="sub">
+  {% if active %}<strong>{{ active.label }}</strong> is active: every new rating uses it.{% else %}No active version.{% endif %}
+  Copy a version into a draft to change rates, then activate it.
+</p>
+
+<h2>Versions</h2>
+<table>
+  <tr><th>Version</th><th>Status</th><th>Based on</th><th>Notes</th><th>Created by</th><th>Activated</th></tr>
+  {% for v in versions %}
+  <tr>
+    <td><a href="/admin/versions/{{ v.id }}"><strong>{{ v.label }}</strong></a></td>
+    <td><span class="badge {{ v.status }}">{{ v.status }}</span></td>
+    <td class="muted">{% for b in versions if b.id == v.based_on %}{{ b.label }}{% endfor %}</td>
+    <td>{{ v.notes }}</td>
+    <td>{{ v.created_by }}</td>
+    <td class="muted">{{ v.activated_at.strftime("%Y-%m-%d %H:%M") if v.activated_at else "" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>New draft</h2>
+<form class="card row" method="post" action="/admin/versions">
+  <label>Copy from
+    <select name="based_on">
+      {% for v in versions %}<option value="{{ v.id }}" {% if v.status == "active" %}selected{% endif %}>{{ v.label }} ({{ v.status }})</option>{% endfor %}
+    </select>
+  </label>
+  <label>New label <input name="label" value="{{ next_label }}" required size="10"></label>
+  <label style="flex:1">Purpose <input name="notes" placeholder="e.g. Q3 Florida territory review" required></label>
+  <label>Your name <input name="actor" value="{{ actor }}" placeholder="name" required size="14"></label>
+  <button>Create draft</button>
+</form>
+
+<h2>Recent rate-table changes</h2>
+{% with show_version = true %}{% include "_audit.html" %}{% endwith %}
+{% endblock %}

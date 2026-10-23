@@ -1,0 +1,22 @@
+<table>
+  <tr><th>When</th>{% if show_version %}<th>Version</th>{% endif %}<th>Who</th><th>Action</th><th>What</th><th>Change</th><th>Reason</th></tr>
+  {% for a in audit %}
+  <tr>
+    <td class="muted">{{ a.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+    {% if show_version %}<td><a href="/admin/versions/{{ a.version_id }}">{{ a.version_label }}</a></td>{% endif %}
+    <td>{{ a.actor }}</td>
+    <td>{{ a.action.replace("_", " ") }}</td>
+    <td><code>{{ a.entity or "" }}</code></td>
+    <td>
+      {% if a.before and a.after %}
+        {% for k, v in a.after.items() %}{% if a.after | length > 1 %}{{ k.replace("_", " ") }} {% endif %}{{ a.before[k] | num }} → <strong>{{ v | num }}</strong>{% if not loop.last %}, {% endif %}{% endfor %}
+      {% elif a.after %}
+        {% for k, v in a.after.items() %}{{ k.replace("_", " ") }}: {{ v }}{% if not loop.last %}, {% endif %}{% endfor %}
+      {% endif %}
+    </td>
+    <td>{{ a.reason }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="7" class="muted">No changes recorded yet.</td></tr>
+  {% endfor %}
+</table>

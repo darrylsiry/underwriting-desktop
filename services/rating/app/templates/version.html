@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ version.label }}{% endblock %}
+{% block content %}
+<p class="sub"><a href="/admin">← All versions</a></p>
+<h1>Version {{ version.label }} <span class="badge {{ version.status }}">{{ version.status }}</span></h1>
+<p class="sub">
+  {{ version.notes }}
+  {% if base_version %}· copied from <a href="/admin/versions/{{ base_version.id }}">{{ base_version.label }}</a>{% endif %}
+  · created by {{ version.created_by }}
+  {% if not editable %}· <strong>read-only</strong>: copy it into a new draft to change rates{% endif %}
+</p>
+
+<div style="display:grid; grid-template-columns: 220px 1fr; gap: 24px; margin-top: 20px">
+  <nav>
+    <h2 style="margin-top:0">Rating variables</h2>
+    <table>
+      {% for n in nav %}
+      <tr><td {% if n.key == section %}style="background:#eef2ff"{% endif %}>
+        <a href="?section={{ n.key }}" style="{% if n.key == section %}font-weight:600{% endif %}">{{ n.title }}</a>
+        {% if n.changes %}<span class="badge draft" style="float:right">{{ n.changes }} changed</span>{% endif %}
+      </td></tr>
+      {% endfor %}
+    </table>
+  </nav>
+
+  <section>
+    <h2 style="margin-top:0">{{ section_title }}</h2>
+    <form method="post" action="/admin/versions/{{ version.id }}/sections/{{ section }}">
+      <table>
+        <tr>
+          <th>Key</th><th>Description</th>
+          {% for c in columns %}<th class="num">{{ {"base_rate": "Rate per $1,000", "min_premium": "Min premium", "value": "Factor" if section not in ("parameters", "sl_tax") else "Value"}[c] }}</th>{% endfor %}
+        </tr>
+        {% for r in rows %}
+        <tr>
+          <td><code>{{ r.key }}</code>{% if r.kind == "band" %}<span class="muted"> and up</span>{% endif %}</td>
+          <td>{{ r.label }}</td>
+          {% for c in r.cells %}
+          <td class="num">
+            {% if editable %}
+              <input class="num {% if c.changed %}changed{% endif %}" name="{{ c.field }}" value="{{ c.value | num }}" inputmode="decimal" required>
+            {% else %}{{ c.value | num }}{% endif %}
+            {% if c.changed %}<span class="was">was {{ c.base | num }}</span>{% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </table>
+      {% if editable %}
+      <div class="card row" style="margin-top:12px">
+        <label style="flex:1">Reason for change (goes in the audit trail)
+          <input name="reason" placeholder="e.g. Florida loss trend +8% per actuarial memo">
+        </label>
+        <label>Your name <input name="actor" value="{{ actor }}" required size="14"></label>
+        <button>Save {{ section_title | lower }}</button>
+      </div>
+      {% endif %}
+    </form>
+
+    {% if editable %}
+    <h2>Activate</h2>
+    <form class="card row" method="post" action="/admin/versions/{{ version.id }}/activate"
+          onsubmit="return confirm('Activate {{ version.label }}? New ratings will use it immediately.')">
+      <span class="muted" style="flex-basis:100%">Activating retires the current active version. Existing quotes keep the version they were rated on.</span>
+      <label style="flex:1">Reason <input name="reason" required placeholder="e.g. Approved by pricing committee"></label>
+      <label>Your name <input name="actor" value="{{ actor }}" required size="14"></label>
+      <button>Activate {{ version.label }}</button>
+    </form>
+    {% endif %}
+  </section>
+</div>
+
+<h2>Change history for {{ version.label }}</h2>
+{% with show_version = false %}{% include "_audit.html" %}{% endwith %}
+{% endblock %}
