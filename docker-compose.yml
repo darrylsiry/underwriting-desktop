@@ -26,7 +26,10 @@ services:
     build: ./services/ingestion
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      RATING_SERVICE_URL: http://rating:8000
     ports: ["8002:8000"]
+    volumes:
+      - ./samples:/samples:ro   # for `python -m app.score /samples` and demo uploads
 
   web:
     build: ./web

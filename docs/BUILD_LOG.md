@@ -94,3 +94,29 @@ read this to replay the build quickly.
   - ILF keys contain `/`; form field names use `|` as the separator (`factor|ilf|1000000/2000000|value`).
   - Locally without uv, relock inside a container: `docker run --rm -v "$PWD":/app -w /app python:3.12-slim sh -c "pip install uv==0.11.32 && uv lock"`.
 - **How to show it:** http://localhost:8001/admin → Create draft (2026.2) → Territory → change FL 1.25 → 1.35, give a reason, Save (the row shows "was 1.25", nav shows "1 changed") → Activate → the versions page shows 2026.1 retired and the audit trail. Then `POST /rate` for a Florida risk at :8001/docs shows 1.35 in the worksheet.
+
+## step-05: Ingestion service (classify → extract → submission JSON with confidence)
+- **Prompt used:** "Build the ingestion service: POST /extract takes every document in one submission (PDF, EML with attachments, DOCX), classifies each one, reads fillable ACORD-style PDFs from their form fields, sends everything else to Claude in one call with a strict JSON schema, and merges the results into the canonical submission JSON with per-field confidence, stated-vs-inferred basis, source document, and a quoted snippet. Add a scorer against samples/ground_truth and offline tests."
+- **What was built:**
+  - `POST /extract` (multipart `files`, optional `use_claude=false`) returns `submission` (the step-02 schema), `fields` (per-field value, confidence, method, basis, source document, snippet), `conflicts`, `missing_for_rating`, `documents` (type and method for each), `notes` (underwriting flags from Claude), `warnings`, and `claude` (model and token usage).
+  - `python -m app.score /samples [-v] [--case 04] [--no-claude]` scores the pipeline against the ground truth. **Result: 250/251 fields correct, 0 wrong, 0 extra, every loss row matched**, about 2.5 minutes and about $0.50 for all 8 cases on Claude Opus 5.5.
+  - 26 offline tests (no API calls).
+- **Files:** `services/ingestion/app/{main,schema,documents,acord,claude,pipeline,score}.py`, `services/ingestion/tests/{conftest,test_ingestion}.py`, `services/ingestion/{pyproject.toml,uv.lock}`, `docker-compose.yml`
+- **Commit:** `step-05: ...`
+- **Decisions:**
+  - **Classification is deterministic**: file type, ACORD field-name prefixes, and first-page title text ("LOSS RUN", "SUPPLEMENTAL QUESTIONNAIRE", "INSURANCE APPLICATION"). It's free and explainable, and it's enough for broker documents. Emails are unpacked: body plus each attachment, with `parent` recorded.
+  - **Fillable ACORD PDFs never go to Claude.** A field map reads them at confidence 1.0 and the snippet is `FieldName = raw value`. The three fillable cases match the ground truth exactly with no API key.
+  - **One Claude call per submission** covering every non-form document, so it can connect "loss runs attached" with the loss run. PDFs are sent as `document` blocks (Claude reads the page), and email and Word text as text `document` blocks titled with filename, type, and parent.
+  - Values already read from form fields are passed to Claude as context. Without them, its notes wrongly called the FEIN and losses "missing".
+  - Structured outputs (`output_config.format` JSON schema with `path` and `source_document` enums) guarantee parseable output. `value` is always a string that Python normalizes per field type ("$2.3M" → 2300000, "12/01/2026" → ISO, "Y" → true), and bad values become warnings.
+  - `basis: stated|inferred` plus confidence bands in the prompt. Class codes come from the rating service's `/classes` (Claude can only pick codes we can rate). Expiration = effective + 1 year and "residential repaints" → 100% are allowed as inferences.
+  - Merge order: form field > stated > inferred > confidence. Disagreements go in `conflicts` (case-insensitive). Loss rows are deduplicated by (date, incurred), preferring the loss run's wording.
+  - Model `claude-opus-5-5` (override with `EXTRACTION_MODEL`), effort `medium`, `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`) so a classifier false positive doesn't block intake; a refusal or API error becomes a warning, not a 500.
+  - Without `ANTHROPIC_API_KEY` the service still works: form fields only, plus a warning listing the unread documents.
+- **Dead ends / gotchas:**
+  - `uv lock` resolved **anthropic 2.1.0**. Check the API against the installed package (`inspect.signature(client.beta.messages.create)`) rather than 1.x memory. `fallbacks` and `output_config` are on `client.beta.messages.create`.
+  - Ground truth includes facts the documents only imply (class code, expiration date in emails). Score "stated" and "inferred" values the same, but expect a blank where nothing supports a value. The only miss: the carpentry email never mentions wrap-up projects.
+  - Use `docx` `iter_inner_content()` to keep headings next to their tables; `doc.paragraphs` + `doc.tables` loses the order.
+  - Default a path from `__file__` lazily: `Path(...).parents[3]` raises inside a container even when `SAMPLES_DIR` is set.
+  - Compose mounts `./samples` read-only into ingestion at `/samples` for the scorer and demo uploads, and sets `RATING_SERVICE_URL`.
+- **How to show it:** http://localhost:8002/docs → `POST /extract` → upload `samples/submissions/05-desert-bloom-painting/*.eml` (a sparse email). Point out the inferred class code 98304 with its snippet, `missing_for_rating: []`, and the notes. Then upload case 06 (ACORD + questionnaire): form fields at 1.0, questionnaire fields from Claude, and notes flagging the open $410K Labor Law 240 claim. Finish with `docker compose exec ingestion python -m app.score /samples` for the 250/251 table.
