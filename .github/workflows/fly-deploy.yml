@@ -1,0 +1,38 @@
+# Deploy all three apps to Fly.io whenever main changes in a way that affects them.
+# Runs scripts/fly-deploy.sh, which is idempotent: it only creates what's missing, then deploys.
+#
+# Needs one repository secret, FLY_API_TOKEN: an org token (`fly tokens create org`), because the
+# script touches three apps and the Managed Postgres cluster. A per-app deploy token is not enough.
+name: Deploy to Fly.io
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - "web/**"
+      - "samples/submissions/**"
+      - "scripts/fly-deploy.sh"
+      - ".github/workflows/fly-deploy.yml"
+  workflow_dispatch: {}
+
+# One deploy at a time; a newer push waits for the running deploy instead of racing it.
+concurrency:
+  group: fly-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy rating, ingestion and web
+        run: scripts/fly-deploy.sh
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

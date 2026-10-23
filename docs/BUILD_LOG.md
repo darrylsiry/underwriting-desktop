@@ -354,3 +354,17 @@ read this to replay the build quickly.
   - In `next dev`, the first compile of a route force-reloads every open tab. A "stale tab" test passes only after the review route has been compiled once. Production has no such reload.
   - `pkill -f "next dev"` inside a shell command line kills that shell too (the pattern matches its own command). Use `pgrep` and skip `$$`.
 - **How to show it:** open /submissions to see "Inbox · 18 new". Click **Extract →** on Mile High Electric (a Word application): the button reads "Reading documents…", and about 25 s later the intake review opens with every field filled and cited. Go back: the inbox shows 17 and SUB-0001 is under Received. For a fast one, Extract Rio Bravo Concrete (fillable ACORD; only the loss run goes to Claude).
+
+## Tooling: deploy to Fly.io from GitHub Actions on every push to main
+- **Prompt used:** "Set up a GitHub Action that deploys to Fly when main changes."
+- **What was built:** `.github/workflows/fly-deploy.yml` runs `scripts/fly-deploy.sh` on a GitHub runner when a push to `main` touches `services/`, `web/`, `samples/submissions/`, the deploy script or the workflow. It can also be started by hand (Actions → Deploy to Fly.io → Run workflow). Docs-only merges don't deploy.
+- **Files:** `.github/workflows/fly-deploy.yml`, `scripts/fly-deploy.sh`
+- **Commit:** `tooling: ...`
+- **Decisions:**
+  - The workflow reuses the deploy script rather than duplicating its steps, so the inbox copy, `--no-public-ips` and the idempotent checks stay in one place.
+  - One repository secret, `FLY_API_TOKEN`. It must be an **org** token (`fly tokens create org`): the script lists apps and the Managed Postgres cluster and deploys three apps, which a per-app deploy token can't do.
+  - `concurrency: fly-deploy` queues overlapping pushes instead of racing two deploys. It runs in the `production` environment, so GitHub shows a deployment history and approvals can be added later.
+  - On CI the script refuses to generate a Basic auth password. A password made on a throwaway runner would be lost. Create it once from a laptop run, which saves `.fly-credentials`.
+- **Dead ends / gotchas:**
+  - Don't deploy from a Claude Code cloud sandbox. Its egress proxy blocks Fly's Depot builder (`api.depot.dev`), and the Fly remote builder needs WireGuard or builder DNS, which the sandbox lacks. The workaround on 2026-10-23 was to build locally with base images from `mirror.gcr.io` (Docker Hub returned 429), pass the sandbox CA only as a build-only bind mount so it never lands in the image, and run `fly deploy --image … --local-only`. Merging to `main` now deploys from GitHub instead.
+  - Deploying an auto-stopped app leaves its machines stopped. They start on the next request.

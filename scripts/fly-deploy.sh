@@ -4,6 +4,8 @@
 #   scripts/fly-deploy.sh            # create what's missing, then deploy all three apps
 #   FLY_PREFIX=acme-uw scripts/fly-deploy.sh
 #
+# Also runs from GitHub Actions on every push to main (.github/workflows/fly-deploy.yml).
+#
 # Safe to re-run: apps, the cluster, databases, attachments and secrets are only created when
 # missing. Creating the cluster and apps starts billing on your Fly.io account.
 #
@@ -76,6 +78,9 @@ if has_secret "$INGESTION" ANTHROPIC_API_KEY; then echo "$INGESTION already has 
 elif [ -n "$key" ]; then printf 'ANTHROPIC_API_KEY=%s\n' "$key" | fly secrets import --stage -a "$INGESTION"
 else echo "No ANTHROPIC_API_KEY in .env: ingestion will read fillable PDFs only"; fi
 if has_secret "$WEB" BASIC_AUTH_PASSWORD; then echo "$WEB already has Basic auth credentials (see .fly-credentials)"
+elif [ -n "${CI:-}" ]; then
+  # A password generated on a CI runner would be lost with the runner; create it from your machine.
+  echo "$WEB has no BASIC_AUTH_PASSWORD. Run scripts/fly-deploy.sh locally once to create it."; exit 1
 else
   user="${BASIC_AUTH_USER:-underwriter}"
   pass="$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)"
