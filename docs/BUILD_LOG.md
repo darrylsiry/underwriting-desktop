@@ -244,3 +244,15 @@ read this to replay the build quickly.
   - The header got crowded once search was added. It now uses `flex-wrap`, a narrower search input below `lg`, and the "Working as" label is `sr-only` (still read by screen readers) until `xl`.
   - The first version showed written premium including fee and tax on the customer page but premium-only on the list. Pick one definition.
 - **How to show it:** type "copper" in the header (finds Desert Bloom through its broker) → open the customer from `/insureds` → click the bound quote → scroll to the rating worksheet and the internal basis with the "−5% Safety program" reason → then type `BND-26-00001` in search and land on the policy with its open subjectivities.
+
+## Fixes from the first code review (CR-001 … CR-016)
+`docs/CODE_REVIEW.md` (from the read-only code-auditor) found 13 bugs plus three suggestions. All the bugs and the bug-like suggestion CR-016 are fixed, one commit each (`git log --grep CR-0`). When replaying steps in the live repo, build these in from the start:
+- **jsonb reorders object keys, everywhere.** Never compare `JSON.stringify` of a value read back from jsonb with a freshly built one; use a fixed-order key (`scheduleKey`, `inputsHash`). (CR-001)
+- **Header values must be Latin-1.** Use `contentDisposition()` (ASCII fallback plus RFC 5987 `filename*`) for any user-supplied filename. (CR-002)
+- **No blocking work in `async def`.** In FastAPI, run psycopg calls, PDF parsing, and the synchronous Anthropic client through `run_in_threadpool` (or use plain `def` handlers). Otherwise `/health` hangs for the whole extraction. (CR-003, CR-009)
+- **A rating is current only on the active rate version.** `readiness()` takes the active version from rating `/health`; `issueQuote` refuses stale rates. (CR-004)
+- **A referral clearance records the flag detail it cleared** and stops counting when that detail changes. (CR-005)
+- **Read-modify-write in one transaction** with `SELECT … FOR UPDATE` and a status predicate on the UPDATE. The review form also carries a data fingerprint, so a stale form is refused instead of reverting someone else's edits (a gap the report didn't name). (CR-006)
+- Validate every id path segment before it reaches a uuid cast; type FastAPI ids as `uuid.UUID`. Make redirects from Referer same-host and local-path only. (CR-007, CR-008, CR-016)
+- Name the target columns in `INSERT … SELECT`. Dedupe loss rows across documents, never within one. Compose healthchecks: ingestion and web wait for a healthy rating service. Cap `/extract` uploads. (CR-010 … CR-013, CR-016)
+- Not done: CR-014 (broader test suites; each fix above added its own regression test) and CR-015 (a shared `schema.json` contract test between Python and TypeScript).
