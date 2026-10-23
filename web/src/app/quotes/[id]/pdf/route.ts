@@ -1,3 +1,4 @@
+import { contentDisposition } from "@/lib/http";
 import { getQuotePdf } from "@/lib/quotes";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +11,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   return new Response(new Uint8Array(q.pdf), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${q.quote_number}-v${q.version}.pdf"`,
+      "Content-Disposition": contentDisposition(`${q.quote_number}-v${q.version}.pdf`, "inline"),
     },
   });
 }

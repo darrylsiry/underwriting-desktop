@@ -1,3 +1,4 @@
+import { contentDisposition } from "@/lib/http";
 import { getDocument } from "@/lib/submissions";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +12,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   return new Response(new Uint8Array(doc.content), {
     headers: {
       "Content-Type": inline ? "application/pdf" : doc.content_type,
-      "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${doc.filename.replace(/"/g, "")}"`,
+      "Content-Disposition": contentDisposition(doc.filename, inline ? "inline" : "attachment"),
     },
   });
 }
