@@ -30,7 +30,7 @@
   </label>
   <label>New label <input name="label" value="{{ next_label }}" required size="10"></label>
   <label style="flex:1">Purpose <input name="notes" placeholder="e.g. Q3 Florida territory review" required></label>
-  <label>Your name <input name="actor" value="{{ actor }}" placeholder="name" required size="14"></label>
+  {% if not signed_in %}<label>Your name <input name="actor" value="{{ actor }}" placeholder="name" required size="14"></label>{% endif %}
   <button>Create draft</button>
 </form>
 

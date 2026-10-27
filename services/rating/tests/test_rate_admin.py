@@ -74,6 +74,20 @@ def test_admin_ui_edits_a_variable(client, draft):
     assert "sam" in client.get("/admin").text  # recent changes on the versions page
 
 
+def test_signed_in_desktop_user_is_the_actor(client, draft):
+    """Through the UW Desktop proxy the signed-in user is recorded, whatever the form says; no name box."""
+    who = {"x-uw-desktop": "1", "x-uw-user": "underwriter7"}
+    page = client.get(f"/admin/versions/{draft['id']}?section=territory", headers=who).text
+    assert 'name="actor"' not in page
+    res = client.post(f"/admin/versions/{draft['id']}/sections/territory", follow_redirects=False, headers=who,
+                      data={"factor|territory|FL|value": "1.4", "reason": "FL trend", "actor": "mallory"})
+    assert res.status_code == 303 and "rating_admin_user" not in res.headers.get("set-cookie", "")
+    [row] = [a for a in client.get(f"/rate-table-audit?version_id={draft['id']}").json()
+             if a["action"] == "update_factor" and "1.4" in str(a.get("after"))]
+    assert row["actor"] == "underwriter7"
+    assert 'name="actor"' in client.get("/admin").text  # standalone (no proxy header) keeps the name field
+
+
 def test_malformed_field_name_is_an_error_not_a_500(client, draft):
     res = client.post(f"/admin/versions/{draft['id']}/sections/classes", follow_redirects=False,
                       data={"class|a|b|base_rate": "1", "reason": "x", "actor": "sam"})
