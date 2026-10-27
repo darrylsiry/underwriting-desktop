@@ -472,3 +472,10 @@ read this to replay the build quickly.
 - **Commit:** `fix: ...`
 - **Decisions:** the headers only change what the page *displays*. The rating service is private on Fly and the proxy builds its outgoing headers from an allow-list, so a client can't inject them; they still aren't used for any authorization. The admin's own "Your name" field for the audit actor is unchanged (SEC-006, on hold).
 - **Gotcha:** when one app proxies another's server-rendered UI, the inner pages need the outer navigation, or users get stranded. Keep the nav links in the inner template in sync with `web/src/app/layout.tsx`.
+
+## Fix: the rate admin records the signed-in user (SEC-006, rating half)
+- **Prompt used:** "Use the signed-in user for the rate admin actor too."
+- **What was built:** inside the UW Desktop, the rate admin's three actions (create draft, save a variable's edits, activate) record the signed-in user from `x-uw-user`, which the web proxy sets from the checked login. A typed name in the form is ignored, the "Your name" boxes aren't rendered, and the name cookie isn't set. Opened standalone (`:8001`, local dev only), the typed name and its cookie still apply. 1 new rating test: a form `actor=mallory` sent with `x-uw-user: underwriter7` records `underwriter7`, with no name field and no cookie.
+- **Files:** `services/rating/app/admin.py` (`signed_in_user`, `form_actor`), `services/rating/app/templates/{version,versions}.html`, `services/rating/tests/test_rate_admin.py`
+- **Commit:** `fix: ...`
+- **Trust:** the header is trusted because the rating service is reachable only through the web proxy on Fly (Flycast, no public IPs). The proxy builds its outgoing headers from an allow-list and sets `x-uw-user` from `currentUser()`, after middleware has checked the password. The JSON admin API (`/rate-versions`, not proxied) still takes `actor` in the body. With both apps' actors now coming from the login, SEC-006 is resolved for every path a signed-in user can reach.

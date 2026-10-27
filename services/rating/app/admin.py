@@ -97,8 +97,21 @@ def redirect(url: str, **params) -> RedirectResponse:
     return RedirectResponse(f"{url}?{query}" if query else url, status_code=303)
 
 
-def remember_actor(response: RedirectResponse, actor: str) -> RedirectResponse:
-    response.set_cookie(ACTOR_COOKIE, actor, max_age=60 * 60 * 24 * 365, samesite="lax")
+def signed_in_user(request: Request) -> str | None:
+    """The UW Desktop user. The web app's /admin proxy sets this header from the login it checked
+    (and builds its outgoing headers from an allow-list, so a browser can't supply it); on Fly this
+    service is private, reachable only through that proxy."""
+    return (request.headers.get("x-uw-user") or "").strip()[:60] or None
+
+
+def form_actor(request: Request, form) -> str:
+    """Who to record in the audit trail: the signed-in user, else the typed name (standalone use)."""
+    return signed_in_user(request) or str(form.get("actor", "")).strip() or "rating-admin"
+
+
+def remember_actor(request: Request, response: RedirectResponse, actor: str) -> RedirectResponse:
+    if not signed_in_user(request):  # the typed name is only remembered when there's no login
+        response.set_cookie(ACTOR_COOKIE, actor, max_age=60 * 60 * 24 * 365, samesite="lax")
     return response
 
 
@@ -119,7 +132,8 @@ def versions_page(request: Request, msg: str = "", error: str = ""):
         "next_label": next_label(versions),
         "active": next((v for v in versions if v["status"] == "active"), None),
         "audit": repository.audit_trail(limit=25),
-        "actor": request.cookies.get(ACTOR_COOKIE, ""),
+        "actor": signed_in_user(request) or request.cookies.get(ACTOR_COOKIE, ""),
+        "signed_in": signed_in_user(request) is not None,
         "msg": msg, "error": error,
     })
 
@@ -127,14 +141,14 @@ def versions_page(request: Request, msg: str = "", error: str = ""):
 @router.post("/versions")
 async def create_version(request: Request):
     form = await request.form()
-    actor = str(form.get("actor", "")).strip() or "rating-admin"
+    actor = form_actor(request, form)
     try:
         # psycopg is synchronous: keep it off the event loop in these async (form-reading) handlers.
         new_id = await run_in_threadpool(
             repository.create_draft, int(form["based_on"]), str(form["label"]).strip(), str(form.get("notes", "")), actor)
     except (LookupError, ValueError) as e:
         return redirect("/admin", error=str(e))
-    return remember_actor(redirect(f"/admin/versions/{new_id}", msg="Draft created. Edit any variable, then activate."), actor)
+    return remember_actor(request, redirect(f"/admin/versions/{new_id}", msg="Draft created. Edit any variable, then activate."), actor)
 
 
 @router.get("/versions/{version_id}", response_class=HTMLResponse)
@@ -163,7 +177,8 @@ def version_page(request: Request, version_id: int, section: str = "classes", ms
         "rows": current,
         "columns": [c["column"] for c in current[0]["cells"]] if current else [],
         "audit": repository.audit_trail(version_id),
-        "actor": request.cookies.get(ACTOR_COOKIE, ""),
+        "actor": signed_in_user(request) or request.cookies.get(ACTOR_COOKIE, ""),
+        "signed_in": signed_in_user(request) is not None,
         "msg": msg, "error": error,
     })
 
@@ -171,7 +186,7 @@ def version_page(request: Request, version_id: int, section: str = "classes", ms
 @router.post("/versions/{version_id}/sections/{section}")
 async def save_section(request: Request, version_id: int, section: str):
     form = await request.form()
-    actor = str(form.get("actor", "")).strip() or "rating-admin"
+    actor = form_actor(request, form)
     back = f"/admin/versions/{version_id}"
     edits: dict[tuple, repository.Edit] = {}
     try:
@@ -190,15 +205,15 @@ async def save_section(request: Request, version_id: int, section: str):
     except (LookupError, ValueError, repository.VersionNotEditable) as e:
         return redirect(back, section=section, error=str(e))
     msg = f"Saved {changed} change{'s' if changed != 1 else ''}" if changed else "Nothing changed"
-    return remember_actor(redirect(back, section=section, msg=msg), actor)
+    return remember_actor(request, redirect(back, section=section, msg=msg), actor)
 
 
 @router.post("/versions/{version_id}/activate")
 async def activate_version(request: Request, version_id: int):
     form = await request.form()
-    actor = str(form.get("actor", "")).strip() or "rating-admin"
+    actor = form_actor(request, form)
     try:
         await run_in_threadpool(repository.activate, version_id, actor, str(form.get("reason", "")))
     except (LookupError, ValueError, repository.VersionNotEditable) as e:
         return redirect(f"/admin/versions/{version_id}", error=str(e))
-    return remember_actor(redirect(f"/admin/versions/{version_id}", msg="Activated. New ratings now use this version."), actor)
+    return remember_actor(request, redirect(f"/admin/versions/{version_id}", msg="Activated. New ratings now use this version."), actor)

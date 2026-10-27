@@ -51,7 +51,7 @@
         <label style="flex:1">Reason for change (goes in the audit trail)
           <input name="reason" placeholder="e.g. Florida loss trend +8% per actuarial memo">
         </label>
-        <label>Your name <input name="actor" value="{{ actor }}" required size="14"></label>
+        {% if not signed_in %}<label>Your name <input name="actor" value="{{ actor }}" required size="14"></label>{% endif %}
         <button>Save {{ section_title | lower }}</button>
       </div>
       {% endif %}
@@ -63,7 +63,7 @@
           onsubmit="return confirm('Activate {{ version.label }}? New ratings will use it immediately.')">
       <span class="muted" style="flex-basis:100%">Activating retires the current active version. Existing quotes keep the version they were rated on.</span>
       <label style="flex:1">Reason <input name="reason" required placeholder="e.g. Approved by pricing committee"></label>
-      <label>Your name <input name="actor" value="{{ actor }}" required size="14"></label>
+      {% if not signed_in %}<label>Your name <input name="actor" value="{{ actor }}" required size="14"></label>{% endif %}
       <button>Activate {{ version.label }}</button>
     </form>
     {% endif %}
