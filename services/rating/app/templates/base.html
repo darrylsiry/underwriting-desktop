@@ -12,6 +12,14 @@
     header { display: flex; align-items: center; gap: 16px; padding: 12px 24px; background: #fff; border-bottom: 1px solid var(--line); }
     header a { color: inherit; text-decoration: none; font-weight: 600; }
     header span { color: var(--muted); font-size: 13px; }
+    /* Shown inside the UW Desktop (via its /admin proxy): the same top bar as the rest of the app. */
+    header.desktop { gap: 24px; flex-wrap: wrap; row-gap: 8px; }
+    header.desktop nav { display: flex; gap: 16px; }
+    header.desktop nav a { font-weight: 400; color: #475569; }
+    header.desktop nav a:hover { color: var(--ink); }
+    header.desktop nav a.current { color: var(--ink); font-weight: 600; }
+    header.desktop form { margin-left: auto; }
+    header.desktop input { width: 260px; padding: 4px 8px; }
     main { max-width: 1100px; margin: 0 auto; padding: 24px; }
     h1 { font-size: 22px; margin: 0 0 4px; }
     h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 28px 0 8px; }
@@ -42,11 +50,27 @@
   </style>
 </head>
 <body>
+  {% if request.headers.get("x-uw-desktop") == "1" %}
+  <header class="desktop">
+    <a href="/">Underwriting Desktop</a>
+    <nav>
+      <a href="/insureds">Customers</a>
+      <a href="/submissions">Submissions</a>
+      <a href="/quotes">Quotes</a>
+      <a href="/policies">Policies</a>
+      <a href="/audit">Audit</a>
+      <a href="/admin" class="current">Rate tables</a>
+    </nav>
+    <form action="/search"><input name="q" placeholder="Search insureds, SUB-, Q-, GL-…" aria-label="Search"></form>
+    {% if request.headers.get("x-uw-user") %}<span>Signed in as <b style="color:var(--ink)">{{ request.headers.get("x-uw-user")[:60] }}</b></span>{% endif %}
+  </header>
+  {% else %}
   <header>
     <a href="/admin">Rating admin</a>
     <span>Contractors GL rate tables</span>
     <span style="margin-left:auto"><a href="/docs" style="font-weight:400">API docs</a></span>
   </header>
+  {% endif %}
   <main>
     {% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
     {% if error %}<div class="flash err">{{ error }}</div>{% endif %}

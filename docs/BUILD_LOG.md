@@ -463,3 +463,12 @@ read this to replay the build quickly.
   - A never-rated worksheet was labelled "Re-rate (inputs changed)". It now says "Rate" until there's a first rating.
   - Local Postgres in the Claude cloud sandbox stops when the container restarts. If a page 500s with `ECONNREFUSED 5432`, run `service postgresql start` before debugging the code.
 - **How to show it:** see DEMO_PLAYBOOK row 15.
+
+## Fix: the Rate tables page kept the desktop's top nav
+- **Prompt used:** "When I go to the rating page from the top nav, the nav disappears and I can only return elsewhere by clicking Back."
+- **Cause:** `/admin` is the rating service's own server-rendered UI, proxied by the web app. Its templates had only a "Rating admin" header. Its "API docs" link (`/docs`) was also dead through the proxy, which forwards only `/admin`.
+- **What was built:** the web proxy sends `x-uw-desktop: 1` and `x-uw-user: <signed-in user>` to the rating service. `base.html` then renders the desktop's top bar: brand → home, Customers, Submissions, Quotes, Policies, Audit, Rate tables (current), search, and "Signed in as". Opened directly (rating on :8001), it keeps its standalone header with API docs. 1 new rating test covers both headers and checks the name is HTML-escaped.
+- **Files:** `services/rating/app/templates/base.html`, `services/rating/tests/test_rate_admin.py`, `web/src/app/admin/[[...path]]/route.ts`
+- **Commit:** `fix: ...`
+- **Decisions:** the headers only change what the page *displays*. The rating service is private on Fly and the proxy builds its outgoing headers from an allow-list, so a client can't inject them; they still aren't used for any authorization. The admin's own "Your name" field for the audit actor is unchanged (SEC-006, on hold).
+- **Gotcha:** when one app proxies another's server-rendered UI, the inner pages need the outer navigation, or users get stranded. Keep the nav links in the inner template in sync with `web/src/app/layout.tsx`.

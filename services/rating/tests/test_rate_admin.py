@@ -88,3 +88,13 @@ def test_activate_retires_previous(client, draft):
     assert statuses == {"2026.1": "retired", "2026.2": "active"}
     assert client.post("/rate", json=ELECTRICAL).json()["rate_version"] == "2026.2"
     assert edit(client, draft["id"], value=1.3).status_code == 409
+
+
+def test_admin_shows_the_desktop_nav_only_when_proxied_by_the_desktop(client):
+    """Through the UW Desktop's /admin proxy the page keeps the desktop's top nav; standalone it doesn't."""
+    inside = client.get("/admin", headers={"x-uw-desktop": "1", "x-uw-user": "underwriter3<b>"}).text
+    assert 'href="/submissions"' in inside and 'href="/insureds"' in inside and 'class="current">Rate tables' in inside
+    assert "Signed in as" in inside and "underwriter3&lt;b&gt;" in inside  # escaped
+    assert 'href="/docs"' not in inside  # the desktop doesn't proxy the API docs
+    standalone = client.get("/admin").text
+    assert "Rating admin" in standalone and 'href="/submissions"' not in standalone
