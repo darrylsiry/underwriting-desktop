@@ -62,7 +62,42 @@ const entityUrl = (type: string, id: string) => ({
 
 const UNDERWRITER = { type: "string", description: "An underwriter's login (underwriter1 … underwriter9). Leave out for everyone." };
 
+/** Every login that has picked up a submission or owns prior-system policies. */
+async function underwriterNames(): Promise<string[]> {
+  const [subs, book, written] = await Promise.all([
+    customerDb.query<{ name: string }>("SELECT DISTINCT received_by AS name FROM submissions"),
+    policyDb.query<{ name: string }>("SELECT DISTINCT underwriter AS name FROM book_policies WHERE expiration_date >= CURRENT_DATE"),
+    policyDb.query<{ name: string }>("SELECT DISTINCT bound_by AS name FROM policies"),
+  ]);
+  return [...new Set([...subs.rows, ...book.rows, ...written.rows].map((r) => r.name))].sort();
+}
+
 export const APP_TOOLS: AppTool[] = [
+  {
+    name: "work_queue",
+    description: "What to work on next: the open work across the whole pipeline, most urgent first. Broker submissions still in the inbox (unextracted and unassigned: whoever clicks Extract becomes their underwriter), submissions in intake review, accepted files not yet rated, open referrals, files ready to quote, quotes waiting for a bind order or about to expire, policies with open subjectivities, and renewals to start or finish. For one underwriter (their desk plus the shared inbox) or for everyone. Use this for any 'what should I work on / what's next / what's waiting / what's overdue' question.",
+    input_schema: { type: "object", properties: { underwriter: UNDERWRITER } },
+    run: async (a, ctx) => {
+      const uw = str(a.underwriter) || null;
+      const names = uw ? [uw] : await underwriterNames();
+      const [desks, inbox] = await Promise.all([Promise.all(names.map(async (n) => ({ n, d: await loadDashboard(n) }))), listInbox()]);
+      const tasks = desks.flatMap(({ n, d }) => d.tasks.filter((t) => t.kind !== "inbox").map((t) => {
+        const days = t.due ? daysUntil(t.due, ctx.today) : null;
+        return { underwriter: n, kind: t.kind, title: t.title, detail: t.detail, due: t.due, days_left: days, overdue: days !== null && days < 0, urgency: t.urgency, url: t.href };
+      })).sort((x, y) => x.urgency - y.urgency);
+      const oldestFirst = [...inbox].sort((x, y) => x.receivedAt.getTime() - y.receivedAt.getTime());
+      return {
+        as_of: ctx.today, scope: uw ?? "everyone",
+        inbox: {
+          count: inbox.length,
+          note: "Not yet extracted. These belong to nobody until someone clicks Extract on /submissions; extracting one is the first step of the workflow and makes it that underwriter's submission.",
+          oldest_first: oldestFirst.slice(0, 25).map((f) => ({ title: f.title, documents: f.files.map((x) => x.name), received_at: f.receivedAt.toISOString(), url: "/submissions" })),
+        },
+        tasks: { count: tasks.length, overdue: tasks.filter((t) => t.overdue).length, items: tasks.slice(0, 60) },
+        how_to_prioritise: "Overdue items first (negative days_left), then the smallest days_left, then the rest in urgency order. A file that is ready to quote comes before one that still needs rating. When an underwriter's own queue is empty, or nothing on it is urgent, the next step is to extract the oldest submission in the inbox.",
+      };
+    },
+  },
   {
     name: "search_app",
     description: "Find anything by name or identifier: insureds (customers), submissions (SUB-0012), quotes (Q-2026-0004, optionally with a version like 'Q-2026-0004 v2'), policies (GL-26-00020), binders (BND-26-00020), producers, FEINs or class codes. Returns the matching records with their URLs. Start here whenever a question names a company or a number.",
@@ -354,7 +389,7 @@ export const APP_TOOLS: AppTool[] = [
         policyDb.query<{ name: string; n: number; premium: number }>("SELECT underwriter AS name, count(*)::int AS n, sum(premium)::float8 AS premium FROM book_policies WHERE expiration_date >= CURRENT_DATE GROUP BY 1"),
         policyDb.query<{ name: string; n: number; premium: number }>("SELECT bound_by AS name, count(*)::int AS n, sum(premium)::float8 AS premium FROM policies GROUP BY 1"),
       ]);
-      const names = [...new Set([...subs.rows, ...book.rows, ...written.rows].map((r) => r.name))].sort();
+      const names = await underwriterNames();
       return { underwriters: names.map((n) => ({ login: n, submissions: subs.rows.find((r) => r.name === n)?.n ?? 0, prior_system_policies_in_force: book.rows.find((r) => r.name === n)?.n ?? 0, prior_system_premium: money(book.rows.find((r) => r.name === n)?.premium ?? 0), uw_desktop_policies: written.rows.find((r) => r.name === n)?.n ?? 0, uw_desktop_premium: money(written.rows.find((r) => r.name === n)?.premium ?? 0), desk_url: "/" })) };
     },
   },
