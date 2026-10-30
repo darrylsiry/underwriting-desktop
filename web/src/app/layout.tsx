@@ -50,7 +50,10 @@ export default async function RootLayout({
               className="w-44 rounded border border-slate-300 px-2 py-1 text-slate-900 lg:w-64" />
           </form>
           {signedIn ? (
-            <span className="whitespace-nowrap text-slate-500">Signed in as <span className="font-medium text-slate-900">{signedIn}</span></span>
+            <span className="flex flex-col items-end whitespace-nowrap leading-tight text-slate-500">
+              <span>Signed in as <span className="font-medium text-slate-900">{signedIn}</span></span>
+              <a href="/signout" className="text-xs text-indigo-600 hover:underline">Sign out</a>
+            </span>
           ) : (
             <form action={setUserAction} className="flex items-center gap-2 text-slate-500">
               <label htmlFor="uw-name" className="sr-only whitespace-nowrap xl:not-sr-only">Working as</label>
