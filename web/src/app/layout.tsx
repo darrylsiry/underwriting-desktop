@@ -42,6 +42,7 @@ export default async function RootLayout({
             <Link href="/quotes" className="hover:text-slate-900">Quotes</Link>
             <Link href="/policies" className="hover:text-slate-900">Policies</Link>
             <Link href="/audit" className="hover:text-slate-900">Audit</Link>
+            <Link href="/accounting" className="hover:text-slate-900">Accounting</Link>
             <a href={RATING_ADMIN_URL} className="hover:text-slate-900">Rate tables</a>
           </nav>
           <form action="/search" className="ml-auto">

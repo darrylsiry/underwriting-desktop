@@ -1,6 +1,8 @@
 import { audit } from "./audit";
 import { bindBlockers, policyNumbers, subjectivityStatus, type SubjectivityStatus } from "./bind-rules";
 import { customerDb, policyDb } from "./db";
+import { accountingPeriod } from "./gl-journal";
+import { postPolicyBound } from "./ledger";
 import { renderBinderPdf, renderPolicyPdf, type PolicyDocument } from "./policy-pdf";
 import type { ExpiringPolicy } from "./renewal-compare";
 import type { RatingInputs } from "./worksheet";
@@ -65,8 +67,11 @@ type QuoteForBinding = {
  */
 export async function bindQuote(quoteId: string, received: Set<number>, actor: string): Promise<PolicyRow> {
   const today = new Date().toISOString().slice(0, 10);
+  const correlationId = crypto.randomUUID();   // shared by the bind's audit events and its ledger journal
+  const boundAt = new Date();
   const client = await policyDb.connect();
   let policyId: string;
+  let journal: { journal_no: string; lines: { account_code: string; debit: number; credit: number }[] };
   let doc: PolicyDocument;
   let q: QuoteForBinding;
   let renewedFrom: ExpiringPolicy | null = null;
@@ -88,7 +93,6 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
     const seq = Number((await client.query<{ n: string }>("SELECT nextval('policy_number_seq') AS n")).rows[0].n);
     const numbers = policyNumbers(seq, Number(q.effective_date.slice(0, 4)));
     const subjectivities = subjectivityStatus(q.subjectivities, received, today);
-    const boundAt = new Date();
     doc = {
       policyNumber: numbers.policy, binderNumber: numbers.binder, quoteNumber: q.quote_number, quoteVersion: q.version,
       boundAt, boundBy: actor, insuredName: q.insured_name, insuredAddress: q.terms.insured_address, producer: q.terms.producer,
@@ -116,6 +120,13 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
       await client.query(
         `UPDATE ${renewedFrom.source === "book" ? "book_policies" : "policies"} SET renewal_status = 'renewed' WHERE id = $1`, [renewedFrom.policy_id]);
     }
+    // Book the premium to the sub-ledger in the same transaction: no bound policy without its journal.
+    journal = await postPolicyBound(client, {
+      policyId, policyNumber: numbers.policy, insuredName: q.insured_name, effectiveDate: q.effective_date, expirationDate: q.expiration_date,
+      quoteRef: `${q.quote_number} v${q.version}`, submissionId: q.submission_id, submissionRef: q.submission_ref,
+      underwriter: actor, producer: q.terms.producer[0] ?? "", transactionType: renewedFrom ? "renewal" : "new_business",
+      amounts: q, postedAt: boundAt, correlationId,
+    });
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -125,7 +136,6 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
   }
 
   const open = doc.subjectivities.filter((s) => s.status === "open");
-  const correlationId = crypto.randomUUID();
   await audit(
     {
       actor, action: "quote.bound", entityType: "quote", entityId: q.id,
@@ -141,6 +151,11 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
     {
       actor, action: "policy.bound", entityType: "submission", entityId: q.submission_id,
       summary: `${q.submission_ref}: bound as ${doc.policyNumber} (${q.quote_number} v${q.version}, ${money(q.total)})${renewedFrom ? `, renewing ${renewedFrom.policy_number}` : ""}`, correlationId,
+    },
+    {
+      actor, action: "gl.posted", entityType: "policy", entityId: policyId,
+      summary: `${journal.journal_no}: ${money(q.total)} booked to the premium sub-ledger for ${doc.policyNumber} (${renewedFrom ? "renewal" : "new business"}, period ${accountingPeriod(boundAt)})`,
+      after: { journal_no: journal.journal_no, lines: journal.lines.map((l) => ({ account: l.account_code, debit: l.debit, credit: l.credit })) }, correlationId,
     },
   );
   return (await policiesForSubmission(q.submission_id)).find((p) => p.id === policyId)!;

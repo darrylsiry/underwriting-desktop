@@ -123,12 +123,13 @@ export function display(v: unknown, max = 140): string {
   return s.length > max ? `${s.slice(0, max)}…` : s;
 }
 
-export type Filters = { source?: string; entityType?: string; actor?: string; q?: string; from?: string; to?: string };
+export type Filters = { source?: string; entityType?: string; actor?: string; q?: string; from?: string; to?: string; correlation?: string };
 
 export function applyFilters(events: TimelineEvent[], f: Filters): TimelineEvent[] {
   const q = f.q?.trim().toLowerCase();
   return events.filter((e) =>
-    (!f.source || e.source === f.source)
+    (!f.correlation || e.correlationId === f.correlation)
+    && (!f.source || e.source === f.source)
     && (!f.entityType || e.entityType === f.entityType)
     && (!f.actor || e.actor.toLowerCase() === f.actor.toLowerCase())
     && (!f.from || e.at.slice(0, 10) >= f.from)

@@ -13,7 +13,7 @@ const SOURCES: Record<string, { label: string; style: string }> = {
   rating: { label: "Rating engine", style: "bg-slate-100 text-slate-600" },
 };
 
-type Params = { submission?: string; source?: string; entityType?: string; actor?: string; q?: string; from?: string; to?: string };
+type Params = { submission?: string; source?: string; entityType?: string; actor?: string; q?: string; from?: string; to?: string; correlation?: string };
 
 function entityHref(e: TimelineEvent): string | null {
   switch (e.entityType) {
@@ -21,6 +21,7 @@ function entityHref(e: TimelineEvent): string | null {
     case "quote": return `/quotes/${e.entityId}`;
     case "policy": return `/policies/${e.entityId}`;
     case "book_policy": return `/policies/book/${e.entityId}`;
+    case "ledger": return `/accounting?batch=${e.entityId}`;
     case "insured": return `/insureds/${e.entityId}`;
     case "rate_version": return `${RATING_ADMIN_URL}/versions/${e.entityId}`;
     default: return null;
@@ -34,7 +35,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
   const groups = groupByCorrelation(events);
   const actors = [...new Set(all.map((e) => e.actor))].sort();
   const entityTypes = [...new Set(all.map((e) => e.entityType))].sort();
-  const label = (e: TimelineEvent) => labels.get(`${e.entityType}:${e.entityId}`) ?? e.entityLabel ?? e.entityId.slice(0, 8);
+  const label = (e: TimelineEvent) => labels.get(`${e.entityType}:${e.entityId}`) ?? e.entityLabel ?? (e.entityType === "ledger" ? e.entityId : e.entityId.slice(0, 8));
   const counts = Object.keys(SOURCES).map((s) => [s, all.filter((e) => e.source === s).length] as const);
 
   return (
@@ -57,6 +58,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
 
       <form className="mt-6 flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm">
         {params.submission && <input type="hidden" name="submission" value={params.submission} />}
+        {params.correlation && <input type="hidden" name="correlation" value={params.correlation} />}
         <label className="flex flex-col gap-1 text-xs text-slate-500">Search
           <input name="q" defaultValue={params.q} placeholder="summary, action, reference" className="w-56 rounded border border-slate-300 px-2 py-1 text-sm text-slate-900" />
         </label>
@@ -89,6 +91,12 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
       </form>
 
       {warnings.map((w) => <p key={w} className="mt-4 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">{w}</p>)}
+      {params.correlation && (
+        <p className="mt-4 rounded bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
+          Showing the events of one action (correlation <code className="text-xs">{params.correlation}</code>).{" "}
+          <Link href={params.submission ? `/audit?submission=${params.submission}` : "/audit"} className="underline">Show everything</Link>
+        </p>
+      )}
       <p className="mt-4 text-xs text-slate-500">
         Showing {events.length} of {all.length} events · {counts.map(([s, n]) => `${SOURCES[s].label} ${n}`).join(" · ")}
       </p>
