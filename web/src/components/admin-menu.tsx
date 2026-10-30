@@ -4,12 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-export type AdminItem = { href: string; label: string; hint: string; external?: boolean };
+export type AdminItem = { href: string; label: string; external?: boolean };
 
 /**
  * The "Admin" drop-down in the top nav: the back-office pages (audit trail, accounting, rate
  * tables) behind one item. Opens on click, closes on Escape, on a click elsewhere, or when the
- * route changes; the button shows as current when one of its pages is open.
+ * route changes; the button shows as current when one of its pages is open. Labels only: the
+ * pages explain themselves.
  */
 export function AdminMenu({ items }: { items: AdminItem[] }) {
   const [open, setOpen] = useState(false);
@@ -34,14 +35,13 @@ export function AdminMenu({ items }: { items: AdminItem[] }) {
         Admin <span aria-hidden className={`text-[10px] transition ${open ? "rotate-180" : ""}`}>▼</span>
       </button>
       {open && (
-        <div role="menu" className="absolute left-0 top-full z-20 mt-2 w-56 overflow-hidden rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg">
+        <div role="menu" className="absolute left-0 top-full z-20 mt-2 w-40 overflow-hidden rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg">
           {items.map((i) => {
             const active = pathname === i.href || pathname.startsWith(`${i.href}/`);
-            const cls = `block px-3 py-2 hover:bg-slate-50 ${active ? "bg-indigo-50/60 text-indigo-700" : "text-slate-700"}`;
-            const body = <><span className="block font-medium">{i.label}</span><span className="block text-xs text-slate-500">{i.hint}</span></>;
+            const cls = `block whitespace-nowrap px-3 py-2 hover:bg-slate-50 ${active ? "bg-indigo-50/60 font-medium text-indigo-700" : "text-slate-700"}`;
             return i.external
-              ? <a key={i.href} href={i.href} role="menuitem" className={cls}>{body}</a>
-              : <Link key={i.href} href={i.href} role="menuitem" className={cls} onClick={() => setOpen(false)}>{body}</Link>;
+              ? <a key={i.href} href={i.href} role="menuitem" className={cls}>{i.label}</a>
+              : <Link key={i.href} href={i.href} role="menuitem" className={cls} onClick={() => setOpen(false)}>{i.label}</Link>;
           })}
         </div>
       )}

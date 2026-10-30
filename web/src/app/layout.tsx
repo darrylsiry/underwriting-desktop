@@ -44,9 +44,9 @@ export default async function RootLayout({
             <Link href="/policies" className="hover:text-slate-900">Policies</Link>
             <Link href="/assistant" className="hover:text-slate-900">AI Assistant</Link>
             <AdminMenu items={[
-              { href: "/audit", label: "Audit", hint: "Every recorded action across the desktop, rating and rate tables" },
-              { href: "/accounting", label: "Accounting", hint: "Premium sub-ledger and the push to the general ledger" },
-              { href: RATING_ADMIN_URL, label: "Rate tables", hint: "Rate versions, factors and their audit", external: true },
+              { href: "/audit", label: "Audit" },
+              { href: "/accounting", label: "Accounting" },
+              { href: RATING_ADMIN_URL, label: "Rate tables", external: true },
             ]} />
           </nav>
           <form action="/search" className="ml-auto">

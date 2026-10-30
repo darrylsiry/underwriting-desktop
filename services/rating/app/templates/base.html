@@ -23,9 +23,8 @@
     header.desktop summary { list-style: none; cursor: pointer; color: var(--ink); font-weight: 600; }
     header.desktop summary::-webkit-details-marker { display: none; }
     header.desktop summary::after { content: " \25BC"; font-size: 9px; }
-    header.desktop details div { position: absolute; left: 0; top: 100%; margin-top: 8px; width: 220px; background: #fff; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 8px 24px rgba(15,23,42,.12); padding: 4px 0; z-index: 20; }
-    header.desktop details div a { display: block; padding: 8px 12px; color: var(--ink); font-weight: 400; }
-    header.desktop details div a small { display: block; color: var(--muted); font-size: 12px; }
+    header.desktop details div { position: absolute; left: 0; top: 100%; margin-top: 8px; width: 160px; background: #fff; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 8px 24px rgba(15,23,42,.12); padding: 4px 0; z-index: 20; }
+    header.desktop details div a { display: block; padding: 8px 12px; color: var(--ink); font-weight: 400; white-space: nowrap; }
     header.desktop details div a:hover { background: #f8fafc; }
     header.desktop details div a.current { background: #eef2ff; color: var(--accent); }
     header.desktop .who { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; }
@@ -74,9 +73,9 @@
       <details>
         <summary aria-haspopup="menu">Admin</summary>
         <div role="menu">
-          <a href="/audit" role="menuitem">Audit<small>Every recorded action across the desktop, rating and rate tables</small></a>
-          <a href="/accounting" role="menuitem">Accounting<small>Premium sub-ledger and the push to the general ledger</small></a>
-          <a href="/admin" role="menuitem" class="current">Rate tables<small>Rate versions, factors and their audit</small></a>
+          <a href="/audit" role="menuitem">Audit</a>
+          <a href="/accounting" role="menuitem">Accounting</a>
+          <a href="/admin" role="menuitem" class="current">Rate tables</a>
         </div>
       </details>
     </nav>
