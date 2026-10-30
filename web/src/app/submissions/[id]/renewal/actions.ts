@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { issueQuote } from "@/lib/quotes";
+import { issueQuote, issuedQuoteHref, type QuoteRow } from "@/lib/quotes";
 import { getSubmission } from "@/lib/submissions";
 import { currentUser } from "@/lib/user";
 import { money, rerateWorksheet } from "@/lib/worksheets";
@@ -31,15 +31,16 @@ export async function issueRenewalQuoteAction(id: string, form: FormData) {
   const sub = await getSubmission(id);
   if (!sub) back(id, { error: "Submission not found" });
   const f = Object.fromEntries([...form.entries()].filter(([, v]) => typeof v === "string") as [string, string][]);
-  let msg: string;
+  let q: QuoteRow;
   try {
-    const q = await issueQuote(sub, { effective_date: f.effective_date ?? "", expiration_date: f.expiration_date ?? "", subjectivities: f.subjectivities ?? "" }, await currentUser());
-    msg = `Renewal quote ${q.quote_number} v${q.version} issued with its memo: ${money(q.total)} total`;
+    q = await issueQuote(sub, { effective_date: f.effective_date ?? "", expiration_date: f.expiration_date ?? "", subjectivities: f.subjectivities ?? "" }, await currentUser());
   } catch (err) {
     back(id, { error: (err as Error).message });
   }
   revalidatePath(`/submissions/${id}/renewal`);
   revalidatePath(`/submissions/${id}/workbench`);
   revalidatePath("/quotes");
-  back(id, { msg });
+  // The first renewal quote is reviewed here, against the expiring policy; a revised one is seen among the quotes.
+  if (q.version > 1) redirect(issuedQuoteHref(q.id));
+  back(id, { msg: `Renewal quote ${q.quote_number} v${q.version} issued with its memo: ${money(q.total)} total` });
 }

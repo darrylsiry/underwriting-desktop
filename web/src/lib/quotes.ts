@@ -23,6 +23,9 @@ const COLUMNS = `id, quote_number, version, status, submission_id, submission_re
   effective_date::text, expiration_date::text, valid_until::text, rating_id, rate_version,
   premium, policy_fee, surplus_lines_tax, total, subjectivities, issued_by, issued_at, (memo_pdf IS NOT NULL) AS has_memo`;
 
+/** Where issuing a revised quote lands the underwriter: the Quotes page with that version called out. */
+export const issuedQuoteHref = (quoteId: string) => `/quotes?highlight=${quoteId}#quote-${quoteId}`;
+
 export async function quotesForSubmission(submissionId: string): Promise<QuoteRow[]> {
   const { rows } = await policyDb.query<QuoteRow>(
     `SELECT ${COLUMNS} FROM quotes WHERE submission_id = $1 ORDER BY version DESC`, [submissionId]);

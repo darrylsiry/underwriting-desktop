@@ -57,7 +57,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
   const exp = expiringOf(sub);
   const issueForm = (
     <IssueQuoteForm action={issueQuoteAction.bind(null, id)} effective={effective} expiration={expiration} subjectivities={subjectivities}
-      label={latest ? `Issue revised quote (v${latest.version + 1})` : `Issue ${exp ? "renewal " : ""}quote · ${rating ? money(rating.total) : ""}`} />
+      label={latest ? `Issue revised ${exp ? "renewal " : ""}quote (v${latest.version + 1})` : `Issue ${exp ? "renewal " : ""}quote · ${rating ? money(rating.total) : ""}`} />
   );
 
   return (

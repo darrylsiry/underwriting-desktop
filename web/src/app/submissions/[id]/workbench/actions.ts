@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getSubmission } from "@/lib/submissions";
 import { currentUser } from "@/lib/user";
 import { bindQuote } from "@/lib/policies";
-import { issueQuote } from "@/lib/quotes";
+import { issueQuote, issuedQuoteHref, type QuoteRow } from "@/lib/quotes";
 import { clearReferral, money, saveAndRate } from "@/lib/worksheets";
 
 function back(id: string, params: Record<string, string>): never {
@@ -45,17 +45,22 @@ export async function clearReferralAction(id: string, code: string, form: FormDa
 export async function issueQuoteAction(id: string, form: FormData) {
   const sub = await getSubmission(id);
   if (!sub) back(id, { error: "Submission not found" });
-  let msg: string;
+  let q: QuoteRow;
   try {
     const f = formFields(form);
-    const q = await issueQuote(sub, { effective_date: f.effective_date ?? "", expiration_date: f.expiration_date ?? "", subjectivities: f.subjectivities ?? "" }, await currentUser());
-    msg = `Quote ${q.quote_number} v${q.version} issued: ${money(q.total)} total`;
+    q = await issueQuote(sub, { effective_date: f.effective_date ?? "", expiration_date: f.expiration_date ?? "", subjectivities: f.subjectivities ?? "" }, await currentUser());
   } catch (err) {
     back(id, { error: (err as Error).message });
   }
   revalidatePath(`/submissions/${id}/workbench`);
+  revalidatePath(`/submissions/${id}/renewal`);
   revalidatePath("/quotes");
-  back(id, { msg });
+  if (sub.kind === "renewal") {
+    // The first renewal quote: review it against the expiring policy. A revised one: see it among the quotes.
+    if (q.version === 1) redirect(`/submissions/${id}/renewal?${new URLSearchParams({ msg: `Renewal quote ${q.quote_number} v1 issued with its memo: ${money(q.total)} total` })}`);
+    redirect(issuedQuoteHref(q.id));
+  }
+  back(id, { msg: `Quote ${q.quote_number} v${q.version} issued: ${money(q.total)} total` });
 }
 
 export async function bindAction(id: string, quoteId: string, form: FormData) {
