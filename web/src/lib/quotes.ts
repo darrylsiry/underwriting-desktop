@@ -4,9 +4,9 @@ import { renderQuotePdf } from "./quote-pdf";
 import { changeSummary, compareRenewal, type Comparison } from "./renewal-compare";
 import { renderRenewalMemoPdf } from "./renewal-memo-pdf";
 import { QUOTE_VALID_DAYS, addDays, addYears, formsFor, parseSubjectivities } from "./quote-terms";
-import { RATING_SERVICE_URL } from "./services";
+import { rateOn } from "./rating-api";
 import type { SubmissionRow } from "./submissions";
-import { scheduleMod, type RatingInputs, type ScheduleItem } from "./worksheet";
+import type { RatingInputs, ScheduleItem } from "./worksheet";
 import { activeRateVersion, getWorksheet, money, readiness, type Rating } from "./worksheets";
 
 export type QuoteRow = {
@@ -87,17 +87,8 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
     "SELECT 'Q-' || $1 || '-' || lpad(nextval('quote_number_seq')::text, 4, '0') AS n", [String(issuedAt.getUTCFullYear())])).rows[0].n;
   const version = (previous?.version ?? 0) + 1;
 
-  const res = await fetch(`${RATING_SERVICE_URL}/rate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      ...ws.rating_inputs, schedule_mod: scheduleMod(ws.schedule), rate_version_id: seen.rate_version_id,
-      reference: `${quoteNumber} v${version}`, requested_by: actor, rated_at: at?.toISOString(),
-    }),
-    signal: AbortSignal.timeout(10_000),
-  });
-  const rating: Rating = await res.json();
-  if (!res.ok) throw new Error(`Rating: ${JSON.stringify((rating as unknown as { detail: unknown }).detail)}`);
+  // Re-rated pinned to the rate version the worksheet shows, so the quote is exactly what the underwriter saw.
+  const rating = await rateOn(ws.rating_inputs, ws.schedule, seen.rate_version_id, `${quoteNumber} v${version}`, actor, at);
   if (rating.total !== seen.total) {
     throw new Error(`Rating returned ${money(rating.total)} but the worksheet shows ${money(seen.total)}. Save & rate again.`);
   }

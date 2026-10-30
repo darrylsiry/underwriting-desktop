@@ -60,7 +60,7 @@
     {% if editable %}
     <h2>Activate</h2>
     <form class="card row" method="post" action="/admin/versions/{{ version.id }}/activate"
-          onsubmit="return confirm('Activate {{ version.label }}? New ratings will use it immediately.')">
+          onsubmit="return confirm(this.dataset.confirm)" data-confirm="Activate {{ version.label }}? New ratings will use it immediately.">
       <span class="muted" style="flex-basis:100%">Activating retires the current active version. Existing quotes keep the version they were rated on.</span>
       <label style="flex:1">Reason <input name="reason" required placeholder="e.g. Approved by pricing committee"></label>
       {% if not signed_in %}<label>Your name <input name="actor" value="{{ actor }}" required size="14"></label>{% endif %}

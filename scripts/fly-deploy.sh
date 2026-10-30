@@ -74,7 +74,22 @@ attach "$WEB" customer CUSTOMER_DATABASE_URL
 attach "$WEB" policy POLICY_DATABASE_URL
 
 step "Secrets"
-key="$(grep -E '^ANTHROPIC_API_KEY=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)"
+env_value() {  # name: NAME's value in .env the way docker compose reads it: quotes, an inline comment and whitespace stripped
+  local raw
+  raw="$(grep -E "^[[:space:]]*(export[[:space:]]+)?$1=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' || true)"
+  raw="${raw#"${raw%%[![:space:]]*}"}"                               # leading whitespace
+  case "$raw" in
+    \"*) raw="${raw#\"}"; raw="${raw%%\"*}" ;;                        # "value"  (anything after the closing quote is dropped)
+    \'*) raw="${raw#\'}"; raw="${raw%%\'*}" ;;                        # 'value'
+    *) raw="${raw%%[[:space:]]#*}"; raw="${raw%"${raw##*[![:space:]]}"}" ;;   # value # comment, trailing whitespace
+  esac
+  printf '%s' "$raw"
+}
+key="$(env_value ANTHROPIC_API_KEY)"
+case "$key" in
+  ""|sk-ant-*) ;;
+  *) echo "ANTHROPIC_API_KEY in .env doesn't look like an Anthropic key (sk-ant-…); not setting it"; key="" ;;
+esac
 if has_secret "$INGESTION" ANTHROPIC_API_KEY; then echo "$INGESTION already has ANTHROPIC_API_KEY"
 elif [ -n "$key" ]; then printf 'ANTHROPIC_API_KEY=%s\n' "$key" | fly secrets import --stage -a "$INGESTION"
 else echo "No ANTHROPIC_API_KEY in .env: ingestion will read fillable PDFs only"; fi

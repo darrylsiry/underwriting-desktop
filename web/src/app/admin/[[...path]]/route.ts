@@ -1,3 +1,4 @@
+import { CROSS_SITE_REFUSED, sameOrigin } from "@/lib/http";
 import { RATING_SERVICE_URL } from "@/lib/services";
 import { currentUser } from "@/lib/user";
 
@@ -10,6 +11,11 @@ const FORWARD_RESPONSE = ["content-type", "location", "set-cookie"];
 
 async function proxy(req: Request): Promise<Response> {
   const url = new URL(req.url);
+  // The admin's forms change rate tables; a form another site auto-submits with this browser's
+  // credentials must not reach them (CR-051). The rating service makes the same check itself.
+  if (req.method !== "GET" && req.method !== "HEAD" && !sameOrigin(req.headers)) {
+    return new Response(CROSS_SITE_REFUSED, { status: 403, headers: { "Content-Type": "text/plain" } });
+  }
   const upstream = await fetch(`${RATING_SERVICE_URL}${url.pathname}${url.search}`, {
     method: req.method,
     headers: {

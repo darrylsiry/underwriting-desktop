@@ -1,7 +1,7 @@
 import { audit } from "./audit";
 import { customerDb } from "./db";
 import { clearanceStatus, referralFlags, type Flag } from "./referrals";
-import { rateOn, rateVersionId } from "./rating-api";
+import { RATING_TIMEOUT_MS, RatingServiceError, rateOn, rateVersionId } from "./rating-api";
 import { RATING_SERVICE_URL } from "./services";
 import type { SubmissionRow } from "./submissions";
 import {
@@ -63,7 +63,7 @@ export function flagsFor(sub: SubmissionRow, ws: WorksheetRow): Flag[] {
 /** The rating service's active rate version label, or null if it can't be reached. */
 export async function activeRateVersion(): Promise<string | null> {
   try {
-    const res = await fetch(`${RATING_SERVICE_URL}/health`, { cache: "no-store", signal: AbortSignal.timeout(3000) });
+    const res = await fetch(`${RATING_SERVICE_URL}/health`, { cache: "no-store", signal: AbortSignal.timeout(RATING_TIMEOUT_MS) });
     return res.ok ? ((await res.json()).active_rate_version ?? null) : null;
   } catch {
     return null;
@@ -84,17 +84,9 @@ export function readiness(sub: SubmissionRow, ws: WorksheetRow, activeVersion: s
   return { flags, openReferrals: open, inputsCurrent, staleRates, rated, ready: rated && open.length === 0 };
 }
 
-async function rate(sub: SubmissionRow, inputs: RatingInputs, schedule: ScheduleItem[], actor: string, at: Date | null = null): Promise<Rating> {
-  const res = await fetch(`${RATING_SERVICE_URL}/rate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    // rated_at: the rating service dates its log entry then instead of now (seeded history)
-    body: JSON.stringify({ ...inputs, schedule_mod: scheduleMod(schedule), reference: sub.reference, requested_by: actor, rated_at: at?.toISOString() }),
-    signal: AbortSignal.timeout(10_000),
-  });
-  const body = await res.json();
-  if (!res.ok) throw new Error(`Rating: ${typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail)}`);
-  return body as Rating;
+/** Rate on the active rate version. `at` back-dates the rating service's log entry (seeded history). */
+function rate(sub: SubmissionRow, inputs: RatingInputs, schedule: ScheduleItem[], actor: string, at: Date | null = null): Promise<Rating> {
+  return rateOn(inputs, schedule, null, sub.reference, actor, at);
 }
 
 /** Save inputs and schedule (auditing each change), then rate. Inputs stay saved even if rating fails. `at` back-dates it (seeded history). */
@@ -137,7 +129,11 @@ async function rateAndStore(sub: SubmissionRow, inputs: RatingInputs, schedule: 
   try {
     rating = await rate(sub, inputs, schedule, actor, at);
   } catch (err) {
-    await customerDb.query("UPDATE worksheets SET last_rating = NULL, rated_inputs_hash = NULL, bridge_rating = NULL WHERE submission_id = $1", [sub.id]);
+    // Inputs the service refused can't be described by the old rating, so it goes. A service that is
+    // down or restarting says nothing about the inputs: the last rating stays, shown as not current (CR-037).
+    if (err instanceof RatingServiceError && err.rejectedInputs) {
+      await customerDb.query("UPDATE worksheets SET last_rating = NULL, rated_inputs_hash = NULL, bridge_rating = NULL WHERE submission_id = $1", [sub.id]);
+    }
     throw err;
   }
   await customerDb.query(

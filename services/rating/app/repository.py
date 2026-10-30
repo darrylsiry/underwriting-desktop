@@ -1,4 +1,5 @@
 """Loads rate tables from the rating DB, records rating calls, and administers rate versions."""
+import re
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -141,8 +142,13 @@ def version_rows(version_id: int) -> dict:
     return {"classes": classes, "factors": factors, "parameters": parameters}
 
 
+LABEL_RE = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
+
+
 def create_draft(base_version_id: int, label: str, notes: str, actor: str) -> int:
     """Copy every row of `base_version_id` into a new draft version."""
+    if not LABEL_RE.match(label):
+        raise ValueError("A version label is 1-32 letters, digits, dots, dashes or underscores (e.g. 2026.2)")
     with pool.connection() as conn:
         base = conn.execute("SELECT id, label FROM rate_versions WHERE id = %s", (base_version_id,)).fetchone()
         if base is None:

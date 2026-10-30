@@ -1,4 +1,5 @@
 import { customerDb, policyDb } from "./db";
+import { RATING_TIMEOUT_MS } from "./rating-api";
 import { RATING_SERVICE_URL } from "./services";
 import {
   fromDesktop, fromRateAdmin, fromRating, merge,
@@ -16,7 +17,7 @@ export type Timeline = {
 
 async function ratingApi<T>(path: string, warnings: string[]): Promise<T[]> {
   try {
-    const res = await fetch(`${RATING_SERVICE_URL}${path}`, { cache: "no-store", signal: AbortSignal.timeout(5000) });
+    const res = await fetch(`${RATING_SERVICE_URL}${path}`, { cache: "no-store", signal: AbortSignal.timeout(RATING_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (err) {

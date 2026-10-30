@@ -14,7 +14,8 @@ async function checkDb(name: DbName): Promise<ComponentStatus> {
 
 async function checkService(name: string, url: string): Promise<ComponentStatus> {
   try {
-    const res = await fetch(`${url}/health`, { cache: "no-store", signal: AbortSignal.timeout(3000) });
+    // Long enough for a Fly machine to start when the first visit of the day wakes it (CR-041).
+    const res = await fetch(`${url}/health`, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
     const body = await res.json();
     const extra = Object.entries(body)
       .filter(([k]) => !["service", "status"].includes(k))

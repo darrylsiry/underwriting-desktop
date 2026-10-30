@@ -108,7 +108,8 @@ def rate_version(version_id: int):
 
 
 class NewDraft(BaseModel):
-    label: str = Field(min_length=1)
+    # Letters, digits, dots, dashes, underscores: the label appears in page text and attributes (CR-044).
+    label: str = Field(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9._-]+$")
     based_on: int | None = Field(default=None, description="Version to copy; defaults to the active version")
     notes: str = ""
     actor: str = "anonymous"

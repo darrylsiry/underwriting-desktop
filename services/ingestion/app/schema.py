@@ -67,6 +67,21 @@ class FieldValue:
         return asdict(self)
 
 
+_OPEN_STATUS = re.compile(r"^(o|open|opn|re-?open|pending|litig|in suit|reserved)", re.I)
+_CLOSED_STATUS = re.compile(r"^(c|cl|clsd|closed|paid|settled|denied|declined|cwp|cwop|withdrawn)", re.I)
+
+
+def normalize_status(raw) -> str:
+    """A claim status as carriers write it ("O", "OPEN-LIT", "Reopened", "Closed - paid", "CWP") reduced
+    to the two words the underwriting rules test for, "Open" or "Closed"; anything else is kept as written."""
+    text = str(raw or "").strip()
+    if _CLOSED_STATUS.match(text):
+        return "Closed"
+    if _OPEN_STATUS.match(text):
+        return "Open"
+    return text
+
+
 @dataclass
 class Loss:
     date: str
@@ -74,6 +89,9 @@ class Loss:
     incurred: int
     status: str
     source_document: str
+
+    def __post_init__(self):
+        self.status = normalize_status(self.status)
 
 
 class NormalizeError(ValueError):

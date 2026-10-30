@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { CROSS_SITE_REFUSED, sameOrigin } from "@/lib/http";
 import { inboxFiles, listInbox } from "@/lib/inbox";
 import { INGESTION_SERVICE_URL } from "@/lib/services";
 import { filesForm, storeSubmission } from "@/lib/submissions";
@@ -13,6 +14,8 @@ export const dynamic = "force-dynamic";
  * are relayed as they arrive, then the submission is stored and a final `stored` event names it.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ folder: string }> }) {
+  // Spends a Claude call and creates a submission in the user's name: only this site's own page may ask (CR-065).
+  if (!sameOrigin(req.headers)) return new Response(CROSS_SITE_REFUSED, { status: 403, headers: { "Content-Type": "text/plain" } });
   const { folder } = await params;
   const actor = await currentUser();
   const started = Date.now();

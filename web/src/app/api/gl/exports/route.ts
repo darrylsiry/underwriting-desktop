@@ -1,5 +1,6 @@
 import { apiError, fileResponse, glContext, jsonResponse, ledgerQuery, searchParamsOf } from "@/lib/gl-http";
 import { pushDocument } from "@/lib/gl-service";
+import { CROSS_SITE_REFUSED, sameOrigin } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,8 @@ export const dynamic = "force-dynamic";
  * JSON format answers with the push record and the ledger document; CSV and Excel answer with the file.
  */
 export async function POST(req: Request) {
+  // A browser form on another site could post here with this browser's credentials; other systems' clients send no Origin (CR-065).
+  if (!sameOrigin(req.headers)) return apiError(403, "forbidden", CROSS_SITE_REFUSED);
   const ct = req.headers.get("content-type") ?? "";
   let body: Record<string, unknown> = {};
   try {

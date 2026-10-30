@@ -18,6 +18,10 @@ test("subjectivities follow the file's gaps", () => {
     ],
   );
   assert.deepEqual(suggestedSubjectivities([], data({ street: "1 Main", zip: "1", fein: "1" })), ["Signed and dated application"]);
+  // A younger business is asked for all of its years (CR-062).
+  const young = { applicant: { street: "1 Main", zip: "1", fein: "1", years_in_business: 2 } } as unknown as SubmissionData;
+  assert.deepEqual(suggestedSubjectivities([flag("NO_LOSS_RUNS")], young),
+    ["Signed and dated application", "Currently valued loss runs for all 2 years in business, satisfactory to the company"]);
 });
 
 test("dates", () => {

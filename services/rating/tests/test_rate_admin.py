@@ -32,6 +32,39 @@ def test_duplicate_label_rejected(client, draft):
     assert client.post("/rate-versions", json={"label": "2026.2"}).status_code == 422
 
 
+@pytest.mark.parametrize("label", ["x'); alert(1); ('", " ", "a" * 33, "2026.3<b>"])
+def test_label_characters_are_constrained(client, label):
+    """A label is shown on the page and in attributes, so it's letters, digits and . _ - only (CR-044)."""
+    assert client.post("/rate-versions", json={"label": label, "actor": "pat"}).status_code == 422
+    res = client.post("/admin/versions", follow_redirects=False, data={"based_on": "1", "label": label, "actor": "pat"})
+    assert res.status_code == 303 and "/admin?error=" in res.headers["location"]
+    assert label.strip() not in {v["label"] for v in client.get("/rate-versions").json()}
+
+
+def test_activate_confirmation_does_not_inline_the_label(client, draft):
+    page = client.get(f"/admin/versions/{draft['id']}").text
+    assert "confirm(this.dataset.confirm)" in page and "confirm('Activate" not in page
+
+
+def test_cross_site_form_posts_are_refused(client, draft):
+    """A hostile page can make the admin's browser post here; Origin or Sec-Fetch-Site gives it away (CR-051)."""
+    data = {"reason": "x", "actor": "mallory"}
+    for headers in ({"Origin": "https://evil.example"}, {"Sec-Fetch-Site": "cross-site"}, {"Referer": "https://evil.example/p"}):
+        res = client.post(f"/admin/versions/{draft['id']}/activate", data=data, headers=headers, follow_redirects=False)
+        assert res.status_code == 403, headers
+        res = client.post(f"/admin/versions/{draft['id']}/sections/territory", data=data | {"factor|territory|TX|value": "9"},
+                          headers=headers, follow_redirects=False)
+        assert res.status_code == 403, headers
+        assert client.post("/admin/versions", data={"based_on": "1", "label": "evil", "actor": "m"}, headers=headers).status_code == 403
+    assert client.get(f"/rate-versions/{draft['id']}").json()["status"] == "draft"
+    assert all(v["label"] != "evil" for v in client.get("/rate-versions").json())
+    # The site's own form (and a client sending neither header) still gets through: nothing changed, so 303 back with a message.
+    for headers in ({"Origin": "http://testserver", "Sec-Fetch-Site": "same-origin"}, {}):
+        res = client.post(f"/admin/versions/{draft['id']}/sections/territory", headers=headers, follow_redirects=False,
+                          data={"factor|territory|TX|value": "1.1", "reason": "no-op", "actor": "pat"})
+        assert res.status_code == 303 and "Nothing+changed" in res.headers["location"], headers
+
+
 def test_edit_is_audited_and_only_changes_count(client, draft):
     res = edit(client, draft["id"], value=1.20)
     assert res.json() == {"changed": 1}

@@ -204,3 +204,16 @@ def test_class_list_survives_a_cold_start_and_falls_back_to_the_last_good_copy(m
 
     monkeypatch.setattr(main.urllib.request, "urlopen", down)
     assert main.rateable_classes() == classes  # last good copy
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("Open", "Open"), ("O", "Open"), ("OPEN-LIT", "Open"), ("RE-OPENED", "Open"), ("Reopened", "Open"),
+    ("Open - suit filed", "Open"), ("Pending", "Open"),
+    ("Closed", "Closed"), ("C", "Closed"), ("Closed - paid", "Closed"), ("CWP", "Closed"), ("Settled", "Closed"), ("Denied", "Closed"),
+    ("Subrogation", "Subrogation"), ("", ""), (None, ""),
+])
+def test_claim_status_is_normalized_for_the_referral_rules(raw, expected):
+    """Carriers write claim status many ways; the web tier's rules test for Open/Closed (CR-030)."""
+    from app.schema import Loss, normalize_status
+    assert normalize_status(raw) == expected
+    assert Loss("2025-01-01", "x", 1, raw, "lr.pdf").status == expected

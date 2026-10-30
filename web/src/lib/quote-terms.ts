@@ -1,6 +1,6 @@
 // Quote terms that don't need the database: suggested subjectivities and dates.
 // Pure module (type-only imports) so node:test can load it.
-import type { Flag } from "./referrals";
+import { lossRunYears, type Flag } from "./referrals.ts";   // .ts so node:test can load this pure module too
 import type { SubmissionData } from "./submission";
 import type { RatingInputs } from "./worksheet";
 
@@ -10,7 +10,12 @@ export const QUOTE_VALID_DAYS = 30;
 export function suggestedSubjectivities(flags: Flag[], data: SubmissionData): string[] {
   const out = ["Signed and dated application"];
   const codes = new Set(flags.map((f) => f.code));
-  if (codes.has("NO_LOSS_RUNS")) out.push("Five years of currently valued loss runs, satisfactory to the company");
+  if (codes.has("NO_LOSS_RUNS")) {
+    const span = lossRunYears(data.applicant?.years_in_business);   // five years, or all of a younger business's years (CR-062)
+    out.push(span === "5 years"
+      ? "Five years of currently valued loss runs, satisfactory to the company"
+      : `Currently valued loss runs for ${span}, satisfactory to the company`);
+  }
   if (codes.has("CLASS_INFERRED")) out.push("Confirmation of operations and class code");
   if (codes.has("UNINSURED_SUBS") || codes.has("HEAVY_SUBCONTRACTING")) {
     out.push("Sample subcontract showing hold-harmless and additional insured requirements");

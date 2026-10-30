@@ -6,9 +6,9 @@ Each changed value is audited. Activating the draft makes it the version
 """
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
@@ -109,6 +109,18 @@ def form_actor(request: Request, form) -> str:
     return signed_in_user(request) or str(form.get("actor", "")).strip() or "rating-admin"
 
 
+def same_origin(request: Request) -> None:
+    """Refuse a form post that another site made this browser send (CR-051). Browsers put Sec-Fetch-Site
+    on every request and Origin on every POST; a request with neither (curl, the UW Desktop proxy, which
+    forwards neither header and makes this check itself) carries no ambient browser credentials."""
+    site = request.headers.get("sec-fetch-site")
+    if site and site not in ("same-origin", "none"):
+        raise HTTPException(403, "Cross-site request refused")
+    origin = request.headers.get("origin") or request.headers.get("referer")
+    if origin and (origin == "null" or urlsplit(origin).netloc != request.headers.get("host")):
+        raise HTTPException(403, "Cross-site request refused")
+
+
 def remember_actor(request: Request, response: RedirectResponse, actor: str) -> RedirectResponse:
     if not signed_in_user(request):  # the typed name is only remembered when there's no login
         response.set_cookie(ACTOR_COOKIE, actor, max_age=60 * 60 * 24 * 365, samesite="lax")
@@ -138,7 +150,7 @@ def versions_page(request: Request, msg: str = "", error: str = ""):
     })
 
 
-@router.post("/versions")
+@router.post("/versions", dependencies=[Depends(same_origin)])
 async def create_version(request: Request):
     form = await request.form()
     actor = form_actor(request, form)
@@ -183,7 +195,7 @@ def version_page(request: Request, version_id: int, section: str = "classes", ms
     })
 
 
-@router.post("/versions/{version_id}/sections/{section}")
+@router.post("/versions/{version_id}/sections/{section}", dependencies=[Depends(same_origin)])
 async def save_section(request: Request, version_id: int, section: str):
     form = await request.form()
     actor = form_actor(request, form)
@@ -208,7 +220,7 @@ async def save_section(request: Request, version_id: int, section: str):
     return remember_actor(request, redirect(back, section=section, msg=msg), actor)
 
 
-@router.post("/versions/{version_id}/activate")
+@router.post("/versions/{version_id}/activate", dependencies=[Depends(same_origin)])
 async def activate_version(request: Request, version_id: int):
     form = await request.form()
     actor = form_actor(request, form)

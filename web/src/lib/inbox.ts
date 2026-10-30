@@ -17,21 +17,35 @@ async function outstanding(): Promise<InboxFolder[]> {
 
 let refill: Promise<void> | null = null;
 let lastFailure = 0;
+let lastFailureMessage: string | null = null;
+const RETRY_AFTER_MS = 10 * 60_000;
 
 /** Write INBOX_TOP_UP generated submissions into the drop folder; one at a time, and not again for a while after a failure. */
 function topUp(): Promise<void> {
   refill ??= (async () => {
     try {
       const made = await generateInboxSubmissions(inboxDir(), INBOX_TOP_UP);
+      lastFailureMessage = null;
       console.log(`[inbox] fewer than ${INBOX_MIN_OUTSTANDING} submissions were waiting: ${made.length} generated (${made.map((m) => m.name).join(", ")})`);
     } catch (err) {
       lastFailure = Date.now();
-      console.error(`[inbox] couldn't top up the drop folder at ${inboxDir()}: ${(err as Error).message}`);
+      lastFailureMessage = `Couldn't generate new submissions into the drop folder at ${inboxDir()}: ${(err as Error).message}`;
+      console.error(`[inbox] ${lastFailureMessage}`);
     } finally {
       refill = null;
     }
   })();
   return refill;
+}
+
+/**
+ * Why the inbox isn't refilling, for the Submissions page to show (CR-073): the last top-up's
+ * error while it is still being backed off from, else null.
+ */
+export function inboxWarning(): string | null {
+  return lastFailureMessage && Date.now() - lastFailure <= RETRY_AFTER_MS
+    ? `${lastFailureMessage}. The inbox will run dry; retrying in ${Math.ceil((RETRY_AFTER_MS - (Date.now() - lastFailure)) / 60_000)} min.`
+    : null;
 }
 
 /**
@@ -41,7 +55,7 @@ function topUp(): Promise<void> {
  */
 export async function listInbox(): Promise<InboxFolder[]> {
   let open = await outstanding();
-  if (open.length < INBOX_MIN_OUTSTANDING && process.env.INBOX_AUTO_TOP_UP !== "0" && Date.now() - lastFailure > 10 * 60_000) {
+  if (open.length < INBOX_MIN_OUTSTANDING && process.env.INBOX_AUTO_TOP_UP !== "0" && Date.now() - lastFailure > RETRY_AFTER_MS) {
     await topUp();
     open = await outstanding();
   }

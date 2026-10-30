@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clearanceStatus, referralFlags, type ReferralContext } from "./referrals.ts";
+import { clearanceStatus, isOpenLoss, lossRunYears, referralFlags, type ReferralContext } from "./referrals.ts";
 import { inputsHash, parseSchedule, scheduleKey, scheduleMod } from "./worksheet.ts";
 import type { SubmissionData } from "./submission.ts";
 
@@ -53,13 +53,44 @@ test("schedule beyond ±15% needs authority", () => {
 
 test("inferred class and missing loss runs warn", () => {
   const c = ctx({
+    inputs: { ...inputs, class_code: "98304" },
     extraction: {
       fields: { "operations.class_code": { value: "98304", confidence: 0.85, method: "claude", basis: "inferred", source_document: "a.eml", snippet: "residential painting" } },
       documents: [{ filename: "a.eml", doc_type: "broker_email", parent: null, method: "claude" }],
     },
   });
   assert.deepEqual(codes(c), ["warn:CLASS_INFERRED", "warn:NO_LOSS_RUNS"]);
+  assert.match(referralFlags(c)[0].detail, /^Class 98304 was inferred/);
   assert.deepEqual(codes({ ...c, correctedFields: ["operations.class_code"] }), ["warn:NO_LOSS_RUNS"]);
+  // Changed on the workbench instead: the inferred class is gone, so the warning about it is too (CR-055).
+  assert.deepEqual(codes({ ...c, inputs: { ...inputs, class_code: "91342" } }), ["warn:NO_LOSS_RUNS"]);
+});
+
+test("loss runs are requested whatever the tenure, sized to it (CR-062)", () => {
+  const noLossRun = { fields: {}, documents: [{ filename: "a.eml", doc_type: "broker_email", parent: null, method: "claude" }] };
+  const unknown = ctx({ extraction: noLossRun, data: { ...ctx().data, applicant: {} } as unknown as SubmissionData });
+  assert.deepEqual(codes(unknown), ["warn:NO_LOSS_RUNS"]);
+  assert.match(referralFlags(unknown)[0].detail, /request 5 years of/);
+  const young = ctx({ extraction: noLossRun, data: { ...ctx().data, applicant: { years_in_business: 2 } } as unknown as SubmissionData });
+  assert.deepEqual(codes(young), ["warn:NEW_VENTURE", "warn:NO_LOSS_RUNS"]);
+  assert.match(referralFlags(young)[1].detail, /request all 2 years in business of/);
+  assert.deepEqual(codes(ctx({ data: { ...ctx().data, applicant: {} } as unknown as SubmissionData })), []);   // a loss run is on file
+  assert.equal(lossRunYears(1), "all 1 year in business");
+  assert.equal(lossRunYears(14), "5 years");
+  assert.equal(lossRunYears(null), "5 years");
+});
+
+test("a large claim refers unless its status is recognizably closed (CR-030)", () => {
+  for (const status of ["Open", "O", "OPEN-LIT", "Reopened", "Open - suit filed", "Pending", "", "Subrogation"]) {
+    assert.equal(isOpenLoss(status), true, status);
+    const c = ctx({ data: { ...ctx().data, loss_history: [{ date: "2024-01-01", description: "b", incurred: 150_000, status }] } as SubmissionData });
+    assert.deepEqual(codes(c), ["refer:LARGE_OPEN_CLAIM"], status);
+  }
+  for (const status of ["Closed", "C", "closed - paid", "CWP", "Settled", "Denied", "Paid"]) {
+    assert.equal(isOpenLoss(status), false, status);
+    const c = ctx({ data: { ...ctx().data, loss_history: [{ date: "2024-01-01", description: "b", incurred: 150_000, status }] } as SubmissionData });
+    assert.deepEqual(codes(c), [], status);
+  }
 });
 
 test("schedule parsing requires reasons and bounds", () => {

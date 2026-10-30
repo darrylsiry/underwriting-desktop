@@ -2,6 +2,7 @@ import { audit } from "./audit";
 import { customerDb, policyDb } from "./db";
 import { addYears, formsFor } from "./quote-terms";
 import { rateOn, rateVersionId } from "./rating-api";
+import { isOpenLoss } from "./referrals";
 import type { ExpiringPolicy } from "./renewal-compare";
 import type { Extraction, SubmissionData, Value } from "./submission";
 import type { SubmissionRow } from "./submissions";
@@ -86,7 +87,7 @@ export function expiringFromDesktop(p: DesktopPolicyForRenewal, original: Submis
     terms: { limits: p.terms.limits, deductible: p.terms.deductible, class_code: p.terms.class_code, class_description: p.terms.class_description,
       operations: p.terms.operations, forms: p.terms.forms },
     losses: { claims: losses.length, incurred: losses.reduce((n, l) => n + l.incurred, 0),
-      open_claims: losses.filter((l) => l.status.toLowerCase() === "open").length },
+      open_claims: losses.filter((l) => isOpenLoss(l.status)).length },
     quote_id: p.quote_id,
   };
 }

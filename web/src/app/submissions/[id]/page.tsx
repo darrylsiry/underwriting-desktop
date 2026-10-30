@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { auditTrail } from "@/lib/audit";
+import { isOpenLoss } from "@/lib/referrals";
 import { dataFingerprint, getSubmission, listDocuments, missingForRating } from "@/lib/submissions";
 import {
   SECTIONS, attention, formatValue, getPath, toInput, type FieldDef, type FieldMeta, type Value,
@@ -76,7 +77,7 @@ export default async function ReviewPage({ params, searchParams }: Props) {
                     <td className="px-4 py-2 tabular-nums text-slate-500">{l.date}</td>
                     <td className="px-4 py-2">{l.description}</td>
                     <td className="px-4 py-2 text-right tabular-nums">${l.incurred.toLocaleString("en-US")}</td>
-                    <td className="px-4 py-2"><span className={l.status.toLowerCase() === "open" ? "font-medium text-rose-700" : "text-slate-500"}>{l.status}</span></td>
+                    <td className="px-4 py-2"><span className={isOpenLoss(l.status) ? "font-medium text-rose-700" : "text-slate-500"}>{l.status}</span></td>
                   </tr>
                 ))}
                 {!sub.data.loss_history.length && <tr><td className="px-4 py-3 text-slate-400">No losses reported.</td></tr>}

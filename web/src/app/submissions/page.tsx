@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { listInbox } from "@/lib/inbox";
+import { inboxWarning, listInbox } from "@/lib/inbox";
 import { listSubmissions, missingForRating } from "@/lib/submissions";
 import { FIELD_DEFS, attention, getPath } from "@/lib/submission";
 import { InboxList } from "./inbox-list";
@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SubmissionsPage() {
   const [submissions, inbox] = await Promise.all([listSubmissions(), listInbox()]);
+  const warning = inboxWarning();
   return (
     <main className="mx-auto max-w-6xl p-8">
       <h1 className="text-2xl font-semibold">Submissions</h1>
@@ -20,6 +21,7 @@ export default async function SubmissionsPage() {
           <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Inbox · {inbox.length} new</h2>
           <span className="text-xs text-slate-400">From the broker drop folder, not yet extracted. Fillable forms read instantly; the rest takes Claude 20–40 s.</span>
         </div>
+        {warning && <p className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-800">{warning}</p>}
         {inbox.length ? <InboxList items={inbox} /> : (
           <p className="px-4 py-6 text-center text-sm text-slate-400">Inbox is empty: every submission in the drop folder has been extracted.</p>
         )}
