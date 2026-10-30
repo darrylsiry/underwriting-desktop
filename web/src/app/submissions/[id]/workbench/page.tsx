@@ -70,6 +70,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${policy || ready ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600"}`}>
           {policy ? `Bound · ${policy.policy_number}` : ready ? (latest ? `Quoted · ${latest.quote_number} v${latest.version}` : "Ready to quote") : !rated ? "Not rated" : `${openReferrals.length} referral${openReferrals.length === 1 ? "" : "s"} open`}
         </span>
+        <button form="worksheet-form" className="ml-auto rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-500">Save &amp; rate</button>
       </div>
       <p className="mt-1 text-sm text-slate-500">
         Underwriting workbench · {String(sub.data.operations?.description ?? "")} ·{" "}
@@ -88,7 +89,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
       {error && <p className="mt-4 rounded bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
-        <form action={saveAndRateAction.bind(null, id)} className="space-y-6">
+        <form id="worksheet-form" action={saveAndRateAction.bind(null, id)} className="space-y-6">
           <Card title="Rating inputs">
             <div className="grid gap-x-6 gap-y-3 p-4 sm:grid-cols-2">
               {INPUT_DEFS.map((d) => (
@@ -142,9 +143,6 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
             </table>
           </Card>
 
-          <div className="sticky bottom-4 flex justify-end">
-            <button className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-indigo-500">Save &amp; rate</button>
-          </div>
         </form>
 
         <aside className="space-y-6">

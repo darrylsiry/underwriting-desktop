@@ -466,6 +466,8 @@ read this to replay the build quickly.
 
 - **Follow-up: the inbox stays on top of Next up.** The "N new submissions in the inbox" task is pinned first (`Task.pinned`; the sort puts pinned tasks ahead of the urgency order) and its row is lightly tinted (indigo wash with a left accent, label in indigo) so new work is never buried under renewals and bind chases. The caption now reads "Inbox first, then most urgent: overdue, then by due date".
 
+- **Follow-up: action buttons at the top right.** "Save & rate" (workbench) and "Save corrections" (intake review) moved from a sticky bar floating at the bottom of the form into the page header, right-aligned next to the title and status. They sit outside their `<form>` and submit it through the `form="worksheet-form"` / `form="review-form"` attribute, so the server actions are unchanged. No page has a bottom action bar any more.
+
 ## Fix: the Rate tables page kept the desktop's top nav
 - **Prompt used:** "When I go to the rating page from the top nav, the nav disappears and I can only return elsewhere by clicking Back."
 - **Cause:** `/admin` is the rating service's own server-rendered UI, proxied by the web app. Its templates had only a "Rating admin" header. Its "API docs" link (`/docs`) was also dead through the proxy, which forwards only `/admin`.

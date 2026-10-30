@@ -31,6 +31,7 @@ export default async function ReviewPage({ params, searchParams }: Props) {
         <h1 className="text-2xl font-semibold">{sub.applicant_name || "Unnamed applicant"}</h1>
         <span className="font-mono text-sm text-slate-500">{sub.reference}</span>
         <StatusBadge status={sub.status} />
+        {editable && <button form="review-form" className="ml-auto rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-500">Save corrections</button>}
       </div>
       <p className="mt-1 text-sm text-slate-500">
         Received by {sub.received_by} {sub.received_at.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
@@ -50,7 +51,7 @@ export default async function ReviewPage({ params, searchParams }: Props) {
       {ex.warnings.map((w) => <p key={w} className="mt-2 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">{w}</p>)}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <form action={saveReviewAction.bind(null, id)} className="space-y-6">
+        <form id="review-form" action={saveReviewAction.bind(null, id)} className="space-y-6">
           <input type="hidden" name="_fingerprint" value={dataFingerprint(sub.data)} />
           {SECTIONS.map((section) => (
             <section key={section.key} className="rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -83,13 +84,6 @@ export default async function ReviewPage({ params, searchParams }: Props) {
             </table>
           </section>
 
-          {editable && (
-            <div className="sticky bottom-4 flex justify-end">
-              <button className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-indigo-500">
-                Save corrections
-              </button>
-            </div>
-          )}
         </form>
 
         <aside className="space-y-6">
