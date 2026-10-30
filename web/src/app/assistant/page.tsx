@@ -14,15 +14,15 @@ const SUGGESTIONS = [
   "Who bound the most premium this year?",
 ];
 
-/** The AI assistant: ask anything about the app; Claude answers from the app's data with links. */
-export default async function AssistantPage() {
-  const user = await currentUser();
+/** The AI assistant: ask anything about the app; Claude answers from the app's data with links. `?q=` (the desk's ask box) asks it on arrival. */
+export default async function AssistantPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  const [user, { q }] = await Promise.all([currentUser(), searchParams]);
   return (
     <main className="mx-auto max-w-4xl p-6 lg:p-8">
       <h1 className="text-2xl font-semibold">AI Assistant</h1>
       <p className="mt-1 text-sm text-slate-500">Ask a question about anything in the Underwriting Desktop. Every answer is looked up in the app and links to the records it rests on.</p>
       <div className="mt-6">
-        <AssistantChat user={user} model={ASSISTANT_MODEL} enabled={assistantEnabled()} suggestions={SUGGESTIONS} />
+        <AssistantChat user={user} model={ASSISTANT_MODEL} enabled={assistantEnabled()} suggestions={SUGGESTIONS} initialQuestion={q?.trim() || undefined} />
       </div>
     </main>
   );

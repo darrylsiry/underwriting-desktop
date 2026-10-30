@@ -13,14 +13,24 @@ const describeInput = (input: unknown) => {
   return parts.length ? parts.join(", ") : "";
 };
 
-export function AssistantChat({ user, model, enabled, suggestions }: { user: string; model: string; enabled: boolean; suggestions: string[] }) {
+export function AssistantChat({ user, model, enabled, suggestions, initialQuestion }: { user: string; model: string; enabled: boolean; suggestions: string[]; initialQuestion?: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
+  const started = useRef(false);
 
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages]);
+
+  // A question brought along in the URL (the desk's ask box) is asked once on arrival; the URL is then cleaned so a refresh doesn't ask again.
+  useEffect(() => {
+    if (!initialQuestion || !enabled || started.current) return;
+    started.current = true;
+    window.history.replaceState(null, "", "/assistant");
+    void ask(initialQuestion);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuestion, enabled]);
 
   async function ask(question: string) {
     const q = question.trim();
