@@ -1,0 +1,210 @@
+// Comparing an expiring policy with its renewing terms: which rating variables changed, which rate
+// factors changed, and how the premium change splits between the two. Pure module (type-only
+// imports) so node:test can load it; the memo PDF and the comparison page both render from this.
+import type { RatingInputs, ScheduleItem } from "./worksheet";
+import type { Rating } from "./worksheets";
+// Explicit .ts extension so node:test can load this module directly (worksheet.ts is itself pure).
+import { INPUT_DEFS, SCHEDULE_CATEGORIES, scheduleTotal } from "./worksheet.ts";
+
+/** Snapshot of the policy being renewed, stored on the renewal submission when it starts. */
+export type ExpiringPolicy = {
+  source: "book" | "desktop";
+  policy_id: string;
+  policy_number: string;
+  insured_name: string;
+  producer: string[];
+  effective_date: string;
+  expiration_date: string;
+  rate_version: string;
+  rating_inputs: RatingInputs;
+  schedule: ScheduleItem[];
+  rating: Rating;                     // the expiring premium, rated on rate_version
+  premium: number;
+  policy_fee: number;
+  surplus_lines_tax: number;
+  total: number;
+  terms: { limits: { label: string; amount: number }[]; deductible: number; class_code: string; class_description: string; operations: string; forms: string[] };
+  losses: { claims: number; incurred: number; open_claims: number };
+  quote_id?: string;
+};
+
+export type Side = { inputs: RatingInputs; schedule: ScheduleItem[]; rating: Rating; effective_date: string; expiration_date: string };
+
+export type TermChange = { key: string; label: string; expiring: string; renewing: string; changed: boolean };
+export type FactorLine = { detail: string; factor: number | null; premium: number };
+export type FactorChange = {
+  step: string; expiring: FactorLine | null; renewing: FactorLine | null;
+  changed: boolean;                   // the factor or the base rate moved
+  cause: "terms" | "rates" | "both" | null;   // what moved it, when the bridge rating is available
+};
+export type MoneyRow = { label: string; expiring: number; renewing: number; change: number; pct: number | null };
+export type Bridge = {
+  expiringPremium: number; renewingPremium: number; change: number; pct: number | null;
+  termsImpact: number | null;          // renewing inputs on expiring rates, minus expiring premium
+  ratesImpact: number | null;          // renewing inputs on current rates, minus the above
+  rateVersionFrom: string; rateVersionTo: string;
+};
+export type Comparison = {
+  terms: TermChange[];
+  factors: FactorChange[];
+  money: MoneyRow[];
+  bridge: Bridge;
+  reasons: { terms: string[]; schedule: string[]; rates: string[] };
+};
+
+export const money = (n: number) => `${n < 0 ? "-" : ""}$${Math.round(Math.abs(n)).toLocaleString("en-US")}`;
+export const signed = (n: number) => `${n >= 0 ? "+" : "-"}$${Math.round(Math.abs(n)).toLocaleString("en-US")}`;
+export const pct = (from: number, to: number): number | null => (from ? Math.round(((to - from) / from) * 1000) / 10 : null);
+export const pctText = (p: number | null) => (p === null ? "" : `${p >= 0 ? "+" : ""}${p}%`);
+
+export function inputText(key: keyof RatingInputs, v: RatingInputs[keyof RatingInputs]): string {
+  const def = INPUT_DEFS.find((d) => d.key === key)!;
+  if (Array.isArray(v)) return v.join(", ");
+  if (typeof v === "boolean") return v ? "yes" : "no";
+  if (def.kind === "money") return money(Number(v));
+  if (def.kind === "pct") return `${v}%`;
+  if (def.kind === "mod") return Number(v).toFixed(2);
+  return String(v);
+}
+
+const sameInput = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const categoryLabel = (key: string) => SCHEDULE_CATEGORIES.find((c) => c.key === key)?.label ?? key;
+const schedText = (pct: number) => `${pct > 0 ? "+" : ""}${pct}%`;
+const usDate = (iso: string) => { const [y, m, d] = iso.split("-"); return `${m}/${d}/${y}`; };
+
+function termChanges(a: Side, b: Side): TermChange[] {
+  const out: TermChange[] = [{
+    key: "period", label: "Policy period", changed: true,
+    expiring: `${usDate(a.effective_date)} to ${usDate(a.expiration_date)}`,
+    renewing: `${usDate(b.effective_date)} to ${usDate(b.expiration_date)}`,
+  }];
+  for (const d of INPUT_DEFS) {
+    const x = a.inputs[d.key], y = b.inputs[d.key];
+    out.push({ key: d.key, label: d.label, expiring: inputText(d.key, x), renewing: inputText(d.key, y), changed: !sameInput(x, y) });
+  }
+  const ta = scheduleTotal(a.schedule), tb = scheduleTotal(b.schedule);
+  out.push({ key: "schedule", label: "Schedule rating", expiring: schedText(ta), renewing: schedText(tb), changed: ta !== tb });
+  return out;
+}
+
+function line(r: Rating, step: string): FactorLine | null {
+  const w = r.worksheet.find((l) => l.step === step);
+  return w ? { detail: w.detail, factor: w.factor === null ? null : Number(w.factor), premium: Number(w.premium) } : null;
+}
+
+const lineKey = (l: FactorLine | null) => (l ? `${l.factor ?? ""}|${l.detail}` : "");
+
+function factorChanges(expiring: Rating, renewing: Rating, bridge: Rating | null): FactorChange[] {
+  const steps = [...new Set([...expiring.worksheet.map((l) => l.step), ...renewing.worksheet.map((l) => l.step)])];
+  return steps.map((step) => {
+    const x = line(expiring, step), y = line(renewing, step), b = bridge ? line(bridge, step) : null;
+    const changed = lineKey(x) !== lineKey(y);
+    let cause: FactorChange["cause"] = null;
+    if (changed && bridge) {
+      const terms = lineKey(x) !== lineKey(b);
+      const rates = lineKey(b) !== lineKey(y);
+      cause = terms && rates ? "both" : rates ? "rates" : "terms";
+    }
+    return { step, expiring: x, renewing: y, changed, cause };
+  });
+}
+
+/** Sentences for the memo: every rating variable that changed, in the insured's terms. */
+function termReasons(a: Side, b: Side): string[] {
+  const out: string[] = [];
+  for (const d of INPUT_DEFS) {
+    const x = a.inputs[d.key], y = b.inputs[d.key];
+    if (sameInput(x, y)) continue;
+    const from = inputText(d.key, x), to = inputText(d.key, y);
+    if (d.key === "gross_receipts" && typeof x === "number" && typeof y === "number") {
+      out.push(`${d.label} changed from ${from} to ${to} (${pctText(pct(x, y))}).`);
+    } else if (d.key === "states") {
+      out.push(`States of operation changed from ${from} to ${to}; the territory factor follows the highest-rated state.`);
+    } else {
+      out.push(`${d.label} changed from ${from} to ${to}.`);
+    }
+  }
+  return out;
+}
+
+function scheduleReasons(a: ScheduleItem[], b: ScheduleItem[]): string[] {
+  const out: string[] = [];
+  const before = new Map(a.map((s) => [s.category, s])), after = new Map(b.map((s) => [s.category, s]));
+  for (const key of new Set([...before.keys(), ...after.keys()])) {
+    const x = before.get(key), y = after.get(key);
+    const label = categoryLabel(key);
+    if (x && !y) out.push(`The ${x.pct < 0 ? "credit" : "debit"} of ${schedText(x.pct)} for ${label.toLowerCase()} no longer applies.`);
+    else if (!x && y) out.push(`A ${y.pct < 0 ? "credit" : "debit"} of ${schedText(y.pct)} applies for ${label.toLowerCase()}.`);
+    else if (x && y && x.pct !== y.pct) out.push(`The adjustment for ${label.toLowerCase()} changed from ${schedText(x.pct)} to ${schedText(y.pct)}.`);
+  }
+  return out;
+}
+
+const RATE_PER_1000 = /\$([\d.]+) per \$1,000/;
+
+/** Rate-table changes: lines that differ between the bridge (old rates) and the renewing rating (current rates). */
+function rateReasons(bridge: Rating | null, renewing: Rating): string[] {
+  if (!bridge) return [];
+  const out: string[] = [];
+  const from = bridge.rate_version, to = renewing.rate_version;
+  for (const l of renewing.worksheet) {
+    const b = line(bridge, l.step);
+    if (!b) continue;
+    if (l.step === "Base premium") {
+      const r0 = b.detail.match(RATE_PER_1000)?.[1], r1 = l.detail.match(RATE_PER_1000)?.[1];
+      if (r0 && r1 && r0 !== r1) out.push(`The base rate for your class changed from $${Number(r0).toFixed(2)} to $${Number(r1).toFixed(2)} per $1,000 of receipts under rate revision ${to}.`);
+      continue;
+    }
+    if (l.factor !== null && b.factor !== null && Number(l.factor) !== Number(b.factor) && b.detail === l.detail) {
+      out.push(`The ${l.step.toLowerCase()} factor (${l.detail}) changed from ${Number(b.factor)} to ${Number(l.factor)} under rate revision ${to}.`);
+    }
+  }
+  if (Number(bridge.policy_fee) !== Number(renewing.policy_fee)) {
+    out.push(`The policy fee changed from ${money(Number(bridge.policy_fee))} to ${money(Number(renewing.policy_fee))}.`);
+  }
+  if (Number(bridge.surplus_lines_tax_rate) !== Number(renewing.surplus_lines_tax_rate)) {
+    out.push(`The surplus lines tax rate changed from ${(Number(bridge.surplus_lines_tax_rate) * 100).toFixed(2)}% to ${(Number(renewing.surplus_lines_tax_rate) * 100).toFixed(2)}%.`);
+  }
+  if (!out.length && from !== to) out.push(`Rate revision ${to} replaced ${from}; none of its changes affect this policy's factors.`);
+  return out;
+}
+
+/**
+ * `bridge` is the renewing inputs rated on the expiring rate version (null when that version
+ * couldn't be rated on). It lets the premium change be split: expiring -> bridge is what the
+ * insured's terms did; bridge -> renewing is what the rate tables did.
+ */
+export function compareRenewal(expiring: Side, renewing: Side, bridge: Rating | null): Comparison {
+  const x = expiring.rating, y = renewing.rating;
+  const row = (label: string, a: number, b: number): MoneyRow => ({ label, expiring: a, renewing: b, change: b - a, pct: pct(a, b) });
+  const moneyRows = [
+    row("Premium", Number(x.premium), Number(y.premium)),
+    row("Policy fee", Number(x.policy_fee), Number(y.policy_fee)),
+    row("Surplus lines tax", Number(x.surplus_lines_tax), Number(y.surplus_lines_tax)),
+    row("Total", Number(x.total), Number(y.total)),
+  ];
+  const bp = bridge ? Number(bridge.premium) : null;
+  return {
+    terms: termChanges(expiring, renewing),
+    factors: factorChanges(x, y, bridge),
+    money: moneyRows,
+    bridge: {
+      expiringPremium: Number(x.premium), renewingPremium: Number(y.premium),
+      change: Number(y.premium) - Number(x.premium), pct: pct(Number(x.premium), Number(y.premium)),
+      termsImpact: bp === null ? null : bp - Number(x.premium),
+      ratesImpact: bp === null ? null : Number(y.premium) - bp,
+      rateVersionFrom: x.rate_version, rateVersionTo: y.rate_version,
+    },
+    reasons: {
+      terms: termReasons(expiring, renewing),
+      schedule: scheduleReasons(expiring.schedule, renewing.schedule),
+      rates: rateReasons(bridge, y),
+    },
+  };
+}
+
+/** One line for list rows and the memo's opening: "up 12.3% ($4,100)" / "unchanged". */
+export function changeSummary(b: Bridge): string {
+  if (b.change === 0) return "unchanged";
+  return `${b.change > 0 ? "up" : "down"} ${Math.abs(b.pct ?? 0)}% (${signed(b.change)})`;
+}

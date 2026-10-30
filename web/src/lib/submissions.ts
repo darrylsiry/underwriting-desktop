@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import { audit } from "./audit";
 import { customerDb } from "./db";
+import type { ExpiringPolicy } from "./renewal-compare";
 import { INGESTION_SERVICE_URL } from "./services";
 import {
   FIELD_DEFS, REQUIRED_FOR_RATING, fromInput, getPath, isEmpty, sameValue, setPath,
@@ -20,6 +21,8 @@ export type SubmissionRow = {
   received_by: string;
   received_at: Date;
   inbox_folder: string | null;
+  kind: "new" | "renewal";
+  renewal_of: ExpiringPolicy | null;   // the expiring policy, for a renewal
   reviewed_by: string | null;
   reviewed_at: Date | null;
 };

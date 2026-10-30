@@ -16,6 +16,8 @@ const PILL: Record<string, string> = {
   needs_review: "bg-amber-50 text-amber-700", accepted: "bg-emerald-50 text-emerald-700",
   issued: "bg-indigo-50 text-indigo-700", superseded: "bg-slate-100 text-slate-500", bound: "bg-emerald-50 text-emerald-700",
   open: "bg-amber-50 text-amber-800", received: "bg-emerald-50 text-emerald-700",
+  not_started: "bg-slate-100 text-slate-600", in_progress: "bg-indigo-50 text-indigo-700", renewed: "bg-emerald-50 text-emerald-700",
+  non_renewed: "bg-rose-50 text-rose-700", renewal: "bg-indigo-50 text-indigo-700", "prior system": "bg-slate-100 text-slate-500",
 };
 
 export function Pill({ status }: { status: string }) {

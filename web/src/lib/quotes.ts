@@ -1,6 +1,8 @@
 import { audit } from "./audit";
 import { policyDb } from "./db";
 import { renderQuotePdf } from "./quote-pdf";
+import { changeSummary, compareRenewal, type Comparison } from "./renewal-compare";
+import { renderRenewalMemoPdf } from "./renewal-memo-pdf";
 import { QUOTE_VALID_DAYS, addDays, addYears, formsFor, parseSubjectivities } from "./quote-terms";
 import { RATING_SERVICE_URL } from "./services";
 import type { SubmissionRow } from "./submissions";
@@ -13,12 +15,13 @@ export type QuoteRow = {
   effective_date: string; expiration_date: string; valid_until: string;
   rating_id: string; rate_version: string; premium: string; policy_fee: string; surplus_lines_tax: string; total: string;
   subjectivities: string[]; issued_by: string; issued_at: Date;
+  has_memo: boolean;   // a renewal quote carries a memo to the insured
 };
 
 // Dates come back as JS Dates by default; keep them as YYYY-MM-DD strings.
 const COLUMNS = `id, quote_number, version, status, submission_id, submission_ref, insured_name,
   effective_date::text, expiration_date::text, valid_until::text, rating_id, rate_version,
-  premium, policy_fee, surplus_lines_tax, total, subjectivities, issued_by, issued_at`;
+  premium, policy_fee, surplus_lines_tax, total, subjectivities, issued_by, issued_at, (memo_pdf IS NOT NULL) AS has_memo`;
 
 export async function quotesForSubmission(submissionId: string): Promise<QuoteRow[]> {
   const { rows } = await policyDb.query<QuoteRow>(
@@ -29,6 +32,13 @@ export async function quotesForSubmission(submissionId: string): Promise<QuoteRo
 export async function listQuotes(): Promise<QuoteRow[]> {
   const { rows } = await policyDb.query<QuoteRow>(`SELECT ${COLUMNS} FROM quotes ORDER BY issued_at DESC`);
   return rows;
+}
+
+export async function getQuoteMemo(id: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  const { rows } = await policyDb.query<{ quote_number: string; version: number; pdf: Buffer | null }>(
+    "SELECT quote_number, version, memo_pdf AS pdf FROM quotes WHERE id = $1", [id]);
+  return rows[0]?.pdf ? rows[0] as { quote_number: string; version: number; pdf: Buffer } : null;
 }
 
 export async function getQuotePdf(id: string) {
@@ -110,8 +120,28 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
     states: inputs.states, grossReceipts: inputs.gross_receipts,
     premium: Number(rating.premium), policyFee: Number(rating.policy_fee), surplusLinesTax: Number(rating.surplus_lines_tax),
     surplusLinesTaxRate: Number(rating.surplus_lines_tax_rate), homeState: inputs.home_state, total: Number(rating.total),
-    rateVersion: rating.rate_version, subjectivities, forms: terms.forms,
+    rateVersion: rating.rate_version, subjectivities, forms: terms.forms, renewalOf: sub.renewal_of?.policy_number,
   });
+
+  // A renewal quote comes with a memo to the insured: premium change, what changed in the rating
+  // basis, and any rate changes. The comparison it's built from is stored with the quote too.
+  let memo: Uint8Array | null = null;
+  let comparison: Comparison | null = null;
+  const exp = sub.kind === "renewal" ? sub.renewal_of : null;
+  if (exp) {
+    comparison = compareRenewal(
+      { inputs: exp.rating_inputs, schedule: exp.schedule, rating: exp.rating, effective_date: exp.effective_date, expiration_date: exp.expiration_date },
+      { inputs, schedule: ws.schedule, rating, effective_date: effective, expiration_date: expiration },
+      ws.bridge_rating,
+    );
+    memo = await renderRenewalMemoPdf({
+      quoteNumber, version, issuedAt, validUntil, issuedBy: actor,
+      insuredName: sub.applicant_name, insuredAddress: terms.insured_address, producer: terms.producer,
+      expiringPolicyNumber: exp.policy_number, expiringPeriod: [exp.effective_date, exp.expiration_date],
+      renewingPeriod: [effective, expiration], comparison, limits: terms.limits, deductible: terms.deductible,
+      classCode: terms.class_code, classDescription: terms.class_description, subjectivities,
+    });
+  }
 
   const client = await policyDb.connect();
   let quote: QuoteRow;
@@ -121,13 +151,13 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
     quote = (await client.query<QuoteRow>(
       `INSERT INTO quotes (quote_number, version, status, submission_id, submission_ref, insured_id, insured_name,
          effective_date, expiration_date, valid_until, rating_id, rate_version, rating_inputs, schedule, rating,
-         premium, policy_fee, surplus_lines_tax, total, subjectivities, terms, pdf, issued_by, issued_at)
-       VALUES ($1, $2, 'issued', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+         premium, policy_fee, surplus_lines_tax, total, subjectivities, terms, pdf, issued_by, issued_at, memo_pdf, renewal_summary)
+       VALUES ($1, $2, 'issued', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
        RETURNING ${COLUMNS}`,
       [quoteNumber, version, sub.id, sub.reference, sub.insured_id, sub.applicant_name, effective, expiration, validUntil,
        rating.rating_id, rating.rate_version, inputs, JSON.stringify(ws.schedule), rating,
        rating.premium, rating.policy_fee, rating.surplus_lines_tax, rating.total, subjectivities, terms,
-       Buffer.from(pdf), actor, issuedAt],
+       Buffer.from(pdf), actor, issuedAt, memo ? Buffer.from(memo) : null, comparison],
     )).rows[0];
     await client.query("COMMIT");
   } catch (err) {
@@ -145,7 +175,7 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
     }] : []),
     {
       actor, action: "quote.issued", entityType: "quote", entityId: quote.id,
-      summary: `${quoteNumber} v${version} issued to ${sub.applicant_name}: ${money(rating.total)} total (${sub.reference})`,
+      summary: `${quoteNumber} v${version} issued to ${sub.applicant_name}: ${money(rating.total)} total (${sub.reference})${exp ? `, renewal of ${exp.policy_number}${comparison ? `, premium ${changeSummary(comparison.bridge)}` : ""}` : ""}`,
       after: { submission_id: sub.id, rating_id: rating.rating_id, rate_version: rating.rate_version, premium: rating.premium,
         total: rating.total, effective_date: effective, subjectivities }, correlationId,
     },
@@ -158,7 +188,7 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
 }
 
 export type QuoteDetail = QuoteRow & {
-  insured_id: string | null; rating_inputs: RatingInputs; schedule: ScheduleItem[]; rating: Rating;
+  insured_id: string | null; rating_inputs: RatingInputs; schedule: ScheduleItem[]; rating: Rating; renewal_summary: Comparison | null;
   terms: { insured_address: string[]; producer: string[]; limits: { label: string; amount: number }[]; deductible: number;
     class_code: string; class_description: string; operations: string; forms: string[] };
 };
@@ -167,7 +197,7 @@ export type QuoteDetail = QuoteRow & {
 export async function getQuote(id: string): Promise<QuoteDetail | null> {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
   const { rows } = await policyDb.query<QuoteDetail>(
-    `SELECT ${COLUMNS}, insured_id, rating_inputs, schedule, rating, terms FROM quotes WHERE id = $1`, [id]);
+    `SELECT ${COLUMNS}, insured_id, rating_inputs, schedule, rating, terms, renewal_summary FROM quotes WHERE id = $1`, [id]);
   return rows[0] ?? null;
 }
 

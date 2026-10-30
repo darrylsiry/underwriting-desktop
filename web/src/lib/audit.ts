@@ -3,7 +3,7 @@ import { policyDb } from "./db";
 export type AuditEvent = {
   actor: string;
   action: string;
-  entityType: "submission" | "insured" | "quote" | "policy";
+  entityType: "submission" | "insured" | "quote" | "policy" | "book_policy";
   entityId: string;
   summary: string;
   before?: unknown;

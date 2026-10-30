@@ -3,6 +3,7 @@ import { Fragment } from "react";
 import { Pill, RowLink, Section, money, when } from "@/components/ui";
 import { policiesForSubmission } from "@/lib/policies";
 import { getQuote, quoteVersions } from "@/lib/quotes";
+import { changeSummary } from "@/lib/renewal-compare";
 import { INPUT_DEFS, SCHEDULE_CATEGORIES, scheduleMod } from "@/lib/worksheet";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
         <h1 className="text-2xl font-semibold">{q.quote_number} v{q.version}</h1>
         <Pill status={q.status} />
         <a href={`/quotes/${q.id}/pdf`} target="_blank" className="rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-50">Quote PDF</a>
+        {q.has_memo && <a href={`/quotes/${q.id}/memo`} target="_blank" className="rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-50">Renewal memo</a>}
       </div>
       <p className="mt-1 text-sm text-slate-500">
         {q.insured_id ? <RowLink href={`/insureds/${q.insured_id}`}>{q.insured_name}</RowLink> : q.insured_name}
@@ -31,6 +33,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
         {" · "}issued by {q.issued_by} {when(q.issued_at)} · valid until {q.valid_until}
         {policy && <> · bound as <RowLink href={`/policies/${policy.id}`}>{policy.policy_number}</RowLink></>}
         {" · "}<RowLink href={`/audit?submission=${q.submission_id}`}>case history</RowLink>
+        {q.renewal_summary && <> · renewal: premium {changeSummary(q.renewal_summary.bridge)} vs expiring (<RowLink href={`/submissions/${q.submission_id}/renewal`}>comparison</RowLink>)</>}
       </p>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">

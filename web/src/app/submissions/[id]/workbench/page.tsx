@@ -12,6 +12,9 @@ import {
   INPUT_DEFS, MAX_CATEGORY_PCT, SCHEDULE_CATEGORIES, UW_AUTHORITY_PCT, scheduleMod, scheduleTotal, type RatingInputs,
 } from "@/lib/worksheet";
 import { activeRateVersion, money, openWorksheet, readiness } from "@/lib/worksheets";
+import { inputText } from "@/lib/renewal-compare";
+import { expiringOf } from "@/lib/renewals";
+import { IssueQuoteForm } from "../issue-quote-form";
 import { StatusBadge } from "../../status-badge";
 import { bindAction, clearReferralAction, issueQuoteAction, saveAndRateAction } from "./actions";
 
@@ -19,7 +22,7 @@ export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ msg?: string; error?: string }> };
 
-const WORKSHEET_ACTIONS = new Set(["worksheet.opened", "worksheet.input_changed", "worksheet.schedule_changed", "worksheet.rated", "referral.cleared", "quote.issued", "policy.bound"]);
+const WORKSHEET_ACTIONS = new Set(["renewal.started", "worksheet.opened", "worksheet.input_changed", "worksheet.schedule_changed", "worksheet.rated", "referral.cleared", "quote.issued", "policy.bound"]);
 
 export default async function WorkbenchPage({ params, searchParams }: Props) {
   const { id } = await params;
@@ -42,30 +45,19 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
   const latest = quotes[0];
   const effective = latest?.effective_date ?? String(sub.data.policy?.effective_date ?? "");
   const expiration = latest?.expiration_date ?? (effective ? addYears(effective, 1) : "");
-  const subjectivities = latest?.subjectivities ?? suggestedSubjectivities(flags, sub.data);
+  const subjectivities = latest?.subjectivities ?? (sub.kind === "renewal"
+    ? ["Signed renewal application or no-change confirmation", ...suggestedSubjectivities(flags, sub.data).slice(1)]
+    : suggestedSubjectivities(flags, sub.data));
   const [policy] = await policiesForSubmission(id);
   const bindIssues = latest ? bindBlockers(latest, new Date().toISOString().slice(0, 10)) : [];
   const rating = ws.last_rating;
   const schedule = new Map(ws.schedule.map((s) => [s.category, s]));
   const total = scheduleTotal(ws.schedule);
 
+  const exp = expiringOf(sub);
   const issueForm = (
-    <form action={issueQuoteAction.bind(null, id)} className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1 text-xs text-slate-500">Effective
-          <input name="effective_date" defaultValue={effective} placeholder="YYYY-MM-DD" required className="rounded border border-slate-300 px-2 py-1 text-sm text-slate-900" />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-slate-500">Expiration
-          <input name="expiration_date" defaultValue={expiration} placeholder="YYYY-MM-DD" className="rounded border border-slate-300 px-2 py-1 text-sm text-slate-900" />
-        </label>
-      </div>
-      <label className="flex flex-col gap-1 text-xs text-slate-500">Subjectivities (one per line)
-        <textarea name="subjectivities" rows={4} defaultValue={subjectivities.join("\n")} className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-900" />
-      </label>
-      <button className="w-full rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500">
-        {latest ? `Issue revised quote (v${latest.version + 1})` : `Issue quote · ${rating ? money(rating.total) : ""}`}
-      </button>
-    </form>
+    <IssueQuoteForm action={issueQuoteAction.bind(null, id)} effective={effective} expiration={expiration} subjectivities={subjectivities}
+      label={latest ? `Issue revised quote (v${latest.version + 1})` : `Issue ${exp ? "renewal " : ""}quote · ${rating ? money(rating.total) : ""}`} />
   );
 
   return (
@@ -84,6 +76,14 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
         <Link href={`/audit?submission=${id}`} className="text-indigo-600 hover:underline">Case history →</Link>
       </p>
 
+      {exp && (
+        <p className="mt-4 flex flex-wrap items-center gap-x-3 rounded border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
+          <span className="font-medium">Renewal of {exp.policy_number}</span>
+          <span>expiring {money(exp.premium)} on rates {exp.rate_version} · {exp.effective_date} → {exp.expiration_date}</span>
+          <span className="text-xs">Expiring values are shown under each input.</span>
+          <Link href={`/submissions/${id}/renewal`} className="ml-auto font-medium hover:underline">Expiring vs renewing →</Link>
+        </p>
+      )}
       {msg && <p className="mt-4 rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{msg}</p>}
       {error && <p className="mt-4 rounded bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
 
@@ -102,6 +102,11 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                     <input name={d.key} defaultValue={inputValue(ws.rating_inputs, d.key)}
                       className="rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900" />
                   )}
+                  {exp && (() => {
+                    const was = inputText(d.key, exp.rating_inputs[d.key]);
+                    const changed = was !== inputText(d.key, ws.rating_inputs[d.key]);
+                    return <span className={`text-[11px] ${changed ? "font-medium text-amber-700" : "text-slate-400"}`}>expiring: {was}</span>;
+                  })()}
                 </label>
               ))}
             </div>

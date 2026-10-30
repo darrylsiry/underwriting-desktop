@@ -49,7 +49,8 @@ export default async function SubmissionsPage() {
             const receipts = getPath(s.data, "operations.gross_receipts");
             return (
               <tr key={s.id} className="border-t border-slate-100 hover:bg-slate-50">
-                <td className="px-4 py-2 font-mono text-xs"><Link href={`/submissions/${s.id}`} className="text-indigo-600 hover:underline">{s.reference}</Link></td>
+                <td className="whitespace-nowrap px-4 py-2 font-mono text-xs"><Link href={`/submissions/${s.id}`} className="text-indigo-600 hover:underline">{s.reference}</Link>
+                  {s.kind === "renewal" && <Link href={`/submissions/${s.id}/renewal`} className="ml-1 rounded bg-indigo-50 px-1 py-0.5 font-sans text-[10px] text-indigo-700 hover:underline" title={`Renewal of ${s.renewal_of?.policy_number}`}>renewal</Link>}</td>
                 <td className="px-4 py-2 font-medium">{s.applicant_name || <span className="text-slate-400">unnamed</span>}</td>
                 <td className="px-4 py-2 font-mono text-xs">{String(getPath(s.data, "operations.class_code") ?? "") || "—"}</td>
                 <td className="px-4 py-2">{(getPath(s.data, "operations.states") as string[] | null)?.join(", ") || "—"}</td>

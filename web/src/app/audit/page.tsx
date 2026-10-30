@@ -20,6 +20,7 @@ function entityHref(e: TimelineEvent): string | null {
     case "submission": return `/submissions/${e.entityId}`;
     case "quote": return `/quotes/${e.entityId}`;
     case "policy": return `/policies/${e.entityId}`;
+    case "book_policy": return `/policies/book/${e.entityId}`;
     case "insured": return `/insureds/${e.entityId}`;
     case "rate_version": return `${RATING_ADMIN_URL}/versions/${e.entityId}`;
     default: return null;

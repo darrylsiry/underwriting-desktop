@@ -12,6 +12,7 @@ export type BookPolicy = {
   states: string[]; producer: string; effective_date: string; expiration_date: string;
   premium: number; claims: number; incurred: number; open_claims: number;
   renewal_status: "not_started" | "in_progress" | "renewed" | "non_renewed"; source: "prior system" | "uw desktop";
+  renewal_submission_id: string | null;
   href: string | null;
 };
 
@@ -54,13 +55,15 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     policyDb.query<BookPolicy>(
       `SELECT id, policy_number, insured_name, class_code, class_description, states, producer,
               effective_date::text, expiration_date::text, premium::float8 AS premium, claims,
-              incurred::float8 AS incurred, open_claims, renewal_status
+              incurred::float8 AS incurred, open_claims, renewal_status, renewal_submission_id
        FROM book_policies WHERE underwriter = $1 AND expiration_date >= CURRENT_DATE`, [user]),
     policyDb.query<{ id: string; policy_number: string; insured_name: string; submission_id: string; effective_date: string;
       expiration_date: string; premium: number; terms: { class_code?: string; class_description?: string; producer?: string[] };
-      states: string[] | null; subjectivities: { text: string; status: string; due_date: string }[] }>(
+      states: string[] | null; subjectivities: { text: string; status: string; due_date: string }[];
+      renewal_status: BookPolicy["renewal_status"]; renewal_submission_id: string | null }>(
       `SELECT p.id, p.policy_number, p.insured_name, p.submission_id, p.effective_date::text, p.expiration_date::text,
-              p.premium::float8 AS premium, q.terms, q.rating_inputs->'states' AS states, p.subjectivities
+              p.premium::float8 AS premium, q.terms, q.rating_inputs->'states' AS states, p.subjectivities,
+              p.renewal_status, p.renewal_submission_id
        FROM policies p JOIN quotes q ON q.id = p.quote_id WHERE p.submission_id = ANY($1)`, [mine]),
     policyDb.query<{ id: string; quote_number: string; version: number; status: string; submission_id: string;
       insured_name: string; valid_until: string; total: number }>(
@@ -78,9 +81,10 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     class_code: p.terms?.class_code ?? "", class_description: p.terms?.class_description ?? "",
     states: p.states ?? [], producer: p.terms?.producer?.[0] ?? "",
     effective_date: p.effective_date, expiration_date: p.expiration_date, premium: p.premium,
-    claims: 0, incurred: 0, open_claims: 0, renewal_status: "not_started", source: "uw desktop", href: `/policies/${p.id}`,
+    claims: 0, incurred: 0, open_claims: 0, renewal_status: p.renewal_status, renewal_submission_id: p.renewal_submission_id,
+    source: "uw desktop", href: `/policies/${p.id}`,
   }));
-  const book = [...legacy.rows.map((p) => ({ ...p, source: "prior system" as const, href: null })), ...written]
+  const book = [...legacy.rows.map((p) => ({ ...p, source: "prior system" as const, href: `/policies/book/${p.id}` })), ...written]
     .sort((a, b) => a.expiration_date.localeCompare(b.expiration_date));
   const renewalCutoff = addDays(today, RENEWAL_WINDOW_DAYS);
   const renewals = book.filter((p) => p.expiration_date <= renewalCutoff && p.renewal_status !== "renewed");
@@ -143,7 +147,8 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     if (p.renewal_status === "in_progress" && left <= 30) {
       tasks.push({ kind: "renewal", title: `Finish renewal: ${p.insured_name}`,
         detail: `${p.policy_number} · in progress · expires in ${left} day(s) · $${Math.round(p.premium).toLocaleString("en-US")} expiring`,
-        href: p.href ?? "#renewals", due: p.expiration_date, urgency: left - 30 });
+        href: p.renewal_submission_id ? `/submissions/${p.renewal_submission_id}/renewal` : p.href ?? "#renewals",
+        due: p.expiration_date, urgency: left - 30 });
       continue;
     }
     if (left > 60 || p.renewal_status !== "not_started") continue;

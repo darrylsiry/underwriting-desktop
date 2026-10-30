@@ -71,14 +71,15 @@ export async function loadTimeline(submissionId?: string): Promise<Timeline> {
 /** Human labels (SUB-0001, Q-2026-0001 v3, GL-26-00001, insured name) for the entities in view. */
 async function entityLabels(events: TimelineEvent[]): Promise<Map<string, string>> {
   const ids = (type: string) => [...new Set(events.filter((e) => e.entityType === type).map((e) => e.entityId))];
-  const [subs, insureds, quotes, policies] = await Promise.all([
+  const [subs, insureds, quotes, policies, book] = await Promise.all([
     customerDb.query<{ id: string; label: string }>("SELECT id::text, reference AS label FROM submissions WHERE id::text = ANY($1)", [ids("submission")]),
     customerDb.query<{ id: string; label: string }>("SELECT id::text, name AS label FROM insureds WHERE id::text = ANY($1)", [ids("insured")]),
     policyDb.query<{ id: string; label: string }>("SELECT id::text, quote_number || ' v' || version AS label FROM quotes WHERE id::text = ANY($1)", [ids("quote")]),
     policyDb.query<{ id: string; label: string }>("SELECT id::text, policy_number AS label FROM policies WHERE id::text = ANY($1)", [ids("policy")]),
+    policyDb.query<{ id: string; label: string }>("SELECT id::text, policy_number AS label FROM book_policies WHERE id::text = ANY($1)", [ids("book_policy")]),
   ]);
   const labels = new Map<string, string>();
-  for (const [type, rows] of [["submission", subs], ["insured", insureds], ["quote", quotes], ["policy", policies]] as const) {
+  for (const [type, rows] of [["submission", subs], ["insured", insureds], ["quote", quotes], ["policy", policies], ["book_policy", book]] as const) {
     for (const r of rows.rows) labels.set(`${type}:${r.id}`, r.label);
   }
   return labels;

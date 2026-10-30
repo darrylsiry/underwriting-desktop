@@ -27,6 +27,7 @@ export type QuoteDocument = {
   rateVersion: string;
   subjectivities: string[];
   forms: string[];
+  renewalOf?: string;   // expiring policy number, for a renewal quote
 };
 
 export async function renderQuotePdf(q: QuoteDocument): Promise<Uint8Array> {
@@ -38,7 +39,7 @@ export async function renderQuotePdf(q: QuoteDocument): Promise<Uint8Array> {
   masthead(w, {
     reference: `Quote ${q.quoteNumber}  ·  Version ${q.version}`,
     title: "Commercial General Liability Quotation",
-    subtitle: "Excess & surplus lines  ·  Contractors",
+    subtitle: q.renewalOf ? `Renewal of policy ${q.renewalOf}  ·  Excess & surplus lines` : "Excess & surplus lines  ·  Contractors",
     right: [`Issued ${usDate(q.issuedAt.toISOString().slice(0, 10))}  ·  Valid until ${usDate(q.validUntil)}`, `Underwriter: ${q.issuedBy}`],
   });
   parties(w, "Named insured and producer", [q.insuredName, ...q.insuredAddress], q.producer);

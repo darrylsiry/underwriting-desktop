@@ -1,7 +1,8 @@
 import { audit } from "./audit";
 import { bindBlockers, policyNumbers, subjectivityStatus, type SubjectivityStatus } from "./bind-rules";
-import { policyDb } from "./db";
+import { customerDb, policyDb } from "./db";
 import { renderBinderPdf, renderPolicyPdf, type PolicyDocument } from "./policy-pdf";
+import type { ExpiringPolicy } from "./renewal-compare";
 import type { RatingInputs } from "./worksheet";
 import { money, type Rating } from "./worksheets";
 
@@ -11,11 +12,13 @@ export type PolicyRow = {
   effective_date: string; expiration_date: string; premium: string; policy_fee: string;
   surplus_lines_tax: string; total: string; subjectivities: SubjectivityStatus[];
   bound_by: string; bound_at: Date;
+  renewal_status: "not_started" | "in_progress" | "renewed" | "non_renewed"; renewal_submission_id: string | null;
+  renewed_from: { source: "book" | "desktop"; policy_id: string; policy_number: string } | null;
 };
 
 const COLUMNS = `p.id, p.policy_number, p.binder_number, p.status, p.quote_id, q.quote_number, q.version AS quote_version,
   p.submission_id, p.insured_name, p.effective_date::text, p.expiration_date::text, p.premium, p.policy_fee,
-  p.surplus_lines_tax, p.total, p.subjectivities, p.bound_by, p.bound_at`;
+  p.surplus_lines_tax, p.total, p.subjectivities, p.bound_by, p.bound_at, p.renewal_status, p.renewal_submission_id, p.renewed_from`;
 
 export async function policiesForSubmission(submissionId: string): Promise<PolicyRow[]> {
   const { rows } = await policyDb.query<PolicyRow>(
@@ -66,6 +69,7 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
   let policyId: string;
   let doc: PolicyDocument;
   let q: QuoteForBinding;
+  let renewedFrom: ExpiringPolicy | null = null;
   try {
     await client.query("BEGIN");
     // Lock the quote so two clicks can't bind it twice.
@@ -76,6 +80,8 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
        FROM quotes WHERE id = $1 FOR UPDATE`, [quoteId])).rows[0];
     if (!found) throw new Error("Quote not found");
     q = found;
+    renewedFrom = (await customerDb.query<{ renewal_of: ExpiringPolicy | null }>(
+      "SELECT renewal_of FROM submissions WHERE id = $1 AND kind = 'renewal'", [q.submission_id])).rows[0]?.renewal_of ?? null;
     const blockers = bindBlockers(q, today);
     if (blockers.length) throw new Error(blockers.join("; "));
 
@@ -98,13 +104,18 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
     policyId = (await client.query<{ id: string }>(
       `INSERT INTO policies (policy_number, binder_number, quote_id, submission_id, insured_id, insured_name,
          effective_date, expiration_date, premium, policy_fee, surplus_lines_tax, total, subjectivities,
-         binder_pdf, policy_pdf, bound_by, bound_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
+         binder_pdf, policy_pdf, bound_by, bound_at, renewed_from)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
       [numbers.policy, numbers.binder, q.id, q.submission_id, q.insured_id, q.insured_name, q.effective_date,
        q.expiration_date, q.premium, q.policy_fee, q.surplus_lines_tax, q.total, JSON.stringify(subjectivities),
-       Buffer.from(binderPdf), Buffer.from(policyPdf), actor, boundAt],
+       Buffer.from(binderPdf), Buffer.from(policyPdf), actor, boundAt,
+       renewedFrom ? { source: renewedFrom.source, policy_id: renewedFrom.policy_id, policy_number: renewedFrom.policy_number } : null],
     )).rows[0].id;
     await client.query("UPDATE quotes SET status = 'bound' WHERE id = $1", [q.id]);
+    if (renewedFrom) {  // the expiring policy is now renewed
+      await client.query(
+        `UPDATE ${renewedFrom.source === "book" ? "book_policies" : "policies"} SET renewal_status = 'renewed' WHERE id = $1`, [renewedFrom.policy_id]);
+    }
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -129,7 +140,7 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
     },
     {
       actor, action: "policy.bound", entityType: "submission", entityId: q.submission_id,
-      summary: `${q.submission_ref}: bound as ${doc.policyNumber} (${q.quote_number} v${q.version}, ${money(q.total)})`, correlationId,
+      summary: `${q.submission_ref}: bound as ${doc.policyNumber} (${q.quote_number} v${q.version}, ${money(q.total)})${renewedFrom ? `, renewing ${renewedFrom.policy_number}` : ""}`, correlationId,
     },
   );
   return (await policiesForSubmission(q.submission_id)).find((p) => p.id === policyId)!;

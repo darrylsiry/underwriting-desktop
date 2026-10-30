@@ -1,6 +1,7 @@
 import { audit } from "./audit";
 import { customerDb } from "./db";
 import { clearanceStatus, referralFlags, type Flag } from "./referrals";
+import { rateOn, rateVersionId } from "./rating-api";
 import { RATING_SERVICE_URL } from "./services";
 import type { SubmissionRow } from "./submissions";
 import {
@@ -22,6 +23,7 @@ export type WorksheetRow = {
   referral_clearances: Record<string, Clearance>;
   last_rating: Rating | null;
   rated_inputs_hash: string | null;
+  bridge_rating: Rating | null;   // renewals: the same inputs on the expiring rate version
   updated_by: string;
   updated_at: Date;
 };
@@ -119,16 +121,26 @@ export async function saveAndRate(sub: SubmissionRow, form: Record<string, strin
     }] : []),
   );
 
+  return rateAndStore(sub, inputs, schedule, actor, correlationId);
+}
+
+/** Rate the worksheet as saved (no input changes): used when rate tables moved or from the renewal comparison. */
+export async function rerateWorksheet(sub: SubmissionRow, actor: string): Promise<Rating> {
+  const ws = await openWorksheet(sub, actor);
+  return rateAndStore(sub, ws.rating_inputs, ws.schedule, actor, crypto.randomUUID());
+}
+
+async function rateAndStore(sub: SubmissionRow, inputs: RatingInputs, schedule: ScheduleItem[], actor: string, correlationId: string): Promise<Rating> {
   let rating: Rating;
   try {
     rating = await rate(sub, inputs, schedule, actor);
   } catch (err) {
-    await customerDb.query("UPDATE worksheets SET last_rating = NULL, rated_inputs_hash = NULL WHERE submission_id = $1", [sub.id]);
+    await customerDb.query("UPDATE worksheets SET last_rating = NULL, rated_inputs_hash = NULL, bridge_rating = NULL WHERE submission_id = $1", [sub.id]);
     throw err;
   }
   await customerDb.query(
-    "UPDATE worksheets SET last_rating = $2, rated_inputs_hash = $3 WHERE submission_id = $1",
-    [sub.id, rating, inputsHash(inputs, schedule)],
+    "UPDATE worksheets SET last_rating = $2, rated_inputs_hash = $3, bridge_rating = $4 WHERE submission_id = $1",
+    [sub.id, rating, inputsHash(inputs, schedule), await bridgeRating(sub, inputs, schedule, rating, actor)],
   );
   await audit({
     actor, action: "worksheet.rated", entityType: "submission", entityId: sub.id,
@@ -154,6 +166,22 @@ export async function clearReferral(sub: SubmissionRow, code: string, note: stri
     actor, action: "referral.cleared", entityType: "submission", entityId: sub.id,
     summary: `${sub.reference}: referral "${flag.title}" cleared`, before: flag, after: clearance,
   });
+}
+
+/**
+ * For a renewal: the renewing inputs rated on the *expiring* policy's rate version, so the premium
+ * change can be split into "terms changed" and "rates changed". Null when that version is gone.
+ */
+async function bridgeRating(sub: SubmissionRow, inputs: RatingInputs, schedule: ScheduleItem[], current: Rating, actor: string): Promise<Rating | null> {
+  const exp = sub.kind === "renewal" ? sub.renewal_of : null;
+  if (!exp) return null;
+  if (current.rate_version === exp.rate_version) return current;
+  try {
+    const versionId = await rateVersionId(exp.rate_version);
+    return versionId ? await rateOn(inputs, schedule, versionId, `${sub.reference} on ${exp.rate_version}`, actor) : null;
+  } catch {
+    return null;
+  }
 }
 
 export const money = (v: string | number) => `$${Number(v).toLocaleString("en-US")}`;

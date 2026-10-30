@@ -1,15 +1,25 @@
 """Generate the seeded in-force book: policies each underwriter already wrote in the prior policy system.
 
     python3 scripts/generate-book.py > web/migrations/policy/004_book_policies.sql
+    python3 scripts/generate-book.py --renewal-columns > web/migrations/policy/005_book_rating_inputs.sql
+
+The second form needs the rating service's code and database (run it from services/rating with its
+venv and DATABASE_URL set): it picks rating inputs for each policy and computes the premium with the
+real rating engine on rate version 2026.1, so a renewal can re-rate and compare the expiring policy
+factor by factor. It never changes the first form's output.
 
 The UW Desktop has only written a few policies itself, so without this the home page would have no
 book and no renewals. Rows are deterministic (fixed seed). Dates are relative to the day the
 migration runs (CURRENT_DATE + n), so renewals are always upcoming in a fresh demo. All names are
 fictitious.
 """
+import json
 import random
+import sys
 
 rng = random.Random(20261023)
+RENEWAL_COLUMNS = "--renewal-columns" in sys.argv
+EXPIRING_RATE_VERSION = "2026.1"
 
 UNDERWRITERS = [f"underwriter{i}" for i in range(1, 10)]
 
@@ -48,7 +58,99 @@ def q(s: str) -> str:
     return "'" + s.replace("'", "''") + "'"
 
 
+
+# --- Rating inputs for each policy, priced by the real engine (migration 005) ------------------
+
+LIMITS = ["1000000/2000000", "1000000/2000000", "1000000/2000000", "500000/1000000", "1000000/3000000", "2000000/4000000"]
+DEDUCTIBLES = [0, 0, 1000, 2500, 2500, 5000, 10000, 25000]
+# class -> (residential % choices, subcontracted % choices, max height choices)
+EXPOSURE = {
+    "91342": ([76, 100, 100], [0, 5, 10], [10, 12, 15]),
+    "91560": ([0, 10, 30], [0, 10, 25], [0, 0, 10]),
+    "91583": ([20, 40, 60], [50, 60, 75], [25, 30, 45]),
+    "92215": ([0, 0, 15], [5, 10, 15], [20, 30, 30]),
+    "97050": ([0, 0, 10], [10, 15, 25], [20, 30, 40]),
+    "98304": ([60, 80, 100], [0, 10, 20], [15, 25, 30]),
+    "98482": ([0, 10, 25], [10, 15, 30], [15, 20, 30]),
+    "98677": ([76, 90, 100], [25, 40, 50], [30, 35, 45]),
+}
+SCHEDULE_REASONS = {
+    "safety": (-5, "Written safety program with documented jobsite inspections"),
+    "management": (-5, "Owner-managed with 15+ years in the trade"),
+    "subcontractor_controls": (5, "Certificates of insurance collected inconsistently"),
+    "loss_experience": (5, "Two liability claims in the last three years"),
+}
+
+
+def renewal_columns() -> None:
+    from decimal import Decimal
+
+    from app.engine import RatingInput, rate
+    from app.db import pool
+    from app.repository import load_tables
+
+    rng2 = random.Random(20261030)  # separate stream: the first pass's names and dates stay the same
+    pool.open(wait=True)
+    with pool.connection() as conn:
+        row = conn.execute("SELECT id FROM rate_versions WHERE label = %s", (EXPIRING_RATE_VERSION,)).fetchone()
+    if row is None:
+        sys.exit(f"rate version {EXPIRING_RATE_VERSION} not found in the rating database")
+    tables = load_tables(row["id"])
+
+    updates = []
+    for number, code, states, home, (lo, hi) in policies:
+        res_pct, sub_pct, heights = EXPOSURE[code]
+        subcontracted = rng2.choice(sub_pct)
+        occ, agg = (int(x) for x in rng2.choice(LIMITS).split("/"))
+        inputs = {
+            "class_code": code, "states": states, "home_state": home,
+            "occurrence_limit": occ, "aggregate_limit": agg, "deductible": rng2.choice(DEDUCTIBLES),
+            "residential_pct": rng2.choice(res_pct), "subcontracted_pct": subcontracted,
+            "subcontractor_coi_required": subcontracted == 0 or rng2.random() < 0.85,
+            "max_height_ft": rng2.choice(heights), "experience_mod": 1,
+        }
+        schedule = []
+        if rng2.random() < 0.3:
+            category = rng2.choice(list(SCHEDULE_REASONS))
+            pct, rationale = SCHEDULE_REASONS[category]
+            schedule.append({"category": category, "pct": pct, "rationale": rationale})
+        schedule_mod = Decimal(1) + Decimal(sum(s["pct"] for s in schedule)) / 100
+
+        # Premium scales with receipts (above the class minimum): rate $1M of receipts once, then
+        # size the receipts so the premium lands in the class's range, rounded to $10,000.
+        target = rng2.uniform(lo, hi)
+        probe = rate(tables, RatingInput(gross_receipts=1_000_000, schedule_mod=schedule_mod, **inputs))
+        receipts = max(100_000, round(1_000_000 * target / float(probe.premium) / 10_000) * 10_000)
+        inputs["gross_receipts"] = receipts
+        result = rate(tables, RatingInput(schedule_mod=schedule_mod, **inputs))
+        updates.append(
+            f"UPDATE book_policies SET rating_inputs = {q(json.dumps(inputs))}::jsonb, schedule = {q(json.dumps(schedule))}::jsonb,"
+            f" rate_version = {q(EXPIRING_RATE_VERSION)}, premium = {result.premium} WHERE policy_number = {q(number)};"
+        )
+
+    print(f"""-- Rating inputs for the prior-system book, priced by the rating engine on rate version {EXPIRING_RATE_VERSION}
+-- (generated by scripts/generate-book.py --renewal-columns). A renewal starts from these inputs, so the
+-- expiring premium can be reproduced factor by factor and compared with the renewing terms.
+ALTER TABLE book_policies ADD COLUMN rating_inputs jsonb;
+ALTER TABLE book_policies ADD COLUMN schedule jsonb NOT NULL DEFAULT '[]';
+ALTER TABLE book_policies ADD COLUMN rate_version text;
+ALTER TABLE book_policies ADD COLUMN renewal_submission_id uuid;   -- the renewal submission (customer DB), once started
+
+-- Policies written here can be renewed too; the renewal is a submission of kind 'renewal'.
+ALTER TABLE policies ADD COLUMN renewal_status text NOT NULL DEFAULT 'not_started'
+    CHECK (renewal_status IN ('not_started', 'in_progress', 'renewed', 'non_renewed'));
+ALTER TABLE policies ADD COLUMN renewal_submission_id uuid;
+ALTER TABLE policies ADD COLUMN renewed_from jsonb;                -- {{source, policy_id, policy_number}} when this policy is a renewal
+
+-- A renewal quote carries a memo to the insured explaining what changed.
+ALTER TABLE quotes ADD COLUMN memo_pdf bytea;
+ALTER TABLE quotes ADD COLUMN renewal_summary jsonb;
+""")
+    print("\n".join(updates))
+
+
 rows, used, n = [], set(), 0
+policies = []  # (policy_number, class code, states, home state, premium range) for the second pass
 for uw in UNDERWRITERS:
     # Each underwriter: 10-14 policies; at least 3 expire within 90 days so every desk has renewals to work.
     count = rng.randint(10, 14)
@@ -70,11 +172,15 @@ for uw in UNDERWRITERS:
         open_claims = 0 if claims == 0 else rng.choices([0, 1], weights=[70, 30])[0]
         status = "in_progress" if days <= 45 and rng.random() < 0.35 else "not_started"
         n += 1
+        policies.append((f"GL-25-{70000 + n:05d}", code, states, home, (lo, hi)))
         rows.append(
             f"({q(f'GL-25-{70000 + n:05d}')}, {q(name)}, {q(uw)}, {q(code)}, {q(desc)}, "
             f"ARRAY[{', '.join(q(s) for s in states)}], {q(home)}, {q(rng.choice(PRODUCERS))}, "
             f"CURRENT_DATE + {days - 365}, CURRENT_DATE + {days}, {premium}, {claims}, {incurred}, {open_claims}, {q(status)})"
         )
+if RENEWAL_COLUMNS:
+    renewal_columns()
+    sys.exit(0)
 
 print("""-- In-force book each underwriter already wrote in the prior policy system (seeded, fictitious).
 -- Generated by scripts/generate-book.py; dates are relative to when this migration runs.
