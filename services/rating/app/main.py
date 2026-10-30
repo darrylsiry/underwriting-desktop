@@ -1,3 +1,4 @@
+from datetime import datetime
 import uuid
 from contextlib import asynccontextmanager
 from decimal import Decimal
@@ -37,6 +38,7 @@ class RateRequest(RatingInput):
     rate_version_id: int | None = None
     reference: str | None = None  # caller's ID, e.g. the submission or quote
     requested_by: str = "anonymous"
+    rated_at: datetime | None = None  # when the rating happened, if not now (seeded history)
 
 
 class RateResponse(RatingResult):
@@ -54,7 +56,7 @@ def rate_risk(req: RateRequest):
         raise HTTPException(422, str(e)) from e
     rating_id = repository.log_rating(
         tables.version_id, req.reference, req.requested_by,
-        req.model_dump(mode="json"), result.model_dump(mode="json"),
+        req.model_dump(mode="json", exclude={"rated_at"}), result.model_dump(mode="json"), req.rated_at,
     )
     return RateResponse(rating_id=rating_id, **result.model_dump())
 

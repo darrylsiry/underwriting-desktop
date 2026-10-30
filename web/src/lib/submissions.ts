@@ -78,18 +78,21 @@ export function filesForm(files: File[]): FormData {
   return form;
 }
 
-/** Store an extraction with its documents and audit it. Used by uploads and the streaming inbox route. */
+/**
+ * Store an extraction with its documents and audit it. Used by uploads and the streaming inbox route.
+ * `at` back-dates the receipt (seeded history); it defaults to now.
+ */
 export async function storeSubmission(
-  files: File[], extraction: Extraction, actor: string, inboxFolder: string | null,
+  files: File[], extraction: Extraction, actor: string, inboxFolder: string | null, at: Date | null = null,
 ): Promise<{ id: string; reference: string }> {
   const client = await customerDb.connect();
   try {
     await client.query("BEGIN");
     const { rows } = await client.query<{ id: string; reference: string }>(
-      `INSERT INTO submissions (reference, applicant_name, data, extraction, received_by, inbox_folder)
-       VALUES ('SUB-' || lpad(nextval('submission_reference_seq')::text, 4, '0'), $1, $2, $3, $4, $5)
+      `INSERT INTO submissions (reference, applicant_name, data, extraction, received_by, inbox_folder, received_at)
+       VALUES ('SUB-' || lpad(nextval('submission_reference_seq')::text, 4, '0'), $1, $2, $3, $4, $5, coalesce($6, now()))
        RETURNING id, reference`,
-      [extraction.submission.applicant?.name ?? "", extraction.submission, extraction, actor, inboxFolder],
+      [extraction.submission.applicant?.name ?? "", extraction.submission, extraction, actor, inboxFolder, at],
     );
     const { id, reference } = rows[0];
     for (const f of files) {
@@ -104,6 +107,7 @@ export async function storeSubmission(
       actor, action: "submission.received", entityType: "submission", entityId: id,
       summary: `${reference} received for ${name}${inboxFolder ? ` from inbox folder ${inboxFolder}` : ""}: ${files.length} document(s), ${Object.keys(extraction.fields).length} fields extracted`,
       after: { inbox_folder: inboxFolder, documents: extraction.documents, missing_for_rating: extraction.missing_for_rating, claude: extraction.claude },
+      occurredAt: at ?? undefined,
     });
     return { id, reference };
   } catch (err) {
@@ -190,8 +194,8 @@ export function missingForRating(data: SubmissionData): string[] {
   return REQUIRED_FOR_RATING.filter((p) => isEmpty(getPath(data, p)));
 }
 
-/** Accept the intake: link (or create) the insured and lock the extracted data for underwriting. */
-export async function acceptSubmission(id: string, actor: string): Promise<void> {
+/** Accept the intake: link (or create) the insured and lock the extracted data for underwriting. `at` back-dates it (seeded history). */
+export async function acceptSubmission(id: string, actor: string, at: Date | null = null): Promise<void> {
   const r = await withReviewLock(id, async (client, sub) => {
     const missing = missingForRating(sub.data);
     if (missing.length) throw new Error(`Fill in before accepting: ${missing.join(", ")}`);
@@ -205,12 +209,12 @@ export async function acceptSubmission(id: string, actor: string): Promise<void>
       ? (await client.query<{ id: string }>("SELECT id FROM insureds WHERE fein = $1", [fein])).rows[0]
       : undefined;
     const insuredId = existing?.id ?? (await client.query<{ id: string }>(
-      "INSERT INTO insureds (name, fein, state) VALUES ($1, $2, $3) RETURNING id", [name, fein, state],
+      "INSERT INTO insureds (name, fein, state, created_at) VALUES ($1, $2, $3, coalesce($4, now())) RETURNING id", [name, fein, state, at],
     )).rows[0].id;
     await client.query(
-      `UPDATE submissions SET status = 'accepted', insured_id = $2, reviewed_by = $3, reviewed_at = now()
+      `UPDATE submissions SET status = 'accepted', insured_id = $2, reviewed_by = $3, reviewed_at = coalesce($4, now())
        WHERE id = $1 AND status = 'needs_review'`,
-      [id, insuredId, actor],
+      [id, insuredId, actor, at],
     );
     return { sub, insuredId, created: !existing, name, fein, state };
   });
@@ -220,11 +224,12 @@ export async function acceptSubmission(id: string, actor: string): Promise<void>
     ...(r.created ? [{
       actor, action: "insured.created", entityType: "insured" as const, entityId: r.insuredId,
       summary: `Insured ${r.name} created from ${r.sub.reference}`, after: { name: r.name, fein: r.fein, state: r.state }, correlationId,
+      occurredAt: at ?? undefined,
     }] : []),
     {
       actor, action: "submission.accepted", entityType: "submission", entityId: id,
       summary: `${r.sub.reference} intake accepted (${r.sub.corrected_fields.length} field(s) corrected)`,
-      after: { insured_id: r.insuredId, corrected_fields: r.sub.corrected_fields }, correlationId,
+      after: { insured_id: r.insuredId, corrected_fields: r.sub.corrected_fields }, correlationId, occurredAt: at ?? undefined,
     },
   );
 }

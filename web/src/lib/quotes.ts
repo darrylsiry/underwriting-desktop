@@ -56,8 +56,9 @@ export type QuoteForm = { effective_date: string; expiration_date: string; subje
 /**
  * Issue a quote from a ready-to-quote worksheet. Rates again through the rating API,
  * pinned to the rate version the underwriter saw, so the quote records its own rating_id.
+ * `at` back-dates the issue (seeded history); it defaults to now.
  */
-export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: string): Promise<QuoteRow> {
+export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: string, at: Date | null = null): Promise<QuoteRow> {
   const ws = await getWorksheet(sub.id);
   if (!ws) throw new Error("Open the workbench and rate first");
   const active = await activeRateVersion();
@@ -75,8 +76,9 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
 
   const previous = (await quotesForSubmission(sub.id))[0];
   if (previous?.status === "bound") throw new Error(`${previous.quote_number} is already bound; changes now need a policy endorsement`);
+  const issuedAt = at ?? new Date();
   const quoteNumber = previous?.quote_number ?? (await policyDb.query<{ n: string }>(
-    "SELECT 'Q-' || to_char(now(), 'YYYY') || '-' || lpad(nextval('quote_number_seq')::text, 4, '0') AS n")).rows[0].n;
+    "SELECT 'Q-' || $1 || '-' || lpad(nextval('quote_number_seq')::text, 4, '0') AS n", [String(issuedAt.getUTCFullYear())])).rows[0].n;
   const version = (previous?.version ?? 0) + 1;
 
   const res = await fetch(`${RATING_SERVICE_URL}/rate`, {
@@ -84,7 +86,7 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       ...ws.rating_inputs, schedule_mod: scheduleMod(ws.schedule), rate_version_id: seen.rate_version_id,
-      reference: `${quoteNumber} v${version}`, requested_by: actor,
+      reference: `${quoteNumber} v${version}`, requested_by: actor, rated_at: at?.toISOString(),
     }),
     signal: AbortSignal.timeout(10_000),
   });
@@ -112,7 +114,6 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
     forms: formsFor(inputs),
   };
   const subjectivities = parseSubjectivities(form.subjectivities);
-  const issuedAt = new Date();
   const validUntil = addDays(issuedAt.toISOString().slice(0, 10), QUOTE_VALID_DAYS);
 
   const pdf = await renderQuotePdf({
@@ -174,17 +175,17 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
   await audit(
     ...(previous ? [{
       actor, action: "quote.superseded", entityType: "quote" as const, entityId: previous.id,
-      summary: `${quoteNumber} v${previous.version} superseded by v${version}`, correlationId,
+      summary: `${quoteNumber} v${previous.version} superseded by v${version}`, correlationId, occurredAt: at ?? undefined,
     }] : []),
     {
       actor, action: "quote.issued", entityType: "quote", entityId: quote.id,
       summary: `${quoteNumber} v${version} issued to ${sub.applicant_name}: ${money(rating.total)} total (${sub.reference})${exp ? `, renewal of ${exp.policy_number}${comparison ? `, premium ${changeSummary(comparison.bridge)}` : ""}` : ""}`,
       after: { submission_id: sub.id, rating_id: rating.rating_id, rate_version: rating.rate_version, premium: rating.premium,
-        total: rating.total, effective_date: effective, subjectivities }, correlationId,
+        total: rating.total, effective_date: effective, subjectivities }, correlationId, occurredAt: at ?? undefined,
     },
     {
       actor, action: "quote.issued", entityType: "submission", entityId: sub.id,
-      summary: `${sub.reference}: quote ${quoteNumber} v${version} issued, ${money(rating.total)} total`, correlationId,
+      summary: `${sub.reference}: quote ${quoteNumber} v${version} issued, ${money(rating.total)} total`, correlationId, occurredAt: at ?? undefined,
     },
   );
   return quote;

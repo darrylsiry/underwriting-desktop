@@ -7,5 +7,8 @@ export async function register() {
     startKeepWarm(wakeServices, keepWarmInterval(process.env));
     const { migrate } = await import("./lib/migrate");
     await migrate();
+    // SEED_HISTORY=<n>: a year of bound policies through the real pipeline, once, in the background.
+    const { seedHistoryIfAsked } = await import("./lib/seed-history");
+    seedHistoryIfAsked(process.env);
   }
 }

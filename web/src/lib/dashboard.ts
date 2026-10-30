@@ -71,7 +71,7 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
       `SELECT id, quote_number, version, status, submission_id, insured_name, valid_until::text, total::float8 AS total
        FROM quotes WHERE submission_id = ANY($1)`, [mine]),
     policyDb.query<{ occurred_at: Date; action: string; summary: string }>(
-      "SELECT occurred_at, action, summary FROM audit_events WHERE actor = $1 ORDER BY id DESC LIMIT 8", [user]),
+      "SELECT occurred_at, action, summary FROM audit_events WHERE actor = $1 ORDER BY occurred_at DESC, id DESC LIMIT 8", [user]),
     listInbox(),
     activeRateVersion(),
   ]);

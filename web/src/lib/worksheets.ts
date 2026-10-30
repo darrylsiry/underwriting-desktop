@@ -33,20 +33,21 @@ export async function getWorksheet(submissionId: string): Promise<WorksheetRow |
   return rows[0] ?? null;
 }
 
-/** The worksheet for an accepted submission, created from the reviewed data on first open. */
-export async function openWorksheet(sub: SubmissionRow, actor: string): Promise<WorksheetRow> {
+/** The worksheet for an accepted submission, created from the reviewed data on first open. `at` back-dates it (seeded history). */
+export async function openWorksheet(sub: SubmissionRow, actor: string, at: Date | null = null): Promise<WorksheetRow> {
   if (sub.status !== "accepted") throw new Error(`${sub.reference} needs its intake accepted first`);
   const existing = await getWorksheet(sub.id);
   if (existing) return existing;
   const inputs = inputsFromSubmission(sub.data);
   const { rowCount } = await customerDb.query(
-    "INSERT INTO worksheets (submission_id, rating_inputs, updated_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
-    [sub.id, inputs, actor],
+    `INSERT INTO worksheets (submission_id, rating_inputs, updated_by, created_at, updated_at)
+     VALUES ($1, $2, $3, coalesce($4, now()), coalesce($4, now())) ON CONFLICT DO NOTHING`,
+    [sub.id, inputs, actor, at],
   );
   if (rowCount) {
     await audit({
       actor, action: "worksheet.opened", entityType: "submission", entityId: sub.id,
-      summary: `${sub.reference}: underwriting worksheet opened`, after: inputs,
+      summary: `${sub.reference}: underwriting worksheet opened`, after: inputs, occurredAt: at ?? undefined,
     });
   }
   return (await getWorksheet(sub.id))!;
@@ -83,11 +84,12 @@ export function readiness(sub: SubmissionRow, ws: WorksheetRow, activeVersion: s
   return { flags, openReferrals: open, inputsCurrent, staleRates, rated, ready: rated && open.length === 0 };
 }
 
-async function rate(sub: SubmissionRow, inputs: RatingInputs, schedule: ScheduleItem[], actor: string): Promise<Rating> {
+async function rate(sub: SubmissionRow, inputs: RatingInputs, schedule: ScheduleItem[], actor: string, at: Date | null = null): Promise<Rating> {
   const res = await fetch(`${RATING_SERVICE_URL}/rate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...inputs, schedule_mod: scheduleMod(schedule), reference: sub.reference, requested_by: actor }),
+    // rated_at: the rating service dates its log entry then instead of now (seeded history)
+    body: JSON.stringify({ ...inputs, schedule_mod: scheduleMod(schedule), reference: sub.reference, requested_by: actor, rated_at: at?.toISOString() }),
     signal: AbortSignal.timeout(10_000),
   });
   const body = await res.json();
@@ -95,9 +97,9 @@ async function rate(sub: SubmissionRow, inputs: RatingInputs, schedule: Schedule
   return body as Rating;
 }
 
-/** Save inputs and schedule (auditing each change), then rate. Inputs stay saved even if rating fails. */
-export async function saveAndRate(sub: SubmissionRow, form: Record<string, string>, actor: string): Promise<Rating> {
-  const ws = await openWorksheet(sub, actor);
+/** Save inputs and schedule (auditing each change), then rate. Inputs stay saved even if rating fails. `at` back-dates it (seeded history). */
+export async function saveAndRate(sub: SubmissionRow, form: Record<string, string>, actor: string, at: Date | null = null): Promise<Rating> {
+  const ws = await openWorksheet(sub, actor, at);
   const inputs = parseInputs(form);
   const schedule = parseSchedule(form);
   const correlationId = crypto.randomUUID();
@@ -105,23 +107,23 @@ export async function saveAndRate(sub: SubmissionRow, form: Record<string, strin
   const changed = INPUT_DEFS.filter((d) => JSON.stringify(ws.rating_inputs[d.key]) !== JSON.stringify(inputs[d.key]));
   const scheduleChanged = scheduleKey(ws.schedule) !== scheduleKey(schedule);
   await customerDb.query(
-    "UPDATE worksheets SET rating_inputs = $2, schedule = $3, updated_by = $4, updated_at = now() WHERE submission_id = $1",
-    [sub.id, inputs, JSON.stringify(schedule), actor],
+    "UPDATE worksheets SET rating_inputs = $2, schedule = $3, updated_by = $4, updated_at = coalesce($5, now()) WHERE submission_id = $1",
+    [sub.id, inputs, JSON.stringify(schedule), actor, at],
   );
   await audit(
     ...changed.map((d) => ({
       actor, action: "worksheet.input_changed", entityType: "submission" as const, entityId: sub.id,
       summary: `${sub.reference}: ${d.label} changed`,
-      before: { [d.key]: ws.rating_inputs[d.key] }, after: { [d.key]: inputs[d.key] }, correlationId,
+      before: { [d.key]: ws.rating_inputs[d.key] }, after: { [d.key]: inputs[d.key] }, correlationId, occurredAt: at ?? undefined,
     })),
     ...(scheduleChanged ? [{
       actor, action: "worksheet.schedule_changed", entityType: "submission" as const, entityId: sub.id,
       summary: `${sub.reference}: schedule ${formatPct(scheduleTotal(ws.schedule))} → ${formatPct(scheduleTotal(schedule))}`,
-      before: ws.schedule, after: schedule, correlationId,
+      before: ws.schedule, after: schedule, correlationId, occurredAt: at ?? undefined,
     }] : []),
   );
 
-  return rateAndStore(sub, inputs, schedule, actor, correlationId);
+  return rateAndStore(sub, inputs, schedule, actor, correlationId, at);
 }
 
 /** Rate the worksheet as saved (no input changes): used when rate tables moved or from the renewal comparison. */
@@ -130,10 +132,10 @@ export async function rerateWorksheet(sub: SubmissionRow, actor: string): Promis
   return rateAndStore(sub, ws.rating_inputs, ws.schedule, actor, crypto.randomUUID());
 }
 
-async function rateAndStore(sub: SubmissionRow, inputs: RatingInputs, schedule: ScheduleItem[], actor: string, correlationId: string): Promise<Rating> {
+async function rateAndStore(sub: SubmissionRow, inputs: RatingInputs, schedule: ScheduleItem[], actor: string, correlationId: string, at: Date | null = null): Promise<Rating> {
   let rating: Rating;
   try {
-    rating = await rate(sub, inputs, schedule, actor);
+    rating = await rate(sub, inputs, schedule, actor, at);
   } catch (err) {
     await customerDb.query("UPDATE worksheets SET last_rating = NULL, rated_inputs_hash = NULL, bridge_rating = NULL WHERE submission_id = $1", [sub.id]);
     throw err;
@@ -146,25 +148,25 @@ async function rateAndStore(sub: SubmissionRow, inputs: RatingInputs, schedule: 
     actor, action: "worksheet.rated", entityType: "submission", entityId: sub.id,
     summary: `${sub.reference}: rated ${money(rating.premium)} premium, ${money(rating.total)} total on rates ${rating.rate_version}`,
     after: { rating_id: rating.rating_id, premium: rating.premium, total: rating.total, schedule_mod: scheduleMod(schedule) },
-    correlationId,
+    correlationId, occurredAt: at ?? undefined,
   });
   return rating;
 }
 
-/** Record why a referral is acceptable. Only flags that currently apply can be cleared. */
-export async function clearReferral(sub: SubmissionRow, code: string, note: string, actor: string): Promise<void> {
-  const ws = await openWorksheet(sub, actor);
+/** Record why a referral is acceptable. Only flags that currently apply can be cleared. `at` back-dates it (seeded history). */
+export async function clearReferral(sub: SubmissionRow, code: string, note: string, actor: string, at: Date | null = null): Promise<void> {
+  const ws = await openWorksheet(sub, actor, at);
   const flag = flagsFor(sub, ws).find((f) => f.code === code);
   if (!flag) throw new Error(`No ${code} flag applies to ${sub.reference}`);
   if (note.trim().length < 10) throw new Error("Write a note explaining why this is acceptable");
-  const clearance: Clearance = { by: actor, at: new Date().toISOString(), note: note.trim(), detail: flag.detail };
+  const clearance: Clearance = { by: actor, at: (at ?? new Date()).toISOString(), note: note.trim(), detail: flag.detail };
   await customerDb.query(
     "UPDATE worksheets SET referral_clearances = referral_clearances || jsonb_build_object($2::text, $3::jsonb) WHERE submission_id = $1",
     [sub.id, code, clearance],
   );
   await audit({
     actor, action: "referral.cleared", entityType: "submission", entityId: sub.id,
-    summary: `${sub.reference}: referral "${flag.title}" cleared`, before: flag, after: clearance,
+    summary: `${sub.reference}: referral "${flag.title}" cleared`, before: flag, after: clearance, occurredAt: at ?? undefined,
   });
 }
 

@@ -63,12 +63,13 @@ type QuoteForBinding = {
 
 /**
  * Bind an issued quote on its quoted terms (no re-rating). Subjectivities not marked received
- * stay open on the binder with a due date.
+ * stay open on the binder with a due date. `at` back-dates the bind (seeded history): the policy,
+ * its ledger journal and its audit events all carry that time.
  */
-export async function bindQuote(quoteId: string, received: Set<number>, actor: string): Promise<PolicyRow> {
-  const today = new Date().toISOString().slice(0, 10);
+export async function bindQuote(quoteId: string, received: Set<number>, actor: string, at: Date | null = null): Promise<PolicyRow> {
+  const boundAt = at ?? new Date();
+  const today = boundAt.toISOString().slice(0, 10);
   const correlationId = crypto.randomUUID();   // shared by the bind's audit events and its ledger journal
-  const boundAt = new Date();
   const client = await policyDb.connect();
   let policyId: string;
   let journal: { journal_no: string; lines: { account_code: string; debit: number; credit: number }[] };
@@ -140,22 +141,22 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
     {
       actor, action: "quote.bound", entityType: "quote", entityId: q.id,
       summary: `${q.quote_number} v${q.version} bound as ${doc.policyNumber}`, before: { status: "issued" }, after: { status: "bound" },
-      correlationId,
+      correlationId, occurredAt: at ?? undefined,
     },
     {
       actor, action: "policy.bound", entityType: "policy", entityId: policyId,
       summary: `${doc.policyNumber} bound for ${q.insured_name}: ${money(q.total)}, effective ${q.effective_date}`
         + (open.length ? `, ${open.length} open subjectivit${open.length === 1 ? "y" : "ies"}` : ""),
-      after: { quote_id: q.id, binder_number: doc.binderNumber, total: q.total, subjectivities: doc.subjectivities }, correlationId,
+      after: { quote_id: q.id, binder_number: doc.binderNumber, total: q.total, subjectivities: doc.subjectivities }, correlationId, occurredAt: at ?? undefined,
     },
     {
       actor, action: "policy.bound", entityType: "submission", entityId: q.submission_id,
-      summary: `${q.submission_ref}: bound as ${doc.policyNumber} (${q.quote_number} v${q.version}, ${money(q.total)})${renewedFrom ? `, renewing ${renewedFrom.policy_number}` : ""}`, correlationId,
+      summary: `${q.submission_ref}: bound as ${doc.policyNumber} (${q.quote_number} v${q.version}, ${money(q.total)})${renewedFrom ? `, renewing ${renewedFrom.policy_number}` : ""}`, correlationId, occurredAt: at ?? undefined,
     },
     {
       actor, action: "gl.posted", entityType: "policy", entityId: policyId,
       summary: `${journal.journal_no}: ${money(q.total)} booked to the premium sub-ledger for ${doc.policyNumber} (${renewedFrom ? "renewal" : "new business"}, period ${accountingPeriod(boundAt)})`,
-      after: { journal_no: journal.journal_no, lines: journal.lines.map((l) => ({ account: l.account_code, debit: l.debit, credit: l.credit })) }, correlationId,
+      after: { journal_no: journal.journal_no, lines: journal.lines.map((l) => ({ account: l.account_code, debit: l.debit, credit: l.credit })) }, correlationId, occurredAt: at ?? undefined,
     },
   );
   return (await policiesForSubmission(q.submission_id)).find((p) => p.id === policyId)!;

@@ -36,12 +36,13 @@ def load_tables(version_id: int | None = None) -> RateTables:
     return RateTables(version["id"], version["label"], classes, factors, parameters)
 
 
-def log_rating(version_id: int, reference: str | None, requested_by: str, request: dict, result: dict) -> str:
+def log_rating(version_id: int, reference: str | None, requested_by: str, request: dict, result: dict, rated_at=None) -> str:
+    """Record a rating call. `rated_at` back-dates the entry (seeded history); it defaults to now."""
     with pool.connection() as conn:
         row = conn.execute(
-            "INSERT INTO rating_log (version_id, reference, requested_by, request, result)"
-            " VALUES (%s, %s, %s, %s, %s) RETURNING id",
-            (version_id, reference, requested_by, Jsonb(request), Jsonb(result)),
+            "INSERT INTO rating_log (version_id, reference, requested_by, request, result, created_at)"
+            " VALUES (%s, %s, %s, %s, %s, coalesce(%s, now())) RETURNING id",
+            (version_id, reference, requested_by, Jsonb(request), Jsonb(result), rated_at),
         ).fetchone()
     return str(row["id"])
 

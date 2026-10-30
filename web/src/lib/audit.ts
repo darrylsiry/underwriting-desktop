@@ -9,6 +9,7 @@ export type AuditEvent = {
   before?: unknown;
   after?: unknown;
   correlationId?: string;
+  occurredAt?: Date;   // when it happened, if not now (seeded history)
 };
 
 /** Append one row to policy.audit_events. Events from one user action share a correlation ID. */
@@ -16,12 +17,12 @@ export async function audit(...events: AuditEvent[]): Promise<void> {
   const correlationId = events[0]?.correlationId ?? crypto.randomUUID();
   for (const e of events) {
     await policyDb.query(
-      `INSERT INTO audit_events (actor, action, entity_type, entity_id, summary, before, after, correlation_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      `INSERT INTO audit_events (actor, action, entity_type, entity_id, summary, before, after, correlation_id, occurred_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, coalesce($9, now()))`,
       [e.actor, e.action, e.entityType, e.entityId, e.summary,
        e.before === undefined ? null : JSON.stringify(e.before),
        e.after === undefined ? null : JSON.stringify(e.after),
-       e.correlationId ?? correlationId],
+       e.correlationId ?? correlationId, e.occurredAt ?? null],
     );
   }
 }

@@ -20,6 +20,14 @@ def test_rate_and_log(client):
     assert logged["reference"] == "sub-001"
 
 
+def test_rated_at_backdates_the_log_entry(client):
+    res = client.post("/rate", json=ELECTRICAL | {"reference": "SUB-0099", "rated_at": "2026-03-30T18:13:00Z"})
+    assert res.status_code == 200, res.text
+    logged = client.get(f"/ratings/{res.json()['rating_id']}").json()
+    assert logged["created_at"].startswith("2026-03-30T18:13:00")
+    assert "rated_at" not in logged["request"]
+
+
 def test_unknown_class_is_422(client):
     assert client.post("/rate", json=ELECTRICAL | {"class_code": "00000"}).status_code == 422
 
