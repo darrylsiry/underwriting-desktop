@@ -56,7 +56,7 @@ export default async function Home() {
       <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-label="Book summary">
         <Tile label="In-force premium" value={usdShort(k.inForcePremium)} sub={`${k.policies} policies in force`} />
         <Tile label="Renewals · 90 days" value={String(k.renewalsDue90)} sub={`${usdShort(k.renewalPremium90)} expiring premium`} />
-        <Tile label="Book loss ratio" value={pct(k.lossRatio)} sub={`${k.openClaims} open claim${k.openClaims === 1 ? "" : "s"} · prior-system book`} />
+        <Tile label="Book loss ratio (incurred)" value={pct(k.lossRatio)} sub={`${k.openClaims} open claim${k.openClaims === 1 ? "" : "s"} · prior-system book`} />
         <Tile label="New business" value={usdShort(k.newBusinessPremium)} sub={`${k.newBusinessPolicies} bound in the UW Desktop`} />
         <Tile label="Quotes out" value={String(k.quotesOut)} sub={k.hitRatio === null ? "hit ratio: no decided quotes yet" : `hit ratio ${pct(k.hitRatio)} of decided quotes`} />
       </section>
