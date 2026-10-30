@@ -38,3 +38,12 @@ export async function auditTrail(entityType: string, entityId: string): Promise<
   );
   return rows;
 }
+
+export type AuditEventRow = AuditRow & { entity_type: string; entity_id: string };
+
+/** Every event of one user action (they share a correlation ID), oldest first. */
+export async function auditByCorrelation(correlationId: string): Promise<AuditEventRow[]> {
+  const { rows } = await policyDb.query<AuditEventRow>(
+    "SELECT * FROM audit_events WHERE correlation_id = $1 ORDER BY id", [correlationId]);
+  return rows;
+}

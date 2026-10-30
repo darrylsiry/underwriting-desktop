@@ -23,7 +23,7 @@ test("json export carries batch, filter, totals and nested journals with numbers
   });
   const doc = JSON.parse(text);
   assert.equal(doc.batch, "GLX-20261030-003");
-  assert.deepEqual(doc.filter, { posting_date_from: "2026-10-01", posting_date_to: "2026-10-31", transaction_type: null });
+  assert.deepEqual(doc.filter, { period: null, posting_date_from: "2026-10-01", posting_date_to: "2026-10-31", transaction_type: null, export_batch: null });
   assert.equal(doc.totals.lines, 4);
   assert.equal(doc.totals.written_premium, 37481);
   const j = doc.journals[0];

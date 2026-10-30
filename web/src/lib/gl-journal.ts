@@ -60,6 +60,9 @@ export function accountingPeriod(at: Date, timeZone = GL_TIME_ZONE): string {
   return glDate(at, timeZone).slice(0, 7);
 }
 
+export const EXPORT_FORMATS = ["xlsx", "csv", "json"] as const;
+export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
 export const PERIOD_PRESETS = ["this_month", "last_month", "this_quarter", "last_quarter", "ytd", "last_12", "all", "custom"] as const;
 export type PeriodPreset = (typeof PERIOD_PRESETS)[number];
 export const PRESET_LABEL: Record<PeriodPreset, string> = {

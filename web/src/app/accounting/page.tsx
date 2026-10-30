@@ -30,11 +30,23 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
 
   return (
     <main className="mx-auto max-w-7xl p-8">
-      <h1 className="text-2xl font-semibold">Accounting</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Premium sub-ledger: what each underwriting action booked to the general ledger, by accounting month. Premium is booked in full
-        when a policy is bound; cash collection and earning are not tracked here. Books are kept in {GL_TIME_ZONE.replace("_", " ")} time.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Accounting</h1>
+          <p className="mt-1 max-w-3xl text-sm text-slate-500">
+            Premium sub-ledger: what each underwriting action booked to the general ledger, by accounting month. Premium is booked in full
+            when a policy is bound; cash collection and earning are not tracked here. Books are kept in {GL_TIME_ZONE.replace("_", " ")} time.
+          </p>
+        </div>
+        <div className="flex gap-2 text-sm">
+          <Link href="/accounting/api" title="REST API for other systems: documentation, OpenAPI spec and try-it links" className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-center shadow-sm hover:bg-slate-50">
+            <span className="block font-semibold">API</span><span className="block text-[11px] text-slate-500">for other systems</span>
+          </Link>
+          <Link href="/accounting/mcp" title="MCP server for agents: the spec, how to connect, and a live session" className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-center shadow-sm hover:bg-slate-50">
+            <span className="block font-semibold">MCP</span><span className="block text-[11px] text-slate-500">for agents</span>
+          </Link>
+        </div>
+      </div>
 
       {p.msg && <p className="mt-4 rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{p.msg}</p>}
       {p.error && <p className="mt-4 rounded bg-rose-50 px-3 py-2 text-sm text-rose-700">{p.error}</p>}
@@ -88,6 +100,7 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
           <span className="text-xs text-slate-500">
             Downloads the {rows.length} line{rows.length === 1 ? "" : "s"} shown: Excel and CSV as one row per journal line, JSON as journals with their lines, each with the policy details and a link to the underwriting action.
             Lines not pushed before are marked with this batch ({pushed} of {rows.length} already pushed).
+            Other systems can pull the same data from the <Link href="/accounting/api" className="text-indigo-600 hover:underline">API</Link>; agents through the <Link href="/accounting/mcp" className="text-indigo-600 hover:underline">MCP server</Link>.
           </span>
         </form>
       </Section>

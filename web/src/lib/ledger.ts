@@ -4,7 +4,7 @@ import { toCsv } from "./csv";
 import { policyDb } from "./db";
 import {
   GL_TIME_ZONE, TRANSACTION_LABEL, accountingPeriod, bindJournal, glDate, isBalanced,
-  type JournalLine, type PolicyAmounts, type TransactionType,
+  type ExportFormat, type JournalLine, type PolicyAmounts, type TransactionType,
 } from "./gl-journal";
 import { ledgerJson } from "./gl-export-json";
 import { toXlsx } from "./xlsx";
@@ -22,12 +22,13 @@ export type Posting = {
 
 export type LedgerFilter = { from: string | null; to: string | null; type: TransactionType | ""; batch: string };
 
+const POSTING_COLUMNS = `id, journal_no, line_no, posted_at, accounting_period, transaction_type, account_code, account_name, debit, credit,
+  description, policy_id, policy_number, insured_name, effective_date::text, expiration_date::text, quote_ref,
+  submission_id, submission_ref, underwriter, producer, source_action, correlation_id, export_batch, exported_at, exported_by`;
+
 export async function listPostings(f: LedgerFilter): Promise<Posting[]> {
   const { rows } = await policyDb.query<Posting>(
-    `SELECT id, journal_no, line_no, posted_at, accounting_period, transaction_type, account_code, account_name, debit, credit,
-            description, policy_id, policy_number, insured_name, effective_date::text, expiration_date::text, quote_ref,
-            submission_id, submission_ref, underwriter, producer, source_action, correlation_id, export_batch, exported_at, exported_by
-     FROM gl_postings
+    `SELECT ${POSTING_COLUMNS} FROM gl_postings
      WHERE ($1::date IS NULL OR (posted_at AT TIME ZONE $5)::date >= $1)
        AND ($2::date IS NULL OR (posted_at AT TIME ZONE $5)::date <= $2)
        AND ($3::text = '' OR transaction_type = $3)
@@ -35,6 +36,12 @@ export async function listPostings(f: LedgerFilter): Promise<Posting[]> {
      ORDER BY posted_at, journal_no, line_no`,
     [f.from, f.to, f.type, f.batch, GL_TIME_ZONE]);
   return rows;
+}
+
+/** One journal with its lines, or null when no such journal number was booked. */
+export async function getJournal(journalNo: string): Promise<Journal | null> {
+  const { rows } = await policyDb.query<Posting>(`SELECT ${POSTING_COLUMNS} FROM gl_postings WHERE journal_no = $1 ORDER BY line_no`, [journalNo]);
+  return groupJournals(rows)[0] ?? null;
 }
 
 /** One booked action: its policy details and its balanced lines. */
@@ -110,47 +117,102 @@ export async function postPolicyBound(client: PoolClient, p: BindPosting): Promi
   return { journal_no, lines };
 }
 
-export type ExportFormat = "csv" | "xlsx" | "json";
-export const EXPORT_FORMATS: ExportFormat[] = ["xlsx", "csv", "json"];
+export { EXPORT_FORMATS, type ExportFormat } from "./gl-journal";
+
+export type PeriodRow = {
+  period: string; journals: number; lines: number; debit: string; credit: string; premium: string; fee: string; tax: string; receivable: string;
+  pushed_lines: number; first_posted_at: Date; last_posted_at: Date;
+};
+
+/** Every accounting month with bookings, newest first, with its totals. */
+export async function listPeriods(): Promise<PeriodRow[]> {
+  const { rows } = await policyDb.query<PeriodRow>(
+    `SELECT accounting_period AS period, count(DISTINCT journal_no)::int AS journals, count(*)::int AS lines,
+            sum(debit)::text AS debit, sum(credit)::text AS credit,
+            sum(CASE WHEN account_code = '4100' THEN credit - debit ELSE 0 END)::text AS premium,
+            sum(CASE WHEN account_code = '4200' THEN credit - debit ELSE 0 END)::text AS fee,
+            sum(CASE WHEN account_code = '2300' THEN credit - debit ELSE 0 END)::text AS tax,
+            sum(CASE WHEN account_code = '1200' THEN debit - credit ELSE 0 END)::text AS receivable,
+            count(*) FILTER (WHERE export_batch IS NOT NULL)::int AS pushed_lines,
+            min(posted_at) AS first_posted_at, max(posted_at) AS last_posted_at
+     FROM gl_postings GROUP BY accounting_period ORDER BY accounting_period DESC`);
+  return rows;
+}
+
+export type BatchRow = {
+  batch: string; exported_at: Date; exported_by: string; format: string | null; from: string | null; to: string | null; type: string | null;
+  lines_in_file: number | null; journals_in_file: number | null; lines_stamped: number; journals_stamped: number; debit: string | null; credit: string | null;
+};
+
+/** Every push to the GL, newest first: what the file held and which lines it was the first to carry. */
+export async function listBatches(): Promise<BatchRow[]> {
+  const { rows } = await policyDb.query<BatchRow>(
+    `SELECT a.entity_id AS batch, a.occurred_at AS exported_at, a.actor AS exported_by, a.after->>'format' AS format,
+            a.after->>'from' AS "from", a.after->>'to' AS "to", a.after->>'type' AS type,
+            (a.after->>'lines')::int AS lines_in_file, (a.after->>'journals')::int AS journals_in_file,
+            coalesce(p.lines, 0) AS lines_stamped, coalesce(p.journals, 0) AS journals_stamped, p.debit::text AS debit, p.credit::text AS credit
+     FROM audit_events a
+     LEFT JOIN (SELECT export_batch, count(*)::int AS lines, count(DISTINCT journal_no)::int AS journals, sum(debit) AS debit, sum(credit) AS credit
+                FROM gl_postings WHERE export_batch IS NOT NULL GROUP BY export_batch) p ON p.export_batch = a.entity_id
+     WHERE a.action = 'gl.exported' AND a.entity_type = 'ledger'
+     ORDER BY a.id DESC`);
+  return rows;
+}
 
 const EXPORT_HEADER = [
   "Journal", "Line", "Posting date", "Posted at (UTC)", "Accounting period", "Transaction type", "Account code", "Account name",
   "Debit", "Credit", "Description", "Policy number", "Insured", "Effective date", "Expiration date", "Underwriter", "Producer",
   "Quote", "Submission", "Source action", "UW action (audit)", "Policy", "Export batch",
 ];
+const EXPORT_WIDTHS = [11, 5, 12, 22, 10, 13, 9, 34, 12, 12, 60, 13, 34, 12, 12, 13, 28, 16, 10, 13, 60, 50, 20];
+
+export type LedgerFile = { filename: string; contentType: string; body: Uint8Array };
+
+export type RenderMeta = {
+  /** The push's batch, which lines not pushed before take; null renders a read, where they stay blank. */
+  batch: string | null; actor: string; origin: string; period?: string | null; generatedAt?: Date;
+};
+
+/** The filtered lines as a file in `format`. Touches no batch stamps: the push does that before calling this. */
+export function renderLedger(rows: Posting[], f: LedgerFilter, format: ExportFormat, meta: RenderMeta): LedgerFile {
+  const data = rows.map((r) => [
+    r.journal_no, r.line_no, glDate(r.posted_at), r.posted_at.toISOString(), r.accounting_period, TRANSACTION_LABEL[r.transaction_type],
+    r.account_code, r.account_name, Number(r.debit), Number(r.credit), r.description, r.policy_number, r.insured_name,
+    r.effective_date, r.expiration_date, r.underwriter, r.producer, r.quote_ref, r.submission_ref, r.source_action,
+    `${meta.origin}/audit?submission=${r.submission_id}&correlation=${r.correlation_id}`, `${meta.origin}/policies/${r.policy_id}`, r.export_batch ?? meta.batch ?? "",
+  ]);
+  const stem = `gl-subledger-${f.from ?? "all"}-${f.to ?? "to-date"}${meta.batch ? `-${meta.batch}` : f.batch ? `-${f.batch}` : ""}`;
+  const enc = new TextEncoder();
+  if (format === "csv") return { filename: `${stem}.csv`, contentType: "text/csv; charset=utf-8", body: enc.encode(toCsv(EXPORT_HEADER, data)) };
+  if (format === "json") {
+    return {
+      filename: `${stem}.json`, contentType: "application/json; charset=utf-8",
+      body: enc.encode(ledgerJson(groupJournals(rows), ledgerTotals(rows), {
+        batch: meta.batch, generatedAt: meta.generatedAt ?? new Date(), generatedBy: meta.actor, origin: meta.origin, timeZone: GL_TIME_ZONE,
+        from: f.from, to: f.to, transactionType: f.type || null, period: meta.period ?? null, batchFilter: f.batch || null,
+      })),
+    };
+  }
+  return {
+    filename: `${stem}.xlsx`, contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    body: toXlsx("Sub-ledger", EXPORT_HEADER, data, EXPORT_WIDTHS),
+  };
+}
 
 /**
  * Push the filtered sub-ledger to the GL as a file. Lines not pushed before are stamped with this
  * batch; lines pushed earlier keep their batch (the file shows which). Audited.
  */
-export async function exportLedger(f: LedgerFilter, format: ExportFormat, actor: string, origin: string) {
+export async function exportLedger(f: LedgerFilter, format: ExportFormat, actor: string, origin: string, period: string | null = null) {
   const rows = await listPostings(f);
   const batch = (await policyDb.query<{ b: string }>(
     "SELECT 'GLX-' || to_char(now() AT TIME ZONE $1, 'YYYYMMDD') || '-' || lpad(nextval('gl_export_seq')::text, 3, '0') AS b", [GL_TIME_ZONE])).rows[0].b;
   const fresh = (await policyDb.query<{ id: number }>(
     "UPDATE gl_postings SET export_batch = $1, exported_at = now(), exported_by = $2 WHERE id = ANY($3) AND export_batch IS NULL RETURNING id",
     [batch, actor, rows.map((r) => r.id)])).rows.length;
-  const batchOf = (r: Posting) => r.export_batch ?? batch;
-
-  const data = rows.map((r) => [
-    r.journal_no, r.line_no, glDate(r.posted_at), r.posted_at.toISOString(), r.accounting_period, TRANSACTION_LABEL[r.transaction_type],
-    r.account_code, r.account_name, Number(r.debit), Number(r.credit), r.description, r.policy_number, r.insured_name,
-    r.effective_date, r.expiration_date, r.underwriter, r.producer, r.quote_ref, r.submission_ref, r.source_action,
-    `${origin}/audit?submission=${r.submission_id}&correlation=${r.correlation_id}`, `${origin}/policies/${r.policy_id}`, batchOf(r),
-  ]);
+  const file = renderLedger(rows, f, format, { batch, actor, origin, period });
   const t = ledgerTotals(rows);
   const range = `${f.from ?? "start"} to ${f.to ?? "today"}`;
-  const stem = `gl-subledger-${f.from ?? "all"}-${f.to ?? "to-date"}-${batch}`;
-  const enc = new TextEncoder();
-  const file = format === "csv"
-    ? { filename: `${stem}.csv`, contentType: "text/csv; charset=utf-8", body: enc.encode(toCsv(EXPORT_HEADER, data)) }
-    : format === "json"
-      ? { filename: `${stem}.json`, contentType: "application/json; charset=utf-8",
-          body: enc.encode(ledgerJson(groupJournals(rows), t, {
-            batch, generatedAt: new Date(), generatedBy: actor, origin, timeZone: GL_TIME_ZONE, from: f.from, to: f.to, transactionType: f.type || null,
-          })) }
-      : { filename: `${stem}.xlsx`, contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          body: toXlsx("Sub-ledger", EXPORT_HEADER, data, [11, 5, 12, 22, 10, 13, 9, 34, 12, 12, 60, 13, 34, 12, 12, 13, 28, 16, 10, 13, 60, 50, 20]) };
 
   await audit({
     actor, action: "gl.exported", entityType: "ledger", entityId: batch,
@@ -158,5 +220,5 @@ export async function exportLedger(f: LedgerFilter, format: ExportFormat, actor:
       + `$${Math.round(t.debit).toLocaleString("en-US")} debits, ${range}${f.type ? `, ${TRANSACTION_LABEL[f.type]} only` : ""}; ${fresh} line(s) newly marked as pushed`,
     after: { format, from: f.from, to: f.to, type: f.type || null, lines: rows.length, journals: t.journals, debit: t.debit, credit: t.credit, newly_stamped: fresh },
   });
-  return { ...file, batch, lines: rows.length, fresh };
+  return { ...file, batch, lines: rows.length, journals: t.journals, fresh };
 }

@@ -25,3 +25,13 @@ export function safeReturnPath(referer: string | null, host: string | null, fall
   const path = url.pathname;
   return path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/\\") ? path : fallback;
 }
+
+/**
+ * The public origin of this request ("https://uwdesk-web.fly.dev"), for absolute links in files
+ * and API documents: the proxy's forwarded host and scheme when present, else the Host header.
+ */
+export function requestOrigin(h: { get(name: string): string | null }): string {
+  const host = (h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000").split(",")[0].trim();
+  const proto = h.get("x-forwarded-proto")?.split(",")[0].trim() || (/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host) ? "http" : "https");
+  return `${proto}://${host}`;
+}

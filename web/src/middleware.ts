@@ -14,10 +14,14 @@ export function middleware(req: NextRequest) {
   if (!users.size) return NextResponse.next({ request: { headers } });
   const name = authenticate(req.headers.get("authorization"), users);
   if (!name) {
-    return new NextResponse("Authentication required", {
-      status: 401,
-      headers: { "WWW-Authenticate": 'Basic realm="Underwriting Desktop", charset="UTF-8"' },
-    });
+    const challenge = { "WWW-Authenticate": 'Basic realm="Underwriting Desktop", charset="UTF-8"' };
+    // API and MCP callers get a JSON error body; browsers get the plain one and their login prompt.
+    if (req.nextUrl.pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: { code: "unauthorized", message: "Authentication required: send an Underwriting Desktop login with HTTP Basic authentication (Authorization: Basic base64(user:password))." } },
+        { status: 401, headers: { ...challenge, "Cache-Control": "no-store" } });
+    }
+    return new NextResponse("Authentication required", { status: 401, headers: challenge });
   }
   headers.set(AUTH_USER_HEADER, name);
   return NextResponse.next({ request: { headers } });
