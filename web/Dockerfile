@@ -13,7 +13,8 @@ COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
 COPY --from=build /app/migrations ./migrations
 # Broker drop folder baked into the image (filled from samples/submissions by scripts/fly-deploy.sh).
-COPY --from=build /app/inbox ./inbox
+# Owned by node: the app tops it up with generated submissions when it runs low.
+COPY --chown=node:node --from=build /app/inbox ./inbox
 USER node
 EXPOSE 3000
 CMD ["node", "server.js"]

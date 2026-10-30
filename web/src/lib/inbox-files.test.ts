@@ -20,6 +20,7 @@ test("folder titles drop the case number", () => {
   assert.equal(folderTitle("acme_roofing"), "Acme Roofing");
   assert.equal(folderTitle("06-empire-builders-gc"), "Empire Builders GC");
   assert.equal(folderTitle("14-silver-state-hvac"), "Silver State HVAC");
+  assert.equal(folderTitle("20261030-1432-suncoast-roofing-llc"), "Suncoast Roofing LLC", "a generated folder's stamp is dropped too");
 });
 
 test("names that could escape the drop folder are refused", () => {

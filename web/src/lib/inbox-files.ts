@@ -24,9 +24,10 @@ export const contentTypeFor = (filename: string) =>
 
 const ACRONYMS = new Set(["gc", "hvac", "llc", "inc", "hoa", "mep", "usa"]);
 
-/** "09-rio-bravo-concrete" -> "Rio Bravo Concrete" (a leading case number is dropped). */
+/** "09-rio-bravo-concrete" -> "Rio Bravo Concrete" (a leading case number, or a generated folder's YYYYMMDD-HHMM stamp, is dropped). */
 export function folderTitle(folder: string): string {
   return folder
+    .replace(/^\d{8}-\d{4}[-_ ]+/, "")
     .replace(/^\d+[-_ ]+/, "")
     .split(/[-_ ]+/)
     .filter(Boolean)
