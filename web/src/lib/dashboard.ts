@@ -21,6 +21,7 @@ export type Task = {
   title: string; detail: string; href: string;
   due: string | null;      // YYYY-MM-DD the task is due, if it has a date
   urgency: number;         // lower is more urgent; sorts the list
+  pinned?: boolean;        // always shown first, ahead of the urgency order (the inbox)
 };
 
 export type Dashboard = {
@@ -158,9 +159,10 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
   }
   if (inbox.length) {
     tasks.push({ kind: "inbox", title: `${inbox.length} new submission${inbox.length === 1 ? "" : "s"} in the inbox`,
-      detail: "Not yet picked up by anyone", href: "/submissions", due: null, urgency: 40 });
+      detail: "Not yet picked up by anyone · extract one to start its intake", href: "/submissions", due: null, urgency: 40, pinned: true });
   }
-  tasks.sort((a, b) => a.urgency - b.urgency);
+  // The inbox stays on top so new work is never buried; everything else by urgency.
+  tasks.sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || a.urgency - b.urgency);
 
   const byClass = new Map<string, { code: string; description: string; premium: number; policies: number }>();
   for (const p of book) {

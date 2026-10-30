@@ -65,13 +65,13 @@ export default async function Home() {
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:col-span-2">
           <div className="flex items-baseline justify-between border-b border-slate-100 bg-slate-50 px-4 py-2">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Next up · {d.tasks.length}</h2>
-            <span className="text-xs text-slate-400">Most urgent first: overdue, then by due date</span>
+            <span className="text-xs text-slate-400">Inbox first, then most urgent: overdue, then by due date</span>
           </div>
           {d.tasks.length ? (
             <ul className="divide-y divide-slate-100">
               {d.tasks.slice(0, 10).map((t, i) => (
-                <li key={i} className="flex items-start gap-3 px-4 py-2.5">
-                  <span className="mt-0.5 w-24 shrink-0 text-xs font-medium uppercase tracking-wide text-slate-400">{TASK_KIND[t.kind]}</span>
+                <li key={i} className={`flex items-start gap-3 px-4 py-2.5 ${t.pinned ? "bg-indigo-50/60 shadow-[inset_3px_0_0_0_theme(colors.indigo.400)]" : ""}`}>
+                  <span className={`mt-0.5 w-24 shrink-0 text-xs font-medium uppercase tracking-wide ${t.pinned ? "text-indigo-600" : "text-slate-400"}`}>{TASK_KIND[t.kind]}</span>
                   <div className="min-w-0 flex-1">
                     <Link href={t.href} className="font-medium text-slate-900 hover:text-indigo-600 hover:underline">{t.title}</Link>
                     <div className="truncate text-xs text-slate-500" title={t.detail}>{t.detail}</div>

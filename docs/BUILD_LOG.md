@@ -464,6 +464,8 @@ read this to replay the build quickly.
   - Local Postgres in the Claude cloud sandbox stops when the container restarts. If a page 500s with `ECONNREFUSED 5432`, run `service postgresql start` before debugging the code.
 - **How to show it:** see DEMO_PLAYBOOK row 15.
 
+- **Follow-up: the inbox stays on top of Next up.** The "N new submissions in the inbox" task is pinned first (`Task.pinned`; the sort puts pinned tasks ahead of the urgency order) and its row is lightly tinted (indigo wash with a left accent, label in indigo) so new work is never buried under renewals and bind chases. The caption now reads "Inbox first, then most urgent: overdue, then by due date".
+
 ## Fix: the Rate tables page kept the desktop's top nav
 - **Prompt used:** "When I go to the rating page from the top nav, the nav disappears and I can only return elsewhere by clicking Back."
 - **Cause:** `/admin` is the rating service's own server-rendered UI, proxied by the web app. Its templates had only a "Rating admin" header. Its "API docs" link (`/docs`) was also dead through the proxy, which forwards only `/admin`.
