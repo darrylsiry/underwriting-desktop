@@ -472,6 +472,8 @@ read this to replay the build quickly.
 
 - **Follow-up: Sign out.** A "Sign out" link under "Signed in as …" opens `/signout`. HTTP Basic auth keeps no server session (the browser re-sends the login with every request), so the route answers **401 with the same `WWW-Authenticate` realm**: the browser drops the cached login and shows its sign-in box, which the user cancels (landing on the route's "You're signed out" page) or fills in as someone else. Without the password gate it clears the "working as" cookie and returns to the desk. Many people can be signed in at once, each with their own login, because every request is authenticated on its own; `scripts/fly-users.sh <name>…` adds logins to the live app.
 
+- **Follow-up: an Admin drop-down.** Audit, Accounting and Rate tables moved out of the top nav into one **Admin** menu (`components/admin-menu.tsx`, a small client component: opens on click, closes on Escape, a click elsewhere or a route change, shows as current when one of its pages is open, each item with a one-line hint). The rate admin's mirrored desktop header (`services/rating/app/templates/base.html`) has the same menu as a native `<details>` (its pages are full loads, so nothing has to close it) and the Sign out link under "Signed in as".
+
 ## Fix: the Rate tables page kept the desktop's top nav
 - **Prompt used:** "When I go to the rating page from the top nav, the nav disappears and I can only return elsewhere by clicking Back."
 - **Cause:** `/admin` is the rating service's own server-rendered UI, proxied by the web app. Its templates had only a "Rating admin" header. Its "API docs" link (`/docs`) was also dead through the proxy, which forwards only `/admin`.

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import { AdminMenu } from "@/components/admin-menu";
 import { setUserAction } from "./submissions/actions";
 import { currentUser, signedInUser } from "@/lib/user";
 import "./globals.css";
@@ -41,9 +42,11 @@ export default async function RootLayout({
             <Link href="/submissions" className="hover:text-slate-900">Submissions</Link>
             <Link href="/quotes" className="hover:text-slate-900">Quotes</Link>
             <Link href="/policies" className="hover:text-slate-900">Policies</Link>
-            <Link href="/audit" className="hover:text-slate-900">Audit</Link>
-            <Link href="/accounting" className="hover:text-slate-900">Accounting</Link>
-            <a href={RATING_ADMIN_URL} className="hover:text-slate-900">Rate tables</a>
+            <AdminMenu items={[
+              { href: "/audit", label: "Audit", hint: "Every recorded action across the desktop, rating and rate tables" },
+              { href: "/accounting", label: "Accounting", hint: "Premium sub-ledger and the push to the general ledger" },
+              { href: RATING_ADMIN_URL, label: "Rate tables", hint: "Rate versions, factors and their audit", external: true },
+            ]} />
           </nav>
           <form action="/search" className="ml-auto">
             <input name="q" placeholder="Search insureds, SUB-, Q-, GL-…" aria-label="Search"

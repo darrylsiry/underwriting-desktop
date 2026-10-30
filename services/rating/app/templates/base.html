@@ -18,6 +18,18 @@
     header.desktop nav a { font-weight: 400; color: #475569; }
     header.desktop nav a:hover { color: var(--ink); }
     header.desktop nav a.current { color: var(--ink); font-weight: 600; }
+    /* The Admin drop-down (Audit, Accounting, Rate tables), as in the web app's header. Native <details>: a page load closes it. */
+    header.desktop details { position: relative; }
+    header.desktop summary { list-style: none; cursor: pointer; color: var(--ink); font-weight: 600; }
+    header.desktop summary::-webkit-details-marker { display: none; }
+    header.desktop summary::after { content: " \25BC"; font-size: 9px; }
+    header.desktop details div { position: absolute; left: 0; top: 100%; margin-top: 8px; width: 220px; background: #fff; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 8px 24px rgba(15,23,42,.12); padding: 4px 0; z-index: 20; }
+    header.desktop details div a { display: block; padding: 8px 12px; color: var(--ink); font-weight: 400; }
+    header.desktop details div a small { display: block; color: var(--muted); font-size: 12px; }
+    header.desktop details div a:hover { background: #f8fafc; }
+    header.desktop details div a.current { background: #eef2ff; color: var(--accent); }
+    header.desktop .who { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; }
+    header.desktop .who a { font-size: 12px; font-weight: 400; }
     header.desktop form { margin-left: auto; }
     header.desktop input { width: 260px; padding: 4px 8px; }
     main { max-width: 1100px; margin: 0 auto; padding: 24px; }
@@ -58,12 +70,17 @@
       <a href="/submissions">Submissions</a>
       <a href="/quotes">Quotes</a>
       <a href="/policies">Policies</a>
-      <a href="/audit">Audit</a>
-      <a href="/accounting">Accounting</a>
-      <a href="/admin" class="current">Rate tables</a>
+      <details>
+        <summary aria-haspopup="menu">Admin</summary>
+        <div role="menu">
+          <a href="/audit" role="menuitem">Audit<small>Every recorded action across the desktop, rating and rate tables</small></a>
+          <a href="/accounting" role="menuitem">Accounting<small>Premium sub-ledger and the push to the general ledger</small></a>
+          <a href="/admin" role="menuitem" class="current">Rate tables<small>Rate versions, factors and their audit</small></a>
+        </div>
+      </details>
     </nav>
     <form action="/search"><input name="q" placeholder="Search insureds, SUB-, Q-, GL-…" aria-label="Search"></form>
-    {% if request.headers.get("x-uw-user") %}<span>Signed in as <b style="color:var(--ink)">{{ request.headers.get("x-uw-user")[:60] }}</b></span>{% endif %}
+    {% if request.headers.get("x-uw-user") %}<span class="who"><span>Signed in as <b style="color:var(--ink)">{{ request.headers.get("x-uw-user")[:60] }}</b></span><a href="/signout">Sign out</a></span>{% endif %}
   </header>
   {% else %}
   <header>
