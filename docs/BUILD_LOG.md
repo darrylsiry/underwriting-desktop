@@ -479,3 +479,14 @@ read this to replay the build quickly.
 - **Files:** `services/rating/app/admin.py` (`signed_in_user`, `form_actor`), `services/rating/app/templates/{version,versions}.html`, `services/rating/tests/test_rate_admin.py`
 - **Commit:** `fix: ...`
 - **Trust:** the header is trusted because the rating service is reachable only through the web proxy on Fly (Flycast, no public IPs). The proxy builds its outgoing headers from an allow-list and sets `x-uw-user` from `currentUser()`, after middleware has checked the password. The JSON admin API (`/rate-versions`, not proxied) still takes `actor` in the body. With both apps' actors now coming from the login, SEC-006 is resolved for every path a signed-in user can reach.
+
+## fix: web keeps rating and ingestion awake while it's awake
+- **Prompt used:** "Have the web service start the rating service and the ingestion service the minute it wakes up (for example if someone logs in after they've all been asleep), so a user doesn't hit a long pause at ingestion or rating."
+- **What was built:** `src/lib/keep-warm.ts`, started from `src/instrumentation.ts` before migrations. It pings rating's and ingestion's `/health` (`wakeServices()`) the moment the web process starts, then every 60 s while it runs. Fly starts web when someone signs in, so the other two are booting while the first page renders, and they don't auto-stop mid-session. When Fly stops the idle web machine, the pings stop and the services sleep a few minutes later. The two page-level `after(wakeServices)` calls (Home, Submissions) are gone; this one mechanism covers every page, including bookmarks.
+- **Files:** `web/src/lib/keep-warm.ts`, `web/src/lib/keep-warm.test.ts`, `web/src/instrumentation.ts`, `web/src/lib/services.ts`, `web/src/app/{page,submissions/page}.tsx`
+- **Commit:** `fix: ...`
+- **Decisions:**
+  - Pings start in `register()` *before* migrations, so the services boot in parallel with web's own start.
+  - `KEEP_WARM_INTERVAL_MS` (default 60000; `0` turns it off). The timer is `unref()`ed so it never holds the process open. Failed pings are ignored, since `/api/health` already reports a down service.
+  - Cost: rating and ingestion now run whenever web runs, instead of only between their own requests. Web still auto-stops a few minutes after its last request, because outgoing pings don't count as incoming traffic and Fly's `/api/live` checks bypass the proxy.
+- **How to show it:** stop all three Fly machines (`fly machine stop -a uwdesk-rating …`), open the site, and within a few seconds `fly machine list -a uwdesk-rating` shows `started`, before any extraction or rating.

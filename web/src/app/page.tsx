@@ -1,8 +1,6 @@
 import Link from "next/link";
-import { after } from "next/server";
 import { daysUntil, loadDashboard, RENEWAL_WINDOW_DAYS, type Task } from "@/lib/dashboard";
 import { systemHealth } from "@/lib/health";
-import { wakeServices } from "@/lib/services";
 import { currentUser } from "@/lib/user";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +37,6 @@ function Tile({ label, value, sub }: { label: string; value: string; sub: string
 export default async function Home() {
   const user = await currentUser();
   const [d, components] = await Promise.all([loadDashboard(user), systemHealth()]);
-  after(wakeServices); // so rating and ingestion are up by the time the underwriter extracts or rates
   const k = d.kpis;
   const maxClass = Math.max(1, ...d.premiumByClass.map((c) => c.premium));
   const todayLabel = new Date(`${d.today}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });

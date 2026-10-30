@@ -2,8 +2,8 @@ export const RATING_SERVICE_URL = process.env.RATING_SERVICE_URL ?? "http://loca
 export const INGESTION_SERVICE_URL = process.env.INGESTION_SERVICE_URL ?? "http://localhost:8002";
 
 /**
- * Ping rating and ingestion so Fly starts their machines if they auto-stopped while idle. Called
- * when the Submissions page loads, so they're usually up before the underwriter clicks Extract.
+ * Ping rating and ingestion so Fly starts their machines if they auto-stopped while idle. Run by
+ * keep-warm (src/instrumentation.ts): when the web process starts and every minute while it runs.
  */
 export async function wakeServices(): Promise<void> {
   await Promise.allSettled([RATING_SERVICE_URL, INGESTION_SERVICE_URL].map((url) =>
