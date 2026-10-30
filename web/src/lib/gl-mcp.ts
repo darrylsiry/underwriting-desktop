@@ -40,7 +40,7 @@ function queryOf(args: Record<string, unknown>, ctx: McpContext) {
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const NO_ARGS = { type: "object" as const, properties: {}, additionalProperties: false };
 
-const TOOLS: ToolDef[] = [
+export const GL_TOOLS: ToolDef[] = [
   {
     name: "gl_summary", title: "Sub-ledger totals",
     description: "Totals of the premium sub-ledger for a period: written premium (4100), policy fees (4200), surplus lines tax payable (2300), premiums receivable (1200), debits and credits, and journal counts by transaction type, overall and per accounting month. Start here for questions like \"how much premium did we write last month?\".",
@@ -101,5 +101,5 @@ const RESOURCES: ResourceDef[] = [
 ];
 
 export function glMcpServer() {
-  return createMcpServer({ ...GL_MCP_SERVER, instructions: INSTRUCTIONS, tools: TOOLS, resources: RESOURCES });
+  return createMcpServer({ ...GL_MCP_SERVER, instructions: INSTRUCTIONS, tools: GL_TOOLS, resources: RESOURCES });
 }

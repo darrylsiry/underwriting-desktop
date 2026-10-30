@@ -42,6 +42,7 @@ export default async function RootLayout({
             <Link href="/submissions" className="hover:text-slate-900">Submissions</Link>
             <Link href="/quotes" className="hover:text-slate-900">Quotes</Link>
             <Link href="/policies" className="hover:text-slate-900">Policies</Link>
+            <Link href="/assistant" className="hover:text-slate-900">AI Assistant</Link>
             <AdminMenu items={[
               { href: "/audit", label: "Audit", hint: "Every recorded action across the desktop, rating and rate tables" },
               { href: "/accounting", label: "Accounting", hint: "Premium sub-ledger and the push to the general ledger" },
