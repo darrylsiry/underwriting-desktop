@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DaysChip } from "@/components/ui";
 import { daysUntil, loadDashboard, RENEWAL_WINDOW_DAYS, type Task } from "@/lib/dashboard";
 import { systemHealth } from "@/lib/health";
 import { currentUser } from "@/lib/user";
@@ -15,22 +16,17 @@ const TASK_KIND: Record<Task["kind"], string> = {
   subjectivity: "Subjectivities", renewal: "Renewal", inbox: "Inbox",
 };
 
-/** Days-left chip: the number always carries the meaning, color only reinforces it. */
-function DaysChip({ days }: { days: number }) {
-  const style = days < 0 ? "bg-rose-100 text-rose-800" : days <= 14 ? "bg-rose-50 text-rose-700"
-    : days <= 45 ? "bg-amber-50 text-amber-800" : "bg-slate-100 text-slate-600";
-  return <span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-medium tabular-nums ${style}`}>
-    {days < 0 ? `${-days}d overdue` : days === 0 ? "today" : `${days}d`}
-  </span>;
-}
-
-function Tile({ label, value, sub }: { label: string; value: string; sub: string }) {
+/** A KPI that opens the list behind the number. */
+function Tile({ label, value, sub, href }: { label: string; value: string; sub: string; href: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{value}</div>
+    <Link href={href} className="group rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-indigo-300 hover:shadow-md" title={`Open: ${label}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
+        <span aria-hidden className="text-slate-300 transition group-hover:text-indigo-500">→</span>
+      </div>
+      <div className="mt-1 text-2xl font-semibold tabular-nums text-slate-900 group-hover:text-indigo-700">{value}</div>
       <div className="mt-0.5 text-xs text-slate-500">{sub}</div>
-    </div>
+    </Link>
   );
 }
 
@@ -54,11 +50,11 @@ export default async function Home() {
       </div>
 
       <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-label="Book summary">
-        <Tile label="In-force premium" value={usdShort(k.inForcePremium)} sub={`${k.policies} policies in force`} />
-        <Tile label="Renewals · 90 days" value={String(k.renewalsDue90)} sub={`${usdShort(k.renewalPremium90)} expiring premium`} />
-        <Tile label="Book loss ratio (incurred)" value={pct(k.lossRatio)} sub={`${k.openClaims} open claim${k.openClaims === 1 ? "" : "s"} · prior-system book`} />
-        <Tile label="New business" value={usdShort(k.newBusinessPremium)} sub={`${k.newBusinessPolicies} bound in the UW Desktop`} />
-        <Tile label="Quotes out" value={String(k.quotesOut)} sub={k.hitRatio === null ? "hit ratio: no decided quotes yet" : `hit ratio ${pct(k.hitRatio)} of decided quotes`} />
+        <Tile href="/book" label="In-force premium" value={usdShort(k.inForcePremium)} sub={`${k.policies} policies in force`} />
+        <Tile href="/book?due=90" label="Renewals · 90 days" value={String(k.renewalsDue90)} sub={`${usdShort(k.renewalPremium90)} expiring premium`} />
+        <Tile href="/book?view=losses" label="Book loss ratio (incurred)" value={pct(k.lossRatio)} sub={`${k.openClaims} open claim${k.openClaims === 1 ? "" : "s"} · prior-system book`} />
+        <Tile href={`/policies?underwriter=${encodeURIComponent(user)}&in_force=1`} label="New business" value={usdShort(k.newBusinessPremium)} sub={`${k.newBusinessPolicies} bound in the UW Desktop`} />
+        <Tile href={`/quotes?status=issued&underwriter=${encodeURIComponent(user)}`} label="Quotes out" value={String(k.quotesOut)} sub={k.hitRatio === null ? "hit ratio: no decided quotes yet" : `hit ratio ${pct(k.hitRatio)} of decided quotes`} />
       </section>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
@@ -107,7 +103,7 @@ export default async function Home() {
 
       <section id="renewals" className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="flex items-baseline justify-between border-b border-slate-100 bg-slate-50 px-4 py-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Upcoming renewals · next {RENEWAL_WINDOW_DAYS} days · {d.renewals.length}</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500"><Link href={`/book?due=${RENEWAL_WINDOW_DAYS}`} className="hover:text-indigo-600 hover:underline">Upcoming renewals · next {RENEWAL_WINDOW_DAYS} days · {d.renewals.length}</Link></h2>
           <span className="text-xs text-slate-400">{usd(d.renewals.reduce((n, p) => n + p.premium, 0))} expiring premium</span>
         </div>
         <div className="overflow-x-auto">

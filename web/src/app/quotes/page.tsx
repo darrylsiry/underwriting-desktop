@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { listQuotes } from "@/lib/quotes";
+import { listQuotes, type QuoteRow } from "@/lib/quotes";
+import { submissionIdsReceivedBy } from "@/lib/submissions";
 import { money } from "@/lib/worksheets";
 
 export const dynamic = "force-dynamic";
@@ -8,17 +9,30 @@ const STATUS_STYLE: Record<string, string> = {
   issued: "bg-indigo-50 text-indigo-700", superseded: "bg-slate-100 text-slate-500", bound: "bg-emerald-50 text-emerald-700",
 };
 
-type Params = { highlight?: string };
+type Params = { highlight?: string; status?: string; underwriter?: string };
+const STATUSES: QuoteRow["status"][] = ["issued", "superseded", "bound"];
 
-/** Every quote version. `?highlight=<quote id>` (where issuing a quote lands) calls out that version. */
+/**
+ * Every quote version. `?highlight=<quote id>` (where issuing a quote lands) calls out that version;
+ * `?status=issued&underwriter=<name>` is the desk's Quotes out tile: current quotes, not yet bound or superseded, from that underwriter's submissions.
+ */
 export default async function QuotesPage({ searchParams }: { searchParams: Promise<Params> }) {
-  const { highlight } = await searchParams;
-  const quotes = await listQuotes();
-  const picked = highlight ? quotes.find((q) => q.id === highlight) : undefined;
+  const p = await searchParams;
+  const status = STATUSES.includes(p.status as QuoteRow["status"]) ? (p.status as QuoteRow["status"]) : null;
+  const underwriter = p.underwriter?.trim() || null;
+  const quotes = await listQuotes({ status, submissionIds: underwriter ? await submissionIdsReceivedBy(underwriter) : null });
+  const picked = p.highlight ? quotes.find((q) => q.id === p.highlight) : undefined;
   return (
     <main className="mx-auto max-w-6xl p-8">
       <h1 className="text-2xl font-semibold">Quotes</h1>
       <p className="mt-1 text-sm text-slate-500">Every issued version, with the PDF exactly as sent.</p>
+      {(status || underwriter) && (
+        <p className="mt-4 flex flex-wrap items-center gap-x-3 rounded bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
+          <span className="font-medium">{status === "issued" ? "Quotes out: issued and not yet bound or superseded" : status ? `Status: ${status}` : "All statuses"}{underwriter ? `, from ${underwriter}'s submissions` : ""}</span>
+          <span>{quotes.length} quote{quotes.length === 1 ? "" : "s"} · {money(quotes.reduce((n, q) => n + Number(q.total), 0))} total</span>
+          <Link href="/quotes" className="ml-auto text-xs underline">Show all quotes</Link>
+        </p>
+      )}
       {picked && (
         <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           <span className="font-medium">{picked.quote_number} v{picked.version} issued</span>

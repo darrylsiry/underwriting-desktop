@@ -29,6 +29,12 @@ export type SubmissionRow = {
 
 export type DocumentRow = { id: string; filename: string; content_type: string; size: number };
 
+/** Ids of the submissions an underwriter picked up (received_by): what the desk counts as theirs. */
+export async function submissionIdsReceivedBy(user: string): Promise<string[]> {
+  const { rows } = await customerDb.query<{ id: string }>("SELECT id FROM submissions WHERE received_by = $1", [user]);
+  return rows.map((r) => r.id);
+}
+
 export async function listSubmissions(): Promise<SubmissionRow[]> {
   const { rows } = await customerDb.query<SubmissionRow>("SELECT * FROM submissions ORDER BY received_at DESC");
   return rows;

@@ -35,9 +35,15 @@ export async function getPolicy(id: string): Promise<(PolicyRow & { insured_id: 
   return rows[0] ?? null;
 }
 
-export async function listPolicies(): Promise<PolicyRow[]> {
+export type PolicyFilter = { submissionIds?: string[] | null; inForce?: boolean };
+
+/** Bound policies, newest first; optionally only those from given submissions and/or still in force today. */
+export async function listPolicies(f: PolicyFilter = {}): Promise<PolicyRow[]> {
   const { rows } = await policyDb.query<PolicyRow>(
-    `SELECT ${COLUMNS} FROM policies p JOIN quotes q ON q.id = p.quote_id ORDER BY p.bound_at DESC`);
+    `SELECT ${COLUMNS} FROM policies p JOIN quotes q ON q.id = p.quote_id
+     WHERE ($1::text[] IS NULL OR p.submission_id::text = ANY($1))
+       AND ($2::boolean IS NOT TRUE OR p.expiration_date >= CURRENT_DATE)
+     ORDER BY p.bound_at DESC`, [f.submissionIds ?? null, f.inForce ?? false]);
   return rows;
 }
 

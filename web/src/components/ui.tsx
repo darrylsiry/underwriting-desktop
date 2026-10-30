@@ -33,4 +33,13 @@ export function RowLink({ href, children }: { href: string; children: React.Reac
 }
 
 export const money = (v: string | number) => `$${Math.round(Number(v)).toLocaleString("en-US")}`;
+
+/** Days-left chip: the number always carries the meaning, color only reinforces it. */
+export function DaysChip({ days }: { days: number }) {
+  const style = days < 0 ? "bg-rose-100 text-rose-800" : days <= 14 ? "bg-rose-50 text-rose-700"
+    : days <= 45 ? "bg-amber-50 text-amber-800" : "bg-slate-100 text-slate-600";
+  return <span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-medium tabular-nums ${style}`}>
+    {days < 0 ? `${-days}d overdue` : days === 0 ? "today" : `${days}d`}
+  </span>;
+}
 export const when = (d: Date) => d.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
