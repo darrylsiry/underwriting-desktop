@@ -46,6 +46,17 @@ export function loadUsers(env: Record<string, string | undefined>): Users {
   return users;
 }
 
+/** True when `password` is `name`'s password. Checks every user so timing doesn't reveal which names exist. */
+export function checkPassword(users: Users, name: string, password: string): boolean {
+  let ok = false;
+  for (const [n, p] of users) {
+    const nameOk = same(n, name);
+    const passOk = same(p, password);
+    if (nameOk && passOk) ok = true;
+  }
+  return ok;
+}
+
 /** The username whose credentials `header` carries, or null. Checks every user so timing doesn't reveal which names exist. */
 export function authenticate(header: string | null, users: Users): string | null {
   let match: string | null = null;

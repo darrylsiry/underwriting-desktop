@@ -658,3 +658,24 @@ read this to replay the build quickly.
 - **Follow-up: "what should I work on next" knows about the inbox.** Asked that, the assistant said the desk was empty while the inbox held several unextracted submissions: `list_submissions` only knows submissions that have been extracted, and nothing explained that an inbox item is work for whoever picks it up. Now a `work_queue` tool returns the whole pipeline's open work in one call (the inbox, oldest first and marked unassigned, plus every underwriter's desk tasks with days left and overdue flags, for one person or the team), and the system prompt spells out the workflow order and that an empty personal queue never means nothing to do while the inbox has submissions.
 - **Follow-up: ask from the desk.** Under the desk's title there is an open text box ("AI Assistant - Ask Me Anything"); submitting it opens `/assistant?q=<text>`, which asks the question on arrival and then cleans the URL so a refresh doesn't ask again.
 - **How to show it:** AI Assistant → click "How much premium did we write this month, and which policies make it up?": the tool calls appear as they run (`gl_summary`, `gl_journals`), then the answer with a linked table and the asker's own share. Then type "Why is Q-2026-0004 priced the way it is?" (search → quote → rating steps, with the renewal bridge) and "Who changed the rate tables?" (audit_search). Click any link: it is the real record.
+
+## step-22: A sign-in page instead of the browser's password prompt
+- **Prompt used:** "The sign-in landing page is an ugly pop-up. I'd rather it be a styled landing page with the fields on the page, not a pop-up."
+- **What was built:**
+  - **`/signin`**: a page of the app's own (wordmark, User ID and Password fields, one button, an error line, a "you're signed out" note), shown without the header chrome. Signing in sets a **signed, expiring session cookie** (`uw_session`, HMAC-SHA256 over the user and expiry, HttpOnly, SameSite=Lax, Secure on https, 7 days) and returns to the page the person was heading for (`?next=`, local paths only). The same logins as before (`BASIC_AUTH_USERS`), checked in constant time.
+  - **Middleware** accepts either the session cookie or an HTTP Basic header. A browser navigation without either is redirected to `/signin?next=…`; `/api/*` callers still get the JSON 401 with the Basic challenge their clients understand; a page's own fetch (the assistant, the inbox panel) after a session ends gets a JSON 401 without a challenge, so the browser never shows its prompt again.
+  - **Sign out** now clears the cookie and shows the sign-in page ("You're signed out"). `/signin` and `/signout` are outside the gate.
+  - The signing key is `SESSION_SECRET` when set, else derived from the configured logins, so the deployment needs no new secret and changing the passwords signs everyone out.
+  - 75 web tests (new: session sign/verify/tamper/expiry, `checkPassword`).
+- **Files:** `web/src/lib/{session,session.test,basic-auth,basic-auth.test}.ts`, `web/src/middleware.ts`, `web/src/app/signin/{page.tsx,actions.ts}`, `web/src/app/signout/route.ts`, `web/src/app/layout.tsx`
+- **Commit:** `step-22: ...`
+- **Decisions:**
+  - **Cookie for people, Basic for systems:** the REST API and the MCP endpoint are documented as HTTP Basic and other tools expect the challenge, so that stays; the browser gets a session instead. Both paths set the same signed-in-user header, so nothing downstream changed.
+  - **A server action for the form:** it sets the cookie and redirects in one place, with no API route to protect; the page is a server component.
+  - **Redirect only for navigations:** a 302 to an HTML page is the wrong answer to a fetch, so the middleware looks at the method and `Accept` to tell a person from a page's own request.
+  - **No header on the sign-in page:** the layout hides the chrome whenever the gate is on and nobody is signed in, which is exactly the sign-in page.
+- **Dead ends / gotchas:**
+  - `/signout` was inside the gate at first, so a stale session clicking Sign out was bounced to sign in with `next=/signout` and signed straight out again; it is excluded from the matcher now, as `/signin` is.
+  - A gated build on plain http needs the cookie without `Secure`; it is set from the request's scheme (`requestOrigin`), not from `NODE_ENV`.
+  - Server actions can't be driven with curl; the form was exercised in the browser, the rest (redirect, 401s, sign-out, a forged cookie) with curl.
+- **How to show it:** open the live site signed out: the sign-in page; sign in and land where you were going; **Sign out** under your name returns to it with the confirmation. `curl -u underwriter1 …/api/gl` still works for other systems.

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { AdminMenu } from "@/components/admin-menu";
 import { setUserAction } from "./submissions/actions";
+import { loadUsers } from "@/lib/basic-auth";
 import { currentUser, signedInUser } from "@/lib/user";
 import "./globals.css";
 
@@ -30,12 +31,14 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const [user, signedIn] = await Promise.all([currentUser(), signedInUser()]);
+  // With the gate on, the only page an unsigned visitor sees is /signin: no header chrome there.
+  const chrome = signedIn !== null || !loadUsers(process.env).size;
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-slate-200 bg-white px-6 py-3 text-sm">
+        {chrome && <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-slate-200 bg-white px-6 py-3 text-sm">
           <Link href="/" className="whitespace-nowrap font-semibold">Underwriting Desktop</Link>
           <nav className="flex gap-4 whitespace-nowrap text-slate-600">
             <Link href="/insureds" className="hover:text-slate-900">Customers</Link>
@@ -66,7 +69,7 @@ export default async function RootLayout({
               <button className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-50">Set</button>
             </form>
           )}
-        </header>
+        </header>}
         {children}
       </body>
     </html>

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { authenticate, basicAuthOk, loadUsers } from "./basic-auth.ts";
+import { authenticate, basicAuthOk, loadUsers, checkPassword } from "./basic-auth.ts";
 
 const header = (s: string) => `Basic ${Buffer.from(s).toString("base64")}`;
 
@@ -21,6 +21,14 @@ test("several users each sign in with their own password", () => {
   assert.equal(authenticate(header("underwriter2:pw-one"), users), null);
   assert.equal(authenticate(header("underwriter3:pw-one"), users), null);
   assert.equal(authenticate(null, users), null);
+});
+
+test("checkPassword matches a name to its own password only", () => {
+  const users = loadUsers({ BASIC_AUTH_USERS: "underwriter1:one,underwriter2:two" });
+  assert.equal(checkPassword(users, "underwriter1", "one"), true);
+  assert.equal(checkPassword(users, "underwriter1", "two"), false);
+  assert.equal(checkPassword(users, "nobody", "one"), false);
+  assert.equal(checkPassword(users, "underwriter2", ""), false);
 });
 
 test("the single-user secrets still work, and no secrets means the gate is off", () => {
