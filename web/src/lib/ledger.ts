@@ -6,6 +6,7 @@ import {
   GL_TIME_ZONE, TRANSACTION_LABEL, accountingPeriod, bindJournal, glDate, isBalanced,
   type JournalLine, type PolicyAmounts, type TransactionType,
 } from "./gl-journal";
+import { ledgerJson } from "./gl-export-json";
 import { toXlsx } from "./xlsx";
 
 // The premium sub-ledger (policy DB, table gl_postings): what each underwriting action booked to
@@ -109,7 +110,8 @@ export async function postPolicyBound(client: PoolClient, p: BindPosting): Promi
   return { journal_no, lines };
 }
 
-export type ExportFormat = "csv" | "xlsx";
+export type ExportFormat = "csv" | "xlsx" | "json";
+export const EXPORT_FORMATS: ExportFormat[] = ["xlsx", "csv", "json"];
 
 const EXPORT_HEADER = [
   "Journal", "Line", "Posting date", "Posted at (UTC)", "Accounting period", "Transaction type", "Account code", "Account name",
@@ -139,10 +141,16 @@ export async function exportLedger(f: LedgerFilter, format: ExportFormat, actor:
   const t = ledgerTotals(rows);
   const range = `${f.from ?? "start"} to ${f.to ?? "today"}`;
   const stem = `gl-subledger-${f.from ?? "all"}-${f.to ?? "to-date"}-${batch}`;
+  const enc = new TextEncoder();
   const file = format === "csv"
-    ? { filename: `${stem}.csv`, contentType: "text/csv; charset=utf-8", body: new TextEncoder().encode(toCsv(EXPORT_HEADER, data)) }
-    : { filename: `${stem}.xlsx`, contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        body: toXlsx("Sub-ledger", EXPORT_HEADER, data, [11, 5, 12, 22, 10, 13, 9, 34, 12, 12, 60, 13, 34, 12, 12, 13, 28, 16, 10, 13, 60, 50, 20]) };
+    ? { filename: `${stem}.csv`, contentType: "text/csv; charset=utf-8", body: enc.encode(toCsv(EXPORT_HEADER, data)) }
+    : format === "json"
+      ? { filename: `${stem}.json`, contentType: "application/json; charset=utf-8",
+          body: enc.encode(ledgerJson(groupJournals(rows), t, {
+            batch, generatedAt: new Date(), generatedBy: actor, origin, timeZone: GL_TIME_ZONE, from: f.from, to: f.to, transactionType: f.type || null,
+          })) }
+      : { filename: `${stem}.xlsx`, contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          body: toXlsx("Sub-ledger", EXPORT_HEADER, data, [11, 5, 12, 22, 10, 13, 9, 34, 12, 12, 60, 13, 34, 12, 12, 13, 28, 16, 10, 13, 60, 50, 20]) };
 
   await audit({
     actor, action: "gl.exported", entityType: "ledger", entityId: batch,

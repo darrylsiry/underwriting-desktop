@@ -84,8 +84,9 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
           <input type="hidden" name="batch" value={filter.batch} />
           <button name="format" value="xlsx" disabled={!rows.length} className="rounded-md bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 disabled:opacity-50">Export Excel (.xlsx)</button>
           <button name="format" value="csv" disabled={!rows.length} className="rounded-md border border-slate-300 px-4 py-2 font-medium hover:bg-slate-50 disabled:opacity-50">Export CSV</button>
+          <button name="format" value="json" disabled={!rows.length} className="rounded-md border border-slate-300 px-4 py-2 font-medium hover:bg-slate-50 disabled:opacity-50">Export JSON</button>
           <span className="text-xs text-slate-500">
-            Downloads the {rows.length} line{rows.length === 1 ? "" : "s"} shown, one row per journal line with the policy details and a link to the underwriting action.
+            Downloads the {rows.length} line{rows.length === 1 ? "" : "s"} shown: Excel and CSV as one row per journal line, JSON as journals with their lines, each with the policy details and a link to the underwriting action.
             Lines not pushed before are marked with this batch ({pushed} of {rows.length} already pushed).
           </span>
         </form>

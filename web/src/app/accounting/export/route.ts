@@ -1,6 +1,6 @@
 import { PERIOD_PRESETS, TRANSACTION_LABEL, glDate, presetRange, type PeriodPreset, type TransactionType } from "@/lib/gl-journal";
 import { contentDisposition } from "@/lib/http";
-import { exportLedger, type ExportFormat } from "@/lib/ledger";
+import { EXPORT_FORMATS, exportLedger, type ExportFormat } from "@/lib/ledger";
 import { currentUser } from "@/lib/user";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
 export async function POST(req: Request) {
   const form = await req.formData();
   const get = (k: string) => String(form.get(k) ?? "");
-  const format: ExportFormat = get("format") === "csv" ? "csv" : "xlsx";
+  const format: ExportFormat = EXPORT_FORMATS.includes(get("format") as ExportFormat) ? (get("format") as ExportFormat) : "xlsx";
   const preset: PeriodPreset = (PERIOD_PRESETS as readonly string[]).includes(get("period")) ? (get("period") as PeriodPreset) : "all";
   const range = presetRange(preset, glDate(new Date()), { from: isDate(get("from")) ? get("from") : null, to: isDate(get("to")) ? get("to") : null });
   const type = get("type") in TRANSACTION_LABEL ? (get("type") as TransactionType) : "";
