@@ -490,3 +490,8 @@ read this to replay the build quickly.
   - `KEEP_WARM_INTERVAL_MS` (default 60000; `0` turns it off). The timer is `unref()`ed so it never holds the process open. Failed pings are ignored, since `/api/health` already reports a down service.
   - Cost: rating and ingestion now run whenever web runs, instead of only between their own requests. Web still auto-stops a few minutes after its last request, because outgoing pings don't count as incoming traffic and Fly's `/api/live` checks bypass the proxy.
 - **How to show it:** stop all three Fly machines (`fly machine stop -a uwdesk-rating …`), open the site, and within a few seconds `fly machine list -a uwdesk-rating` shows `started`, before any extraction or rating.
+- **Verified on Fly (2026-10-30):** with all three machines stopped and settled, one unauthenticated hit on `/api/live` woke web in about 4.7 s, and **rating and ingestion were both `started` by t+5 s**, before any page asked for them.
+- **Gotchas:**
+  - In an earlier run, Fly refused to start ingestion for about 65 s ("machine can't start at the moment", `crash exit_code=0` with no boot output), then showed it as `migrating` to another host. That's a Fly host-capacity event; the next 60 s ping started it once the move finished.
+  - Don't `fly machine stop` a machine that's already stopped while testing; it seemed to make that worse.
+  - The GitHub Actions deploy for this change waited about 11 minutes for a runner before running; `fly deploy web …` from a laptop is the fallback.
