@@ -11,6 +11,9 @@ import pytest
 
 ADMIN_URL = os.environ.get("TEST_DATABASE_ADMIN_URL", "postgresql://uw:uw@localhost:5432/postgres")
 TEST_DB = "rating_test"
+# Point the app at the test DB before any test module imports app.db (which builds its pool from
+# DATABASE_URL at import time): a unit test that imports app.admin must never reach the real `rating` DB.
+os.environ["DATABASE_URL"] = ADMIN_URL.rsplit("/", 1)[0] + f"/{TEST_DB}"
 
 
 @pytest.fixture(scope="session")
@@ -21,7 +24,6 @@ def client():
             conn.execute(f"CREATE DATABASE {TEST_DB}")
     except psycopg.OperationalError:
         pytest.skip("Postgres not available")
-    os.environ["DATABASE_URL"] = ADMIN_URL.rsplit("/", 1)[0] + f"/{TEST_DB}"
     from fastapi.testclient import TestClient
 
     from app.main import app

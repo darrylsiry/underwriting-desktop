@@ -18,6 +18,7 @@ services:
     build: ./services/rating
     environment:
       DATABASE_URL: postgresql://uw:uw@db:5432/rating
+      DISPLAY_TZ: ${DISPLAY_TZ:-America/New_York}   # UX-006: the zone every on-screen timestamp is shown in
     ports: ["127.0.0.1:8001:8000"]
     depends_on:
       db: { condition: service_healthy }
@@ -50,6 +51,7 @@ services:
       # The desk's AI assistant (step 21) calls Claude from the web app: same key as ingestion (CR-078).
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-${UW_ANTHROPIC_API_KEY:-}}
       ASSISTANT_MODEL: ${ASSISTANT_MODEL:-claude-opus-5-5}
+      DISPLAY_TZ: ${DISPLAY_TZ:-America/New_York}   # UX-006: the zone every on-screen timestamp is shown in
     volumes:
       # Broker drop folder shown in the Submissions inbox. Writable: when fewer than five submissions
       # are waiting the app generates more into it (step 20); those folders are git-ignored.

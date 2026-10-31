@@ -16,13 +16,14 @@
     <td class="muted">{% for b in versions if b.id == v.based_on %}{{ b.label }}{% endfor %}</td>
     <td>{{ v.notes }}</td>
     <td>{{ v.created_by }}</td>
-    <td class="muted">{{ v.activated_at.strftime("%Y-%m-%d %H:%M") if v.activated_at else "" }}</td>
+    <td class="muted">{{ v.activated_at | when }}</td>{# UX-006: one named zone (DISPLAY_TZ) #}
   </tr>
   {% endfor %}
 </table>
 
 <h2>New draft</h2>
-<form class="card row" method="post" action="/admin/versions">
+{# UX-009: one submit per click #}
+<form class="card row" method="post" action="/admin/versions" onsubmit="return pending(this, 'Creating draft…')">
   <label>Copy from
     <select name="based_on">
       {% for v in versions %}<option value="{{ v.id }}" {% if v.status == "active" %}selected{% endif %}>{{ v.label }} ({{ v.status }})</option>{% endfor %}
