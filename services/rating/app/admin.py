@@ -65,10 +65,15 @@ def value_kind(kind: str, ident: tuple, column: str) -> str:
     return "factor"   # mod bounds (schedule_mod_min ...) are factors
 
 
-def audit_kind(entry: dict, column: str) -> str:
+def audit_kind(entry: dict, column: str) -> str | None:
     """UX-019: the DECIMALS kind for one before/after value of an audit row (entity 'territory:FL',
-    'class:98677', 'policy_fee', 'sl_tax.FL'; action 'update_factor' | 'update_class' | 'update_parameter')."""
-    return value_kind(str(entry.get("action", "")).removeprefix("update_"), (entry.get("entity") or "",), column)
+    'class:98677', 'policy_fee', 'sl_tax.FL'; action 'update_factor' | 'update_class' | 'update_parameter').
+    UX-027: only update_* rows carry numbers; activate/create_draft rows hold version labels and notes,
+    which pass through unformatted (2026.1 stays 2026.1, never 2026.10)."""
+    action = str(entry.get("action", ""))
+    if not action.startswith("update_"):
+        return None
+    return value_kind(action.removeprefix("update_"), (entry.get("entity") or "",), column)
 
 
 # UX-006: every on-screen timestamp in one named zone, the same one the web app shows.

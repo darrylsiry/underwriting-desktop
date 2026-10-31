@@ -59,3 +59,13 @@ def test_diff_summary_names_the_differences():
     assert "no active version" in diff_summary(v, None, [])
     many = one * 10
     assert "and 2 more" in diff_summary(v, a, many)
+
+
+def test_audit_kind_leaves_version_labels_alone():
+    """UX-027: an activate row holds version labels, not factors: 2026.1 stays 2026.1, never 2026.10."""
+    from app.admin import audit_kind, num
+
+    row = {"action": "activate", "entity": "version:2", "before": {"active": "2026.1"}, "after": {"active": "2026.2"}}
+    assert audit_kind(row, "active") is None
+    assert num("2026.1", audit_kind(row, "active")) == "2026.1"
+    assert audit_kind({"action": "update_factor", "entity": "territory:FL"}, "value") == "factor"

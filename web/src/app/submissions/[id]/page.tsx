@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { DirtyHint } from "@/components/dirty-hint";
 import { when, whenDate } from "@/components/ui";
 import { auditTrail } from "@/lib/audit";
 import { isOpenLoss } from "@/lib/referrals";
@@ -11,7 +10,7 @@ import {
 } from "@/lib/submission";
 import { reviewAction } from "../actions";
 import { StatusBadge } from "../status-badge";
-import { ActionError, ActionForm, ActionFormProvider, ActionInput, ActionSelect, ActionSubmit, ActionTextarea, FieldMessage } from "./action-form";
+import { ActionDirtyHint, ActionError, ActionForm, ActionFormProvider, ActionInput, ActionSelect, ActionSubmit, ActionTextarea, FieldMessage } from "./action-form";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +46,7 @@ export default async function ReviewPage({ params, searchParams }: Props) {
           <StatusBadge status={sub.status} />
           {editable && (
             <span className="ml-auto flex items-center gap-3">
-              <DirtyHint formId="review-form" />
+              <ActionDirtyHint />
               {/* UX-009: "Saving…" while it runs. Enter in any field submits this (the form's first submit button). */}
               <ActionSubmit name="intent" value="save" pending="Saving…" title="Enter also saves"
                 className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-500">
@@ -254,20 +253,25 @@ function FieldRow({ def, value, original, meta, corrected, conflicted, editable,
           <ActionInput id={def.path} name={def.path} saved={saved} className={inputClass} {...constraints(def.type)} />
         )}
         {editable && <FieldMessage name={def.path} />}
-        {/* UX-011: the evidence is readable without a mouse; long snippets open in full. */}
-        {meta?.snippet && !corrected && (
-          <>
-            <p className="mt-1 line-clamp-2 text-xs text-slate-600">
+        {/* UX-011 / UX-028: a form-field read is provenance (one small line); a Claude read is evidence
+            (the quote, readable without a mouse, with one expander when it is long). */}
+        {meta?.snippet && !corrected && (meta.method === "form_field" ? (
+          <p className="mt-0.5 text-[11px] text-slate-500">
+            Form field <code>{meta.snippet.split(" = ")[0]}</code>{docType && ` · ${docType.replaceAll("_", " ")}`}
+          </p>
+        ) : meta.snippet.length > 140 ? (
+          <details className="mt-1 text-xs text-slate-600">
+            <summary className="line-clamp-2 cursor-pointer list-none">
               “{meta.snippet}” <span className="text-slate-500">— {meta.source_document}{docType && ` (${docType.replaceAll("_", " ")})`}</span>
-            </p>
-            {meta.snippet.length > 140 && (
-              <details className="text-xs">
-                <summary className="cursor-pointer text-indigo-600">Show full snippet</summary>
-                <p className="mt-1 whitespace-pre-wrap text-slate-600">“{meta.snippet}”</p>
-              </details>
-            )}
-          </>
-        )}
+              <span className="ml-1 text-indigo-600">more</span>
+            </summary>
+            <p className="mt-1 whitespace-pre-wrap">“{meta.snippet}”</p>
+          </details>
+        ) : (
+          <p className="mt-1 text-xs text-slate-600">
+            “{meta.snippet}” <span className="text-slate-500">— {meta.source_document}{docType && ` (${docType.replaceAll("_", " ")})`}</span>
+          </p>
+        ))}
         {corrected && (
           <p className="mt-1 text-xs text-indigo-600">Corrected by underwriter · extracted value: {formatValue(def.type, original)}</p>
         )}

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { DirtyHint } from "@/components/dirty-hint";
 import { SubmitButton } from "@/components/submit-button";
 import { when, whenDate } from "@/components/ui";
 import { auditTrail } from "@/lib/audit";
@@ -19,7 +18,7 @@ import {
 import { activeRateVersion, money, openWorksheet, readiness } from "@/lib/worksheets";
 import { inputText } from "@/lib/renewal-compare";
 import { expiringOf } from "@/lib/renewals";
-import { ActionError, ActionForm, ActionFormProvider, ActionInput, ActionSelect, ActionSubmit, FieldMessage, WaitForSave } from "../action-form";
+import { ActionDirtyHint, ActionError, ActionForm, ActionFormProvider, ActionInput, ActionSelect, ActionSubmit, FieldMessage, WaitForSave } from "../action-form";
 import { IssueQuoteForm } from "../issue-quote-form";
 import { QuoteDriftNotice, StatusChips } from "../status-chips";
 import { StatusBadge } from "../../status-badge";
@@ -31,7 +30,7 @@ export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ msg?: string; error?: string }> };
 
 const WORKSHEET_ACTIONS = new Set(["renewal.started", "worksheet.opened", "worksheet.input_changed", "worksheet.schedule_changed", "worksheet.rated", "referral.cleared", "quote.issued", "policy.bound"]);
-const WAIT = "Save & rate your changes first";
+const WAIT = "Save & rate your changes first (or reload the page to discard them)."; // UX-032
 
 // UX-010: the tab names the file.
 export async function generateMetadata({ params }: Pick<Props, "params">): Promise<Metadata> {
@@ -103,7 +102,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
           <StatusBadge status={sub.status} />
           <StatusChips chips={chips} />
           <span className="ml-auto flex items-center gap-3">
-            <DirtyHint formId="worksheet-form" />
+            <ActionDirtyHint />
             <ActionSubmit pending="Rating…" title="Enter also saves" className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-500">
               Save &amp; rate
             </ActionSubmit>
@@ -132,7 +131,8 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
               <div className="grid gap-x-6 gap-y-3 p-4 sm:grid-cols-2">
                 {INPUT_DEFS.map((d) => (
                   <label key={d.key} className="flex flex-col gap-1 text-xs text-slate-500">
-                    {d.label}
+                    {/* UX-029: the input shows the unit, so the label does not repeat it. */}
+                    {inputUnit(d) ? d.label.replace(/\s*%$|\s*\(ft\)$/, "") : d.label}
                     {d.kind === "bool" ? (
                       <ActionSelect name={d.key} saved={ws.rating_inputs[d.key] ? "yes" : "no"} className="rounded border px-2 py-1.5 text-sm text-slate-900">
                         <option value="yes">yes</option><option value="no">no</option>

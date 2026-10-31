@@ -115,3 +115,11 @@ export function ActionSelect({ name, saved, className = "", children, ...rest }:
   const bad = useFieldInvalid(name);
   return <select {...rest} name={name} defaultValue={value} aria-invalid={bad || undefined} className={`${className} ${invalidClass(bad)}`}>{children}</select>;
 }
+
+/** UX-021 / UX-032: "Unsaved changes" next to the Save button, from the same dirty state that holds
+ * Clear/Issue/Bind back (typed input, or a submit the server rejected), so the two never disagree. */
+export function ActionDirtyHint() {
+  const c = useCtx();
+  if (!c?.dirty) return null;
+  return <span className="rounded bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800" role="status">Unsaved changes</span>;
+}
