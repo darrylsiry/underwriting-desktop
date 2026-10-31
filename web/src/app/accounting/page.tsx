@@ -1,17 +1,31 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import { Section } from "@/components/ui";
+import { AutoDownload } from "@/components/auto-download";
+import { SubmitButton } from "@/components/submit-button";
+import { Section, when, whenDate } from "@/components/ui";
 import {
-  GL_TIME_ZONE, PERIOD_PRESETS, PRESET_LABEL, TRANSACTION_LABEL, glDate, periodLabel, presetRange, type PeriodPreset, type TransactionType,
+  EXPORT_FORMATS, GL_TIME_ZONE, PERIOD_PRESETS, PRESET_LABEL, TRANSACTION_LABEL, glDate, periodLabel, presetRange, type ExportFormat, type PeriodPreset, type TransactionType,
 } from "@/lib/gl-journal";
 import { byPeriod, ledgerTotals, listPostings, type Journal, type LedgerFilter } from "@/lib/ledger";
+import { iso } from "@/lib/time";
+import { pushToGlAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-type Params = { period?: string; from?: string; to?: string; type?: string; batch?: string; msg?: string; error?: string };
+type Params = { period?: string; from?: string; to?: string; type?: string; batch?: string; msg?: string; error?: string; pushed?: string; format?: string };
+
+// UX-010: the tab names the month being looked at.
+export async function generateMetadata({ searchParams }: { searchParams: Promise<Params> }): Promise<Metadata> {
+  const p = await searchParams;
+  const preset: PeriodPreset = (PERIOD_PRESETS as readonly string[]).includes(p.period ?? "") ? (p.period as PeriodPreset) : p.batch ? "all" : "this_month";
+  const range = presetRange(preset, glDate(new Date()), { from: isDate(p.from) ? p.from! : null, to: isDate(p.to) ? p.to! : null });
+  const month = range.from && range.to && range.from.slice(0, 7) === range.to.slice(0, 7) ? periodLabel(range.from.slice(0, 7)) : PRESET_LABEL[preset];
+  return { title: `Accounting · ${p.batch ? `batch ${p.batch}` : month}` };
+}
 
 const money = (n: number | string) => `$${Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const amount = (n: number | string) => (Number(n) === 0 ? "" : money(n));
-const when = (d: Date) => d.toLocaleString("en-US", { timeZone: GL_TIME_ZONE, dateStyle: "medium", timeStyle: "short" });
+// UX-006: clock times through the shared `when` (one display zone, zone named); posting dates and periods stay on GL_TIME_ZONE.
 const isDate = (s?: string) => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const TYPES = Object.keys(TRANSACTION_LABEL) as TransactionType[];
 
@@ -25,8 +39,14 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
   const rows = await listPostings(filter);
   const periods = byPeriod(rows);
   const t = ledgerTotals(rows);
-  const rangeText = range.from || range.to ? `${range.from ?? "start"} to ${range.to ?? today}` : "all periods";
+  const rangeText = range.from || range.to ? `${range.from ? whenDate(range.from) : "start"} to ${whenDate(range.to ?? today)}` : "all periods";
   const pushed = rows.filter((r) => r.export_batch).length;
+  // UX-022: the push just made (from the redirect), the batch most recently stamped among the lines shown.
+  const justPushed = /^\d+$/.test(p.pushed ?? "") ? Number(p.pushed) : null;
+  const format: ExportFormat = (EXPORT_FORMATS as readonly string[]).includes(p.format ?? "") ? (p.format as ExportFormat) : "xlsx";
+  const last = rows.filter((r) => r.exported_at).sort((a, b) => b.exported_at!.getTime() - a.exported_at!.getTime())[0];
+  const fileQs = new URLSearchParams({ ...(filter.from ? { from: filter.from } : {}), ...(filter.to ? { to: filter.to } : {}), ...(filter.type ? { type: filter.type } : {}), ...(filter.batch ? { batch: filter.batch } : {}), format });
+  const fileHref = `/api/gl/postings?${fileQs}`;   // a read: renders the same file without stamping
 
   return (
     <main className="mx-auto max-w-7xl p-8">
@@ -50,7 +70,19 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
 
       {p.msg && <p className="mt-4 rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{p.msg}</p>}
       {p.error && <p className="mt-4 rounded bg-rose-50 px-3 py-2 text-sm text-rose-700">{p.error}</p>}
-      {p.batch && (
+      {/* UX-022: the push just made, confirmed on the page; the file follows on its own. */}
+      {justPushed !== null && (
+        <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800" role="status">
+          {justPushed > 0 && p.batch
+            ? <><span className="font-medium">Pushed batch <code className="text-xs">{p.batch}</code></span><span>{justPushed} line{justPushed === 1 ? "" : "s"} marked</span></>
+            : <><span className="font-medium">Nothing new to push</span><span>every line in the file had been pushed in an earlier batch; the file shows which</span></>}
+          <a href={fileHref} className="font-medium underline">Download .{format}</a>
+          <span className="text-xs text-emerald-700">(downloading now)</span>
+          {p.batch && <Link href="/accounting" className="ml-auto text-xs underline">Show all</Link>}
+          <AutoDownload href={fileHref} strip={["pushed", "format"]} />
+        </p>
+      )}
+      {p.batch && justPushed === null && (
         <p className="mt-4 rounded bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
           Showing the lines pushed in batch <code className="text-xs">{p.batch}</code>. <Link href="/accounting" className="underline">Show all</Link>
         </p>
@@ -76,7 +108,7 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
           </select>
         </label>
         <button className="rounded-md bg-indigo-600 px-3 py-1.5 font-medium text-white hover:bg-indigo-500">Show</button>
-        <span className="py-1.5 text-xs text-slate-500">Posting dates {rangeText}{filter.type ? ` · ${TRANSACTION_LABEL[filter.type]} only` : ""}</span>
+        <span className="py-1.5 text-xs text-slate-500">Posting dates {rangeText}{filter.type ? ` · ${TRANSACTION_LABEL[filter.type]} only` : ""} · {GL_TIME_ZONE.replace("_", " ")} days</span>
       </form>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -88,18 +120,21 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
       </div>
 
       <Section title="Push to the general ledger">
-        <form method="post" action="/accounting/export" className="flex flex-wrap items-center gap-3 p-4 text-sm">
+        {/* UX-022 / UX-009: a server action (same push as POST /accounting/export) so the buttons can show their pending state. */}
+        <form action={pushToGlAction} className="flex flex-wrap items-center gap-3 p-4 text-sm">
           <input type="hidden" name="period" value={preset} />
           <input type="hidden" name="from" value={isDate(p.from) ? p.from : ""} />
           <input type="hidden" name="to" value={isDate(p.to) ? p.to : ""} />
           <input type="hidden" name="type" value={filter.type} />
           <input type="hidden" name="batch" value={filter.batch} />
-          <button name="format" value="xlsx" disabled={!rows.length} className="rounded-md bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 disabled:opacity-50">Export Excel (.xlsx)</button>
-          <button name="format" value="csv" disabled={!rows.length} className="rounded-md border border-slate-300 px-4 py-2 font-medium hover:bg-slate-50 disabled:opacity-50">Export CSV</button>
-          <button name="format" value="json" disabled={!rows.length} className="rounded-md border border-slate-300 px-4 py-2 font-medium hover:bg-slate-50 disabled:opacity-50">Export JSON</button>
+          <SubmitButton pending="Preparing file…" name="format" value="xlsx" disabled={!rows.length} className="rounded-md bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 disabled:opacity-50">Export Excel (.xlsx)</SubmitButton>
+          <SubmitButton pending="Preparing file…" name="format" value="csv" disabled={!rows.length} className="rounded-md border border-slate-300 px-4 py-2 font-medium hover:bg-slate-50 disabled:opacity-50">Export CSV</SubmitButton>
+          <SubmitButton pending="Preparing file…" name="format" value="json" disabled={!rows.length} className="rounded-md border border-slate-300 px-4 py-2 font-medium hover:bg-slate-50 disabled:opacity-50">Export JSON</SubmitButton>
           <span className="text-xs text-slate-500">
-            Downloads the {rows.length} line{rows.length === 1 ? "" : "s"} shown: Excel and CSV as one row per journal line, JSON as journals with their lines, each with the policy details and a link to the underwriting action.
-            Lines not pushed before are marked with this batch ({pushed} of {rows.length} already pushed).
+            Downloads the {rows.length} line{rows.length === 1 ? "" : "s"} shown: Excel and CSV as one row per journal line, JSON as journals with their lines, each with the policy details and a link to the underwriting action.{" "}
+            {rows.length > 0 && pushed === rows.length
+              ? <>All {rows.length} line{rows.length === 1 ? "" : "s"} shown were pushed{last?.export_batch ? <> (last batch <code>{last.export_batch}</code> on {whenDate(last.exported_at!)})</> : ""}. Exporting again re-stamps nothing; the file names each line&apos;s batch.</>
+              : <>Lines not pushed before are marked with this batch ({pushed} of {rows.length} already pushed).</>}{" "}
             Other systems can pull the same data from the <Link href="/accounting/api" className="text-indigo-600 hover:underline">API</Link>; agents through the <Link href="/accounting/mcp" className="text-indigo-600 hover:underline">MCP server</Link>.
           </span>
         </form>
@@ -118,13 +153,13 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
                 <tr><th className="px-4 py-2 font-medium">Journal · posted</th><th className="px-4 py-2 font-medium">Account</th><th className="px-4 py-2 text-right font-medium">Debit</th><th className="px-4 py-2 text-right font-medium">Credit</th></tr>
               </thead>
               <tbody>
-                {g.journals.map((j) => <JournalRows key={j.journal_no} j={j} />)}
+                {g.journals.map((j) => <JournalRows key={j.journal_no} j={j} highlight={justPushed ? p.batch : undefined} />)}
               </tbody>
             </table>
           </section>
         ))}
         {!rows.length && (
-          <p className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-400">
+          <p className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
             Nothing booked for {rangeText}. Try <Link href="/accounting?period=ytd" className="text-indigo-600 hover:underline">year to date</Link> or{" "}
             <Link href="/accounting?period=all" className="text-indigo-600 hover:underline">all periods</Link>.
           </p>
@@ -144,33 +179,34 @@ function Tile({ label, value, sub }: { label: string; value: string; sub?: strin
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-xs text-slate-500">{label}</p>
       <p className="mt-1 text-xl font-semibold tabular-nums">{value}</p>
-      {sub && <p className="mt-0.5 truncate text-xs text-slate-400" title={sub}>{sub}</p>}
+      {sub && <p className="mt-0.5 truncate text-xs text-slate-500" title={sub}>{sub}</p>}
     </div>
   );
 }
 
-function JournalRows({ j }: { j: Journal }) {
+/** `highlight`: the batch just pushed (UX-022), called out on its journals. */
+function JournalRows({ j, highlight }: { j: Journal; highlight?: string }) {
   return (
     <>
       <tr className="border-t border-slate-200 bg-slate-50/60">
         <td colSpan={4} className="px-4 py-2">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="font-mono text-xs font-semibold">{j.journal_no}</span>
-            <span className="text-xs text-slate-500">{when(j.posted_at)}</span>
+            <time dateTime={iso(j.posted_at)} className="text-xs text-slate-500">{when(j.posted_at)}</time>
             <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] text-indigo-700">{TRANSACTION_LABEL[j.transaction_type]}</span>
             <Link href={`/policies/${j.policy_id}`} className="font-medium text-indigo-600 hover:underline">{j.policy_number}</Link>
             <span>{j.insured_name}</span>
-            <span className="text-xs text-slate-500">{j.effective_date} → {j.expiration_date} · {j.quote_ref} · {j.submission_ref} · UW {j.underwriter}{j.producer ? ` · ${j.producer}` : ""}</span>
+            <span className="text-xs text-slate-500">{whenDate(j.effective_date)} → {whenDate(j.expiration_date)} · {j.quote_ref} · {j.submission_ref} · UW {j.underwriter}{j.producer ? ` · ${j.producer}` : ""}</span>
             <Link href={`/audit?submission=${j.submission_id}&correlation=${j.correlation_id}`} className="text-xs text-indigo-600 hover:underline">UW action →</Link>
-            <span className="ml-auto text-[11px] text-slate-500">
-              {j.export_batch ? `pushed · ${j.export_batch} · ${j.exported_at ? when(j.exported_at) : ""}` : "not yet pushed"}
+            <span className={`ml-auto text-[11px] ${j.export_batch && j.export_batch === highlight ? "rounded bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-800" : "text-slate-500"}`}>
+              {j.export_batch ? <>pushed · {j.export_batch} · {j.exported_at && <time dateTime={iso(j.exported_at)}>{when(j.exported_at)}</time>}</> : "not yet pushed"}
             </span>
           </div>
         </td>
       </tr>
       {j.lines.map((l) => (
         <tr key={l.id} className="border-t border-slate-100">
-          <td className="px-4 py-1 pl-10 text-xs text-slate-400">line {l.line_no}</td>
+          <td className="px-4 py-1 pl-10 text-xs text-slate-500">line {l.line_no}</td>
           <td className="px-4 py-1"><span className="font-mono text-xs text-slate-500">{l.account_code}</span> <span>{l.account_name}</span></td>
           <td className="px-4 py-1 text-right tabular-nums">{amount(l.debit)}</td>
           <td className="px-4 py-1 text-right tabular-nums">{amount(l.credit)}</td>

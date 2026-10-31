@@ -1,6 +1,8 @@
 import { customerDb, policyDb } from "./db";
 import { listInbox } from "./inbox";
 import { missingForRating, type SubmissionRow } from "./submissions";
+import { stageOf, type Stage } from "./stage";
+import { whenDate } from "./time";
 import { activeRateVersion, readiness, type WorksheetRow } from "./worksheets";
 
 // Everything the home page shows for one underwriter. An underwriter owns the submissions they
@@ -103,7 +105,7 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     if (s.status === "needs_review") {
       const missing = missingForRating(s.data).length;
       tasks.push({ kind: "review", title: `Review intake: ${name}`, href: `/submissions/${s.id}`, due: null, urgency: 20,
-        detail: `${s.reference} · received ${s.received_at.toISOString().slice(0, 10)}${missing ? ` · ${missing} rating field(s) missing` : ""}` });
+        detail: `${s.reference} · received ${whenDate(s.received_at)}${missing ? ` · ${missing} rating field(s) missing` : ""}` });   // UX-025
       continue;
     }
     if (quotedSubs.has(s.id)) continue;
@@ -195,4 +197,31 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     },
     activity: activity.rows,
   };
+}
+
+/**
+ * Where each submission stands (UX-005), for the Received table: intake review, worksheet and
+ * referrals, the latest quote, or the bound policy. One query per table, not per row.
+ */
+export async function submissionStages(subs: SubmissionRow[]): Promise<Map<string, Stage>> {
+  const ids = subs.map((s) => s.id);
+  const [worksheets, quotes, policies, activeVersion] = await Promise.all([
+    customerDb.query<WorksheetRow>("SELECT * FROM worksheets WHERE submission_id = ANY($1)", [ids]),
+    policyDb.query<{ submission_id: string; version: number; total: string; status: string }>(
+      "SELECT DISTINCT ON (submission_id) submission_id, version, total, status FROM quotes WHERE submission_id = ANY($1) ORDER BY submission_id, version DESC", [ids]),
+    policyDb.query<{ submission_id: string; policy_number: string }>("SELECT submission_id, policy_number FROM policies WHERE submission_id = ANY($1)", [ids]),
+    activeRateVersion(),
+  ]);
+  const ws = new Map(worksheets.rows.map((w) => [w.submission_id, w]));
+  const quote = new Map(quotes.rows.map((q) => [q.submission_id, q]));
+  const policy = new Map(policies.rows.map((p) => [p.submission_id, p]));
+  return new Map(subs.map((s) => {
+    const w = ws.get(s.id);
+    const r = w ? readiness(s, w, activeVersion) : null;
+    return [s.id, stageOf({
+      status: s.status, missing: missingForRating(s.data).length,
+      worksheet: r ? { rated: r.rated, openReferrals: r.openReferrals.length } : null,
+      quote: quote.get(s.id) ?? null, policy: policy.get(s.id) ?? null,
+    })];
+  }));
 }

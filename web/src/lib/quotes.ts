@@ -11,7 +11,7 @@ import { activeRateVersion, getWorksheet, money, readiness, type Rating } from "
 
 export type QuoteRow = {
   id: string; quote_number: string; version: number; status: "issued" | "superseded" | "bound";
-  submission_id: string; submission_ref: string; insured_name: string;
+  submission_id: string; submission_ref: string; insured_id: string | null; insured_name: string;   // UX-013: lists link the insured
   effective_date: string; expiration_date: string; valid_until: string;
   rating_id: string; rate_version: string; premium: string; policy_fee: string; surplus_lines_tax: string; total: string;
   subjectivities: string[]; issued_by: string; issued_at: Date;
@@ -19,7 +19,7 @@ export type QuoteRow = {
 };
 
 // Dates come back as JS Dates by default; keep them as YYYY-MM-DD strings.
-const COLUMNS = `id, quote_number, version, status, submission_id, submission_ref, insured_name,
+const COLUMNS = `id, quote_number, version, status, submission_id, submission_ref, insured_id, insured_name,
   effective_date::text, expiration_date::text, valid_until::text, rating_id, rate_version,
   premium, policy_fee, surplus_lines_tax, total, subjectivities, issued_by, issued_at, (memo_pdf IS NOT NULL) AS has_memo`;
 
@@ -122,6 +122,8 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
     premium: Number(rating.premium), policyFee: Number(rating.policy_fee), surplusLinesTax: Number(rating.surplus_lines_tax),
     surplusLinesTaxRate: Number(rating.surplus_lines_tax_rate), homeState: inputs.home_state, total: Number(rating.total),
     rateVersion: rating.rate_version, subjectivities, forms: terms.forms, renewalOf: sub.renewal_of?.policy_number,
+    // UX-016: a revised quote says which version it replaces.
+    supersedes: previous ? { version: previous.version, issuedAt: previous.issued_at.toISOString().slice(0, 10) } : undefined,
   });
 
   // A renewal quote comes with a memo to the insured: premium change, what changed in the rating
@@ -189,7 +191,7 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
 }
 
 export type QuoteDetail = QuoteRow & {
-  insured_id: string | null; rating_inputs: RatingInputs; schedule: ScheduleItem[]; rating: Rating; renewal_summary: Comparison | null;
+  rating_inputs: RatingInputs; schedule: ScheduleItem[]; rating: Rating; renewal_summary: Comparison | null;
   terms: { insured_address: string[]; producer: string[]; limits: { label: string; amount: number }[]; deductible: number;
     class_code: string; class_description: string; operations: string; forms: string[] };
 };
@@ -198,7 +200,7 @@ export type QuoteDetail = QuoteRow & {
 export async function getQuote(id: string): Promise<QuoteDetail | null> {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
   const { rows } = await policyDb.query<QuoteDetail>(
-    `SELECT ${COLUMNS}, insured_id, rating_inputs, schedule, rating, terms, renewal_summary FROM quotes WHERE id = $1`, [id]);
+    `SELECT ${COLUMNS}, rating_inputs, schedule, rating, terms, renewal_summary FROM quotes WHERE id = $1`, [id]);
   return rows[0] ?? null;
 }
 

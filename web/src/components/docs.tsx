@@ -18,7 +18,7 @@ export function Crumbs({ trail }: { trail: { href?: string; label: string }[] })
 export function Code({ children, title }: { children: string; title?: string }) {
   return (
     <div className="my-2">
-      {title && <p className="mb-1 text-[11px] uppercase tracking-wide text-slate-400">{title}</p>}
+      {title && <p className="mb-1 text-[11px] uppercase tracking-wide text-slate-500">{title}</p>}
       <pre className="overflow-x-auto rounded-md bg-slate-900 p-3 text-xs leading-relaxed text-slate-100"><code>{children}</code></pre>
     </div>
   );

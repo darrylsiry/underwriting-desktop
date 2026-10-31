@@ -10,7 +10,7 @@ import { money, type Rating } from "./worksheets";
 
 export type PolicyRow = {
   id: string; policy_number: string; binder_number: string; status: string; quote_id: string;
-  quote_number: string; quote_version: number; submission_id: string; insured_name: string;
+  quote_number: string; quote_version: number; submission_id: string; insured_id: string | null; insured_name: string;   // UX-013: lists link the insured
   effective_date: string; expiration_date: string; premium: string; policy_fee: string;
   surplus_lines_tax: string; total: string; subjectivities: SubjectivityStatus[];
   bound_by: string; bound_at: Date;
@@ -19,7 +19,7 @@ export type PolicyRow = {
 };
 
 const COLUMNS = `p.id, p.policy_number, p.binder_number, p.status, p.quote_id, q.quote_number, q.version AS quote_version,
-  p.submission_id, p.insured_name, p.effective_date::text, p.expiration_date::text, p.premium, p.policy_fee,
+  p.submission_id, p.insured_id, p.insured_name, p.effective_date::text, p.expiration_date::text, p.premium, p.policy_fee,
   p.surplus_lines_tax, p.total, p.subjectivities, p.bound_by, p.bound_at, p.renewal_status, p.renewal_submission_id, p.renewed_from`;
 
 export async function policiesForSubmission(submissionId: string): Promise<PolicyRow[]> {
@@ -28,10 +28,16 @@ export async function policiesForSubmission(submissionId: string): Promise<Polic
   return rows;
 }
 
-export async function getPolicy(id: string): Promise<(PolicyRow & { insured_id: string | null }) | null> {
+/** What the policy covers, frozen on the quote it was bound from (UX-014). */
+export type PolicyTerms = {
+  terms: { limits: { label: string; amount: number }[]; deductible: number; class_code: string; class_description: string; operations: string; forms: string[] };
+  rating_inputs: RatingInputs;
+};
+
+export async function getPolicy(id: string): Promise<(PolicyRow & PolicyTerms) | null> {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
-  const { rows } = await policyDb.query<PolicyRow & { insured_id: string | null }>(
-    `SELECT ${COLUMNS}, p.insured_id FROM policies p JOIN quotes q ON q.id = p.quote_id WHERE p.id = $1`, [id]);
+  const { rows } = await policyDb.query<PolicyRow & PolicyTerms>(
+    `SELECT ${COLUMNS}, q.terms, q.rating_inputs FROM policies p JOIN quotes q ON q.id = p.quote_id WHERE p.id = $1`, [id]);
   return rows[0] ?? null;
 }
 

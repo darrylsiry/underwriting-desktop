@@ -1,13 +1,25 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Empty, Pill, RowLink, Section, money, when } from "@/components/ui";
+import { Fragment, cache } from "react";
+import { Empty, Pill, RowLink, Section, money, when, whenDate } from "@/components/ui";
+import { RENEWAL_WINDOW_DAYS, daysUntil } from "@/lib/dashboard";
 import { getPolicy } from "@/lib/policies";
 import { quotesForSubmission } from "@/lib/quotes";
 import { renewalOfPolicy } from "@/lib/renewals";
 import { listDocuments } from "@/lib/submissions";
 import { startRenewalAction } from "../actions";
+import { StartRenewalForm } from "../start-renewal-form";
 
 export const dynamic = "force-dynamic";
+
+const load = cache(getPolicy);   // once per request, shared by the title and the page
+
+// UX-010
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const p = await load((await params).id);
+  return { title: p ? `${p.policy_number} · Policy` : "Policy" };
+}
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string }> };
 
@@ -17,8 +29,9 @@ type Doc = { group: string; title: string; detail: string; href: string };
 export default async function PolicyPage({ params, searchParams }: Props) {
   const { id } = await params;
   const { error } = await searchParams;
-  const p = await getPolicy(id);
+  const p = await load(id);
   if (!p) notFound();
+  const daysLeft = daysUntil(p.expiration_date, new Date().toISOString().slice(0, 10));   // UX-023
   const [quotes, uploads, renewal] = await Promise.all([
     quotesForSubmission(p.submission_id), listDocuments(p.submission_id), renewalOfPolicy(p.renewal_submission_id),
   ]);
@@ -38,7 +51,7 @@ export default async function PolicyPage({ params, searchParams }: Props) {
       ...(q.has_memo ? [{ group: "Renewal", title: `Renewal memo for ${q.quote_number} v${q.version}`, detail: "to the insured: what changed and why", href: `/quotes/${q.id}/memo` }] : []),
     ]),
     ...(renewal?.policy ? [
-      { group: "Renewal", title: `Renewal policy ${renewal.policy.policy_number}`, detail: `${renewal.policy.effective_date} → ${renewal.policy.expiration_date}`, href: `/policies/${renewal.policy.id}/policy` },
+      { group: "Renewal", title: `Renewal policy ${renewal.policy.policy_number}`, detail: `${whenDate(renewal.policy.effective_date)} → ${whenDate(renewal.policy.expiration_date)}`, href: `/policies/${renewal.policy.id}/policy` },
     ] : []),
   ];
 
@@ -63,9 +76,20 @@ export default async function PolicyPage({ params, searchParams }: Props) {
       {error && <p className="mt-4 rounded bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
 
       <div className="mt-6 grid gap-6 md:grid-cols-2">
+        {/* UX-014: what is covered, from the terms frozen on the quote; the money has its own section. */}
         <Section title="Coverage">
+          <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 p-4 text-sm">
+            <dt className="text-slate-500">Policy period</dt><dd className="text-right">{whenDate(p.effective_date)} → {whenDate(p.expiration_date)}</dd>
+            {p.terms.limits.map((l) => <Fragment key={l.label}><dt className="text-slate-500">{l.label}</dt><dd className="text-right tabular-nums">{money(l.amount)}</dd></Fragment>)}
+            <dt className="text-slate-500">Deductible</dt><dd className="text-right tabular-nums">{p.terms.deductible ? money(p.terms.deductible) : "None"}</dd>
+            <dt className="text-slate-500">Class</dt><dd className="text-right">{p.terms.class_code} {p.terms.class_description}</dd>
+            <dt className="text-slate-500">Gross receipts</dt><dd className="text-right tabular-nums">{money(p.rating_inputs.gross_receipts)}</dd>
+            <dt className="text-slate-500">States</dt><dd className="text-right">{p.rating_inputs.states.join(", ")} (home {p.rating_inputs.home_state})</dd>
+            <dt className="text-slate-500">Forms</dt><dd className="text-right"><ul>{p.terms.forms.map((f) => <li key={f}>{f}</li>)}</ul></dd>
+          </dl>
+        </Section>
+        <Section title="Premium">
           <dl className="grid grid-cols-2 gap-y-1 p-4 text-sm">
-            <dt className="text-slate-500">Policy period</dt><dd className="text-right">{p.effective_date} → {p.expiration_date}</dd>
             <dt className="text-slate-500">Premium</dt><dd className="text-right tabular-nums">{money(p.premium)}</dd>
             <dt className="text-slate-500">Policy fee</dt><dd className="text-right tabular-nums">{money(p.policy_fee)}</dd>
             <dt className="text-slate-500">Surplus lines tax</dt><dd className="text-right tabular-nums">{money(p.surplus_lines_tax)}</dd>
@@ -77,23 +101,25 @@ export default async function PolicyPage({ params, searchParams }: Props) {
             {p.subjectivities.map((s) => (
               <li key={s.text} className="flex items-center gap-3 px-4 py-2">
                 <span className="flex-1">{s.text}</span>
-                {s.status === "open" && <span className="text-xs text-amber-800">due {s.due_date}</span>}
+                {s.status === "open" && <span className="text-xs text-amber-800">due {whenDate(s.due_date!)}</span>}
                 <Pill status={s.status} />
               </li>
             ))}
           </ul>
         </Section>
 
+        {/* UX-023: when it expires, whether a renewal is due yet, and a confirm before one is created. */}
         <Section title={`Renewal · ${p.renewal_status.replace("_", " ")}`}>
           <div className="p-4 text-sm">
             {!renewal ? (
-              <form action={startRenewalAction.bind(null, "desktop", p.id)}>
-                <p className="text-slate-600">
-                  Expires {p.expiration_date}. Starting a renewal copies this policy&apos;s terms, schedule and rating into a new worksheet;
+              <StartRenewalForm action={startRenewalAction.bind(null, "desktop", p.id)} policyNumber={p.policy_number} inWindow={daysLeft <= RENEWAL_WINDOW_DAYS}>
+                <p className="font-medium">Expires {whenDate(p.expiration_date)} · {daysLeft < 0 ? `expired ${-daysLeft} day${daysLeft === -1 ? "" : "s"} ago` : `${daysLeft} day${daysLeft === 1 ? "" : "s"}`}</p>
+                <p className="mt-1 text-slate-600">
+                  {daysLeft > RENEWAL_WINDOW_DAYS && <>Renewals usually start within {RENEWAL_WINDOW_DAYS} days of expiry. </>}
+                  Starting a renewal copies this policy&apos;s terms, schedule and rating into a new worksheet;
                   the renewing terms are then compared with it factor by factor.
                 </p>
-                <button className="mt-3 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Start renewal</button>
-              </form>
+              </StartRenewalForm>
             ) : (
               <>
                 <p>
@@ -104,8 +130,8 @@ export default async function PolicyPage({ params, searchParams }: Props) {
                 {renewal.quotes.length > 0 && (
                   <ul className="mt-3 space-y-1">
                     {renewal.quotes.map((q) => (
-                      <li key={q.id} className={`flex items-center gap-2 ${q.status === "superseded" ? "text-slate-400" : ""}`}>
-                        <Link href={`/quotes/${q.id}`} className="font-mono text-xs hover:underline">{q.quote_number} v{q.version}</Link>
+                      <li key={q.id} className={`flex items-center gap-2 ${q.status === "superseded" ? "text-slate-500" : ""}`}>
+                        <Link href={`/quotes/${q.id}`} className="font-mono text-xs text-indigo-600 hover:underline">{q.quote_number} v{q.version}</Link>{/* UX-013 */}
                         <Pill status={q.status} />
                         <span className="ml-auto tabular-nums">{money(q.total)}</span>
                       </li>
@@ -114,7 +140,7 @@ export default async function PolicyPage({ params, searchParams }: Props) {
                 )}
                 {renewal.policy && (
                   <p className="mt-3 rounded bg-emerald-50 px-3 py-2 text-emerald-800">
-                    Renewed as <RowLink href={`/policies/${renewal.policy.id}`}>{renewal.policy.policy_number}</RowLink>, {renewal.policy.effective_date} → {renewal.policy.expiration_date}, {money(renewal.policy.total)}
+                    Renewed as <RowLink href={`/policies/${renewal.policy.id}`}>{renewal.policy.policy_number}</RowLink>, {whenDate(renewal.policy.effective_date)} → {whenDate(renewal.policy.expiration_date)}, {money(renewal.policy.total)}
                   </p>
                 )}
               </>
@@ -126,7 +152,7 @@ export default async function PolicyPage({ params, searchParams }: Props) {
           <ul className="divide-y divide-slate-100 text-sm">
             {docs.map((d) => (
               <li key={d.href + d.title} className="flex items-center gap-3 px-4 py-2">
-                <span className="w-20 shrink-0 text-xs uppercase tracking-wide text-slate-400">{d.group}</span>
+                <span className="w-20 shrink-0 text-xs uppercase tracking-wide text-slate-500">{d.group}</span>
                 <span className="min-w-0 flex-1">
                   <a href={d.href} target="_blank" className="text-indigo-600 hover:underline">{d.title}</a>
                   <span className="block truncate text-xs text-slate-500">{d.detail}</span>

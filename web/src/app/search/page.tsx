@@ -1,12 +1,19 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Empty, Pill, RowLink, Section, money } from "@/components/ui";
+import { Empty, Pill, RowLink, Section, money, whenDate } from "@/components/ui";
 import { directHit, search } from "@/lib/search";
 import { parseQuery } from "@/lib/search-terms";
 
 export const dynamic = "force-dynamic";
 
 type Props = { searchParams: Promise<{ q?: string; all?: string }> };
+
+// UX-010
+export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
+  const { q = "" } = await searchParams;
+  return { title: q.trim() ? `Search: ${q.trim()}` : "Search" };
+}
 
 export default async function SearchPage({ searchParams }: Props) {
   const { q = "", all } = await searchParams;
@@ -66,7 +73,7 @@ export default async function SearchPage({ searchParams }: Props) {
                 <Link key={p.id} href={`/policies/${p.id}`} className="flex items-center gap-3 border-t border-slate-100 px-4 py-2 text-sm first:border-0 hover:bg-slate-50">
                   <span className="font-mono text-xs">{p.policy_number}</span>
                   <span>{p.insured_name}</span>
-                  <span className="ml-auto text-xs text-slate-500">eff. {p.effective_date}</span>
+                  <span className="ml-auto text-xs text-slate-500">eff. {whenDate(p.effective_date)}</span>{/* UX-025 */}
                   <span className="tabular-nums">{money(p.total)}</span>
                 </Link>
               ))}

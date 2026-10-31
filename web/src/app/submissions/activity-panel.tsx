@@ -103,8 +103,8 @@ function Row({ e }: { e: ActivityEvent }) {
   }
 }
 
-export function ActivityPanel({ title, events, running, onClose }: {
-  title: string; events: ActivityEvent[]; running: boolean; onClose: () => void;
+export function ActivityPanel({ title, events, running, onClose, onRetry }: {
+  title: string; events: ActivityEvent[]; running: boolean; onClose: () => void; onRetry?: () => void;
 }) {
   const [now, setNow] = useState(Date.now());
   const [startedAt] = useState(Date.now());
@@ -123,7 +123,8 @@ export function ActivityPanel({ title, events, running, onClose }: {
   const fields = events.filter((e) => e.type === "field");
   const formCount = fields.filter((e) => e.method === "form_field").length;
   const claudeStage = events.some((e) => e.stage === "claude");
-  const failed = events.some((e) => e.type === "error");
+  const failure = events.find((e) => e.type === "error");
+  const failed = !!failure;
   const done = events.find((e) => e.type === "stored");
   // A quiet spell while Claude works (it reads and reasons before it writes): say so instead of looking stuck.
   const waitingOnClaude = running && claudeStage && last && elapsed - last.t > 1.5;
@@ -153,7 +154,14 @@ export function ActivityPanel({ title, events, running, onClose }: {
             </div>
           )}
         </div>
+        {/* UX-008: what went wrong in plain words, and the way forward. */}
+        {failed && !running && (
+          <p className="border-t border-slate-800 bg-rose-950/40 px-5 py-3 text-sm text-rose-200" role="alert">{failure.message}</p>
+        )}
         <div className="flex items-center justify-end gap-3 border-t border-slate-800 px-5 py-3">
+          {failed && !running && onRetry && (
+            <button onClick={onRetry} className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500">Try again</button>
+          )}
           {done?.id && (
             <a href={`/submissions/${done.id}`} className="rounded-md bg-emerald-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-500">
               Open {done.reference} →

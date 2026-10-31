@@ -58,3 +58,11 @@ test("schedules display compactly", () => {
   assert.equal(display([]), "none");
   assert.equal(display(null), "—");
 });
+
+// UX-006: the day filters use the display zone, so an event shown as "Oct 31, 11:30 PM EDT" is an Oct 31 event.
+test("from/to bucket days in the display zone, not UTC", () => {
+  const lateOct31Eastern = [desktop(1, "2026-11-01T03:30:00Z", "c1")];
+  assert.equal(applyFilters(lateOct31Eastern, { from: "2026-10-31", to: "2026-10-31" }, "America/New_York").length, 1);
+  assert.equal(applyFilters(lateOct31Eastern, { from: "2026-11-01" }, "America/New_York").length, 0);
+  assert.equal(applyFilters(lateOct31Eastern, { from: "2026-11-01" }, "UTC").length, 1);
+});

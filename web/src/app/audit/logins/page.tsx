@@ -1,10 +1,14 @@
-import { Empty, RowLink, Section } from "@/components/ui";
+import type { Metadata } from "next";
+import { Empty, RowLink, Section, when as whenAt } from "@/components/ui";
 import { loginReport } from "@/lib/login-events";
 import { browserLabel, place, type LoginEvent, type UserSummary } from "@/lib/login-meta";
 
 export const dynamic = "force-dynamic";
 
-const when = (d: Date | null) => (d ? d.toISOString().replace("T", " ").slice(0, 16) + " UTC" : "—");
+export const metadata: Metadata = { title: "Sign-ins" };   // UX-010
+
+// UX-006: the same display zone as every other screen (was UTC in its own format).
+const when = (d: Date | null) => (d ? whenAt(d) : "—");
 const num = (n: number) => n.toLocaleString("en-US");
 
 function Stat({ label, value, tone = "" }: { label: string; value: string; tone?: string }) {
@@ -28,7 +32,7 @@ function UsersTable({ users }: { users: UserSummary[] }) {
           <tr key={u.username} className="border-t border-slate-100">
             <td className="px-4 py-2 font-medium text-slate-900">{u.username}</td>
             <td className="px-2 py-2 text-right tabular-nums">{num(u.logins)}</td>
-            <td className={`px-2 py-2 text-right tabular-nums ${u.failures ? "text-rose-700" : "text-slate-400"}`}>{num(u.failures)}</td>
+            <td className={`px-2 py-2 text-right tabular-nums ${u.failures ? "text-rose-700" : "text-slate-500"}`}>{num(u.failures)}</td>
             <td className="whitespace-nowrap px-2 py-2 text-slate-600">{when(u.first_seen)}</td>
             <td className="whitespace-nowrap px-2 py-2 text-slate-600">{when(u.last_seen)}</td>
             <td className="px-2 py-2 text-slate-600"><span className="font-mono text-xs">{u.last_ip ?? "—"}</span>{u.last_place && <span className="block text-xs text-slate-500">{u.last_place}</span>}</td>
@@ -59,7 +63,7 @@ function EventsTable({ events }: { events: LoginEvent[] }) {
               : <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700">failed</span>}</td>
             <td className="px-2 py-2 text-xs text-slate-600">{e.method === "signin" ? "sign-in page" : "API (Basic)"}</td>
             <td className="px-2 py-2 font-mono text-xs text-slate-600">{e.ip ?? "—"}</td>
-            <td className="px-2 py-2 text-slate-600" title={e.geo_source ?? ""}>{place(e.geo) || <span className="text-xs text-slate-400">{e.geo_source ?? "pending"}</span>}</td>
+            <td className="px-2 py-2 text-slate-600" title={e.geo_source ?? ""}>{place(e.geo) || <span className="text-xs text-slate-500">{e.geo_source ?? "pending"}</span>}</td>
             <td className="px-2 py-2 text-xs text-slate-600">{e.geo?.isp ?? "—"}</td>
             <td className="px-2 py-2 text-xs text-slate-600">{e.edge_region ?? "—"}</td>
             <td className="px-2 py-2 text-xs text-slate-600" title={e.user_agent ?? ""}>{browserLabel(e.user_agent) || "—"}</td>
@@ -113,7 +117,7 @@ export default async function LoginsPage({ searchParams }: { searchParams: Promi
           <EventsTable events={r.all_time.events} />
         </Section>
       </div>
-      <p className="mt-6 text-xs text-slate-400">
+      <p className="mt-6 text-xs text-slate-500">
         Via: the sign-in page, or an HTTP Basic login on the API or MCP endpoint (recorded once per login, address and hour). Location and network are looked up from
         the address with ipwho.is; a private or local address has none. On Fly the address is the one the platform saw (Fly-Client-IP), and Edge is the Fly region that took the request.
       </p>

@@ -102,7 +102,7 @@ export default async function GlApiDocsPage() {
                   <code className="text-sm font-semibold">{path}</code>
                   <span className="text-sm text-slate-600">{op.summary}</span>
                   <span className="ml-auto flex items-center gap-2 text-xs">
-                    <span className="text-slate-400">{op.tags.join(", ")}</span>
+                    <span className="text-slate-500">{op.tags.join(", ")}</span>
                     {method === "get" && <a href={tryHref(path, op)} target="_blank" rel="noreferrer" className="rounded border border-indigo-200 bg-white px-2 py-0.5 font-medium text-indigo-700 hover:bg-indigo-50">Try it ↗</a>}
                   </span>
                 </div>
@@ -132,7 +132,7 @@ export default async function GlApiDocsPage() {
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
                     {Object.entries(op.responses).map(([status, r]) => (
                       <span key={status}><code className={`font-semibold ${status.startsWith("2") ? "text-emerald-700" : "text-rose-700"}`}>{status}</code> {r.description}
-                        {r.content && <span className="text-slate-400"> · {Object.keys(r.content).map((c) => c.split(";")[0].replace("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx")).join(", ")}</span>}
+                        {r.content && <span className="text-slate-500"> · {Object.keys(r.content).map((c) => c.split(";")[0].replace("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx")).join(", ")}</span>}
                       </span>
                     ))}
                   </div>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { AdminMenu } from "@/components/admin-menu";
+import { NavLink } from "@/components/nav-link";
 import { setUserAction } from "./submissions/actions";
 import { loadUsers } from "@/lib/basic-auth";
 import { currentUser, signedInUser } from "@/lib/user";
@@ -20,8 +21,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// UX-010: pages set a short title ("Q-2026-0001 v2 · Quote"); the template adds the product name.
 export const metadata: Metadata = {
-  title: "Underwriting Desktop",
+  title: { default: "Underwriting Desktop", template: "%s · Underwriting Desktop" },
   description: "E&S contractors GL underwriting workbench",
 };
 
@@ -41,11 +43,12 @@ export default async function RootLayout({
         {chrome && <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-slate-200 bg-white px-6 py-3 text-sm">
           <Link href="/" className="whitespace-nowrap font-semibold">Underwriting Desktop</Link>
           <nav className="flex gap-4 whitespace-nowrap text-slate-600">
-            <Link href="/insureds" className="hover:text-slate-900">Customers</Link>
-            <Link href="/submissions" className="hover:text-slate-900">Submissions</Link>
-            <Link href="/quotes" className="hover:text-slate-900">Quotes</Link>
-            <Link href="/policies" className="hover:text-slate-900">Policies</Link>
-            <Link href="/assistant" className="hover:text-slate-900">AI Assistant</Link>
+            {/* UX-010: the open section is marked. */}
+            <NavLink href="/insureds">Customers</NavLink>
+            <NavLink href="/submissions">Submissions</NavLink>
+            <NavLink href="/quotes">Quotes</NavLink>
+            <NavLink href="/policies">Policies</NavLink>
+            <NavLink href="/assistant">AI Assistant</NavLink>
             <AdminMenu items={[
               { href: "/audit", label: "Audit" },
               { href: "/audit/logins", label: "Sign-ins" },

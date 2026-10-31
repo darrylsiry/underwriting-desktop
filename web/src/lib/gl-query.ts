@@ -57,3 +57,18 @@ export function parseLedgerQuery(p: Record<string, string | undefined | null>, t
   const range = presetRange(period, today, custom);
   return { query: { period, from: range.from, to: range.to, type, batch: /^[A-Za-z0-9-]{1,40}$/.test(batch) ? batch : "", format }, errors };
 }
+
+/**
+ * Where the Accounting page lands after a push (UX-022): the same filter the user was looking at,
+ * narrowed to the new batch when it stamped anything, plus `pushed` and `format` for the banner
+ * and the download. `p` is the posted form (period, from, to, type, batch).
+ */
+export function pushedAccountingPath(p: Record<string, string | undefined | null>, batch: string, fresh: number, format: ExportFormat): string {
+  const qs = new URLSearchParams();
+  for (const k of ["period", "from", "to", "type"] as const) if (p[k]) qs.set(k, String(p[k]));
+  const keep = fresh > 0 ? batch : (p.batch ?? "");
+  if (keep) qs.set("batch", keep);
+  qs.set("pushed", String(fresh));
+  qs.set("format", format);
+  return `/accounting?${qs}`;
+}

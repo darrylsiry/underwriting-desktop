@@ -44,7 +44,8 @@ async function ratingPost<T>(path: string, body: unknown): Promise<T> {
       signal: AbortSignal.timeout(RATING_TIMEOUT_MS),
     });
   } catch (err) {
-    throw new RatingServiceError(`Rating service unreachable (${(err as Error).message})`, null);
+    // UX-008: say what the failure did not do.
+    throw new RatingServiceError(`Rating service unreachable (${(err as Error).message}). Your inputs are saved; the last premium is kept.`, null);
   }
   const text = await res.text();
   if (!res.ok) {

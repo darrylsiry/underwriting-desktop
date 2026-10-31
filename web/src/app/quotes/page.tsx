@@ -1,9 +1,14 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { when, whenDate } from "@/components/ui";
 import { listQuotes, type QuoteRow } from "@/lib/quotes";
 import { submissionIdsReceivedBy } from "@/lib/submissions";
+import { iso } from "@/lib/time";
 import { money } from "@/lib/worksheets";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Quotes" };   // UX-010
 
 const STATUS_STYLE: Record<string, string> = {
   issued: "bg-indigo-50 text-indigo-700", superseded: "bg-slate-100 text-slate-500", bound: "bg-emerald-50 text-emerald-700",
@@ -33,8 +38,9 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
           <Link href="/quotes" className="ml-auto text-xs underline">Show all quotes</Link>
         </p>
       )}
+      {/* UX-025: "just issued" is a done state, so emerald (amber means needs attention everywhere else). */}
       {picked && (
-        <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900" role="status">
           <span className="font-medium">{picked.quote_number} v{picked.version} issued</span>
           <span>{picked.insured_name} · {money(picked.total)} total{picked.version > 1 ? ` · supersedes v${picked.version - 1}` : ""}</span>
           <span className="ml-auto flex gap-3 text-xs">
@@ -59,18 +65,19 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
           {quotes.map((q) => {
             const hit = q.id === picked?.id;
             return (
-              <tr key={q.id} id={`quote-${q.id}`} className={`border-t border-slate-100 ${hit ? "bg-amber-50 shadow-[inset_4px_0_0_0_theme(colors.amber.400)]" : q.status === "superseded" ? "text-slate-400" : ""}`}>
+              <tr key={q.id} id={`quote-${q.id}`} className={`border-t border-slate-100 ${hit ? "bg-emerald-50 shadow-[inset_4px_0_0_0_theme(colors.emerald.400)]" : q.status === "superseded" ? "text-slate-500" : ""}`}>
                 <td className="whitespace-nowrap px-4 py-2 font-mono text-xs">
                   <Link href={`/quotes/${q.id}`} className="text-indigo-600 hover:underline">{q.quote_number} v{q.version}</Link>
-                  {hit && <span className="ml-2 rounded-full bg-amber-500 px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-white">just issued</span>}
+                  {hit && <span className="ml-2 rounded-full bg-emerald-600 px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-white">just issued</span>}
                 </td>
-                <td className="px-4 py-2"><Link href={`/submissions/${q.submission_id}/workbench`} className="hover:underline">{q.insured_name}</Link></td>
-                <td className="whitespace-nowrap px-4 py-2 tabular-nums">{q.effective_date}</td>
+                {/* UX-013: the insured's name opens the customer; it looks like the link it is. */}
+                <td className="px-4 py-2">{q.insured_id ? <Link href={`/insureds/${q.insured_id}`} className="text-indigo-600 hover:underline">{q.insured_name}</Link> : q.insured_name}</td>
+                <td className="whitespace-nowrap px-4 py-2 tabular-nums">{whenDate(q.effective_date)}</td>
                 <td className="px-4 py-2 text-right tabular-nums">{money(q.premium)}</td>
                 <td className="px-4 py-2 text-right font-medium tabular-nums">{money(q.total)}</td>
                 <td className="px-4 py-2 text-xs">{q.rate_version}</td>
                 <td className="px-4 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[q.status]}`}>{q.status}</span></td>
-                <td className="px-4 py-2 text-xs text-slate-500">{q.issued_by}, {q.issued_at.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}</td>
+                <td className="whitespace-nowrap px-4 py-2 text-xs text-slate-500">{q.issued_by}, <time dateTime={iso(q.issued_at)}>{when(q.issued_at)}</time></td>
                 <td className="whitespace-nowrap px-4 py-2 text-xs">
                   <a href={`/quotes/${q.id}/pdf`} target="_blank" className="text-indigo-600 hover:underline">PDF</a>
                   {q.has_memo && <> · <a href={`/quotes/${q.id}/memo`} target="_blank" className="text-indigo-600 hover:underline">memo</a></>}
@@ -78,7 +85,7 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
               </tr>
             );
           })}
-          {!quotes.length && <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-400">No quotes yet. Issue one from a ready-to-quote workbench.</td></tr>}
+          {!quotes.length && <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">No quotes yet. Issue one from a ready-to-quote workbench.</td></tr>}
         </tbody>
       </table>
     </main>

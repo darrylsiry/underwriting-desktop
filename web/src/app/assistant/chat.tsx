@@ -105,17 +105,17 @@ export function AssistantChat({ user, model, enabled, suggestions, initialQuesti
                       {m.steps.map((s) => (
                         <li key={s.id} className="flex flex-wrap items-baseline gap-x-2">
                           <code className="font-mono text-[11px] text-slate-700">{s.name}</code>
-                          <span className="truncate text-slate-400" title={describeInput(s.input)}>{describeInput(s.input)}</span>
+                          <span className="truncate text-slate-500" title={describeInput(s.input)}>{describeInput(s.input)}</span>
                           <span className="ml-auto whitespace-nowrap">{s.ms === undefined ? "…" : s.ok === false ? `failed · ${s.ms} ms` : `${s.ms} ms`}</span>
                         </li>
                       ))}
                     </ol>
                   </details>
                 )}
-                {m.pending && !m.text && <p className="text-sm text-slate-400"><span className="inline-block animate-pulse">Thinking…</span></p>}
+                {m.pending && !m.text && <p className="text-sm text-slate-500"><span className="inline-block animate-pulse">Thinking…</span></p>}
                 {m.text && <Markdown source={m.text} />}
                 {m.error && <p className="mt-2 rounded bg-rose-50 px-3 py-2 text-sm text-rose-700">{m.error}</p>}
-                {m.meta && <p className="mt-2 text-[11px] text-slate-400">{m.meta}</p>}
+                {m.meta && <p className="mt-2 text-[11px] text-slate-500">{m.meta}</p>}
               </div>
             )}
           </div>
@@ -132,7 +132,7 @@ export function AssistantChat({ user, model, enabled, suggestions, initialQuesti
         <button type="submit" disabled={busy || !enabled || !input.trim()} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">{busy ? "Working…" : "Ask"}</button>
         {messages.length > 0 && <button type="button" onClick={() => setMessages([])} disabled={busy} className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">New</button>}
       </form>
-      <p className="text-center text-[11px] text-slate-400">Powered by the Claude API ({model}). Read-only: the assistant looks things up and links to them; it never changes anything.</p>
+      <p className="text-center text-[11px] text-slate-500">Powered by the Claude API ({model}). Read-only: the assistant looks things up and links to them; it never changes anything.</p>
     </div>
   );
 }

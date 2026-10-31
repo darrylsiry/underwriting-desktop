@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { money } from "@/components/ui";
 import { listInsureds } from "@/lib/insureds";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Customers" };   // UX-010
 
 export default async function InsuredsPage() {
   const insureds = await listInsureds();
@@ -30,7 +33,7 @@ export default async function InsuredsPage() {
               <td className="px-4 py-2 text-xs">{i.open_subjectivities ? <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-800">{i.open_subjectivities} open</span> : "—"}</td>
             </tr>
           ))}
-          {!insureds.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">No customers yet. Accept a submission&apos;s intake to create one.</td></tr>}
+          {!insureds.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">No customers yet. Accept a submission&apos;s intake to create one.</td></tr>}
         </tbody>
       </table>
     </main>

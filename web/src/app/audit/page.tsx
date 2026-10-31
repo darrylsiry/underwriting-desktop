@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import { RowLink } from "@/components/ui";
+import { RowLink, when } from "@/components/ui";
+import { getSubmission } from "@/lib/submissions";
+import { DISPLAY_TIME_ZONE } from "@/lib/time";
 import { loadTimeline } from "@/lib/timeline";
 import { applyFilters, changes, display, groupByCorrelation, type TimelineEvent } from "@/lib/timeline-merge";
 
@@ -26,6 +29,13 @@ function entityHref(e: TimelineEvent): string | null {
     case "rate_version": return `${RATING_ADMIN_URL}/versions/${e.entityId}`;
     default: return null;
   }
+}
+
+// UX-010: "Case history SUB-0003" for one file, "Audit" for everything.
+export async function generateMetadata({ searchParams }: { searchParams: Promise<Params> }): Promise<Metadata> {
+  const { submission } = await searchParams;
+  const sub = submission ? await getSubmission(submission) : null;
+  return { title: sub ? `Case history ${sub.reference}` : "Audit" };
 }
 
 export default async function AuditPage({ searchParams }: { searchParams: Promise<Params> }) {
@@ -98,7 +108,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
         </p>
       )}
       <p className="mt-4 text-xs text-slate-500">
-        Showing {events.length} of {all.length} events · {counts.map(([s, n]) => `${SOURCES[s].label} ${n}`).join(" · ")}
+        Showing {events.length} of {all.length} events · {counts.map(([s, n]) => `${SOURCES[s].label} ${n}`).join(" · ")} · times in {DISPLAY_TIME_ZONE.replace("_", " ")}
       </p>
 
       <ol className="mt-3 space-y-3">
@@ -114,9 +124,9 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
                 const href = entityHref(e);
                 const diff = changes(e.before, e.after);
                 return (
-                  <li key={e.key} className="grid grid-cols-[130px_minmax(0,1fr)] gap-4 px-4 py-2.5 text-sm">
+                  <li key={e.key} className="grid grid-cols-[150px_minmax(0,1fr)] gap-4 px-4 py-2.5 text-sm">
                     <div className="text-xs text-slate-500">
-                      <time dateTime={e.at}>{new Date(e.at).toLocaleString("en-US", { dateStyle: "short", timeStyle: "medium" })}</time>
+                      <time dateTime={e.at}>{when(e.at)}</time>{/* UX-006 */}
                       <span className={`mt-1 block w-fit rounded px-1.5 py-0.5 text-[11px] font-medium ${SOURCES[e.source].style}`}>{SOURCES[e.source].label}</span>
                     </div>
                     <div className="min-w-0">
@@ -148,7 +158,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
             </ul>
           </li>
         ))}
-        {!events.length && <li className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-400">No events match.</li>}
+        {!events.length && <li className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">No events match.</li>}
       </ol>
     </main>
   );

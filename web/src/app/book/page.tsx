@@ -1,5 +1,6 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import { DaysChip, money } from "@/components/ui";
+import { DaysChip, money, whenDate } from "@/components/ui";
 import { daysUntil, loadDashboard, RENEWAL_WINDOW_DAYS, type BookPolicy } from "@/lib/dashboard";
 import { currentUser } from "@/lib/user";
 
@@ -7,7 +8,9 @@ export const dynamic = "force-dynamic";
 
 type Params = { due?: string; view?: string };
 
-const shortDate = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+export const metadata: Metadata = { title: "Book" };   // UX-010
+
+const shortDate = whenDate;   // UX-025: one on-screen date format
 
 /**
  * The in-force book behind the desk's tiles: the signed-in underwriter's unexpired policies, the ones
@@ -76,8 +79,8 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
                   <tr key={x.id} className="border-t border-slate-100 hover:bg-slate-50">
                     <td className="whitespace-nowrap px-4 py-2"><span className="mr-2 tabular-nums">{shortDate(x.expiration_date)}</span><DaysChip days={daysUntil(x.expiration_date, d.today)} /></td>
                     <td className="px-4 py-2">
-                      <div className="font-medium">{x.href ? <Link href={x.href} className="hover:underline">{x.insured_name}</Link> : x.insured_name}</div>
-                      <div className="font-mono text-xs text-slate-400">{x.policy_number}{x.source === "prior system" ? " · prior system" : " · UW Desktop"}</div>
+                      <div className="font-medium">{x.href ? <Link href={x.href} className="text-indigo-600 hover:underline">{x.insured_name}</Link> : x.insured_name}</div>{/* UX-013 */}
+                      <div className="font-mono text-xs text-slate-500">{x.policy_number}{x.source === "prior system" ? " · prior system" : " · UW Desktop"}</div>
                     </td>
                     <td className="px-4 py-2 text-xs"><span className="font-mono">{x.class_code}</span> <span className="text-slate-500">{x.class_description}</span></td>
                     <td className="px-4 py-2 text-xs">{x.states.join(", ")}</td>
@@ -87,7 +90,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
                     <td className="px-4 py-2 text-xs">
                       {x.claims ? <>{x.claims} claim{x.claims === 1 ? "" : "s"} · {money(x.incurred)} · <span className={lr >= 0.65 ? "font-semibold text-rose-700" : ""}>{Math.round(lr * 100)}% LR</span>
                         {x.open_claims > 0 && <span className="ml-1 rounded bg-amber-50 px-1 text-amber-800">{x.open_claims} open</span>}</>
-                        : <span className="text-slate-400">{x.source === "uw desktop" ? "no history yet" : "clean"}</span>}
+                        : <span className="text-slate-500">{x.source === "uw desktop" ? "no history yet" : "clean"}</span>}
                     </td>
                     <td className="px-4 py-2 text-xs">
                       {x.renewal_status === "in_progress" ? <span className="whitespace-nowrap rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-700">In progress</span>
@@ -97,7 +100,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
                   </tr>
                 );
               })}
-              {!rows.length && <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-400">Nothing here{due !== null ? ` in the next ${due} days` : ""}.</td></tr>}
+              {!rows.length && <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">Nothing here{due !== null ? ` in the next ${due} days` : ""}.</td></tr>}
             </tbody>
           </table>
         </div>

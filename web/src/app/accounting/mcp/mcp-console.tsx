@@ -116,7 +116,7 @@ function StepView({ s }: { s: Step }) {
       <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-3 py-1.5 text-xs">
         <span className="font-mono font-semibold">{s.label}</span>
         <span className={`rounded px-1.5 py-0.5 font-mono ${failed ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>HTTP {s.status}</span>
-        <span className="text-slate-400">{s.ms} ms</span>
+        <span className="text-slate-500">{s.ms} ms</span>
       </div>
       <div className="grid gap-2 p-2 lg:grid-cols-2">
         <pre className="max-h-64 overflow-auto rounded bg-slate-900 p-2 text-[11px] leading-relaxed text-slate-100"><code>{`→ ${JSON.stringify(s.request, null, 2)}`}</code></pre>

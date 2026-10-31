@@ -1,12 +1,24 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Empty, Pill, RowLink, Section, money, when } from "@/components/ui";
+import { cache } from "react";
+import { Empty, Pill, RowLink, Section, money, when, whenDate } from "@/components/ui";
+import { RENEWAL_WINDOW_DAYS, daysUntil } from "@/lib/dashboard";
 import { inputText } from "@/lib/renewal-compare";
 import { getBookPolicy, renewalOfPolicy } from "@/lib/renewals";
 import { INPUT_DEFS, SCHEDULE_CATEGORIES } from "@/lib/worksheet";
 import { startRenewalAction } from "../../actions";
+import { StartRenewalForm } from "../../start-renewal-form";
 
 export const dynamic = "force-dynamic";
+
+const load = cache(getBookPolicy);   // once per request, shared by the title and the page
+
+// UX-010
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const p = await load((await params).id);
+  return { title: p ? `${p.policy_number} · Policy` : "Policy" };
+}
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string }> };
 
@@ -14,8 +26,9 @@ type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ error?: 
 export default async function BookPolicyPage({ params, searchParams }: Props) {
   const { id } = await params;
   const { error } = await searchParams;
-  const p = await getBookPolicy(id);
+  const p = await load(id);
   if (!p) notFound();
+  const daysLeft = daysUntil(p.expiration_date, new Date().toISOString().slice(0, 10));   // UX-023
   const renewal = await renewalOfPolicy(p.renewal_submission_id);
   const inputs = p.rating_inputs;
   const lossRatio = Number(p.premium) ? Number(p.incurred) / Number(p.premium) : 0;
@@ -37,7 +50,7 @@ export default async function BookPolicyPage({ params, searchParams }: Props) {
       <div className="mt-6 grid gap-6 md:grid-cols-2">
         <Section title="Current policy">
           <dl className="grid grid-cols-2 gap-y-1 p-4 text-sm">
-            <dt className="text-slate-500">Policy period</dt><dd className="text-right">{p.effective_date} → {p.expiration_date}</dd>
+            <dt className="text-slate-500">Policy period</dt><dd className="text-right">{whenDate(p.effective_date)} → {whenDate(p.expiration_date)}</dd>
             <dt className="text-slate-500">Expiring premium</dt><dd className="text-right font-semibold tabular-nums">{money(p.premium)}</dd>
             <dt className="text-slate-500">Rated on</dt><dd className="text-right">rate revision {p.rate_version ?? "—"}</dd>
             {inputs && (
@@ -67,16 +80,18 @@ export default async function BookPolicyPage({ params, searchParams }: Props) {
             </div>
           ) : <Empty>No rating inputs on file for this policy.</Empty>}
         </Section>
+        {/* UX-023: when it expires, whether a renewal is due yet, and a confirm before one is created. */}
         <Section title={`Renewal · ${p.renewal_status.replace("_", " ")}`}>
           <div className="p-4 text-sm">
             {!renewal ? (
-              <form action={startRenewalAction.bind(null, "book", p.id)}>
-                <p className="text-slate-600">
+              <StartRenewalForm action={startRenewalAction.bind(null, "book", p.id)} policyNumber={p.policy_number} inWindow={daysLeft <= RENEWAL_WINDOW_DAYS}>
+                <p className="font-medium">Expires {whenDate(p.expiration_date)} · {daysLeft < 0 ? `expired ${-daysLeft} day${daysLeft === -1 ? "" : "s"} ago` : `${daysLeft} day${daysLeft === 1 ? "" : "s"}`}</p>
+                <p className="mt-1 text-slate-600">
+                  {daysLeft > RENEWAL_WINDOW_DAYS && <>Renewals usually start within {RENEWAL_WINDOW_DAYS} days of expiry. </>}
                   Starts a renewal from these terms: the expiring premium is reproduced on rate revision {p.rate_version}, and the
                   renewing terms are rated on current rates so the two can be compared.
                 </p>
-                <button className="mt-3 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Start renewal</button>
-              </form>
+              </StartRenewalForm>
             ) : (
               <>
                 <p>
@@ -87,8 +102,8 @@ export default async function BookPolicyPage({ params, searchParams }: Props) {
                 {renewal.quotes.length > 0 && (
                   <ul className="mt-3 space-y-1">
                     {renewal.quotes.map((q) => (
-                      <li key={q.id} className={`flex items-center gap-2 ${q.status === "superseded" ? "text-slate-400" : ""}`}>
-                        <Link href={`/quotes/${q.id}`} className="font-mono text-xs hover:underline">{q.quote_number} v{q.version}</Link>
+                      <li key={q.id} className={`flex items-center gap-2 ${q.status === "superseded" ? "text-slate-500" : ""}`}>
+                        <Link href={`/quotes/${q.id}`} className="font-mono text-xs text-indigo-600 hover:underline">{q.quote_number} v{q.version}</Link>{/* UX-013 */}
                         <Pill status={q.status} />
                         <span className="ml-auto tabular-nums">{money(q.total)}</span>
                         <a href={`/quotes/${q.id}/pdf`} target="_blank" className="text-xs text-indigo-600 hover:underline">Quote PDF</a>
@@ -99,7 +114,7 @@ export default async function BookPolicyPage({ params, searchParams }: Props) {
                 )}
                 {renewal.policy && (
                   <p className="mt-3 rounded bg-emerald-50 px-3 py-2 text-emerald-800">
-                    Renewed as <RowLink href={`/policies/${renewal.policy.id}`}>{renewal.policy.policy_number}</RowLink>, {renewal.policy.effective_date} → {renewal.policy.expiration_date}, {money(renewal.policy.total)}
+                    Renewed as <RowLink href={`/policies/${renewal.policy.id}`}>{renewal.policy.policy_number}</RowLink>, {whenDate(renewal.policy.effective_date)} → {whenDate(renewal.policy.expiration_date)}, {money(renewal.policy.total)}
                   </p>
                 )}
               </>
@@ -107,7 +122,7 @@ export default async function BookPolicyPage({ params, searchParams }: Props) {
           </div>
         </Section>
       </div>
-      <p className="mt-6 text-xs text-slate-400">Imported from the prior policy system; its documents aren&apos;t held here. Documents for the renewal appear above once issued.</p>
+      <p className="mt-6 text-xs text-slate-500">Imported from the prior policy system; its documents aren&apos;t held here. Documents for the renewal appear above once issued.</p>
     </main>
   );
 }

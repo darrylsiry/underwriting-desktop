@@ -1,12 +1,30 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Empty, Pill, RowLink, Section, money, when } from "@/components/ui";
+import { cache } from "react";
+import { Empty, Pill, RowLink, Section, money, when, whenDate } from "@/components/ui";
 import { getInsured, policiesForInsured, quotesForInsured, submissionsForInsured } from "@/lib/insureds";
 
 export const dynamic = "force-dynamic";
 
+const load = cache(getInsured);   // once per request, shared by the title and the page
+
+// UX-010
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const insured = await load((await params).id);
+  return { title: insured ? `${insured.name} · Customer` : "Customer" };
+}
+
+// UX-013: every table says what its columns hold.
+const TH = "px-4 py-2 font-medium";
+const Head = ({ cols }: { cols: (string | [string, "right"])[] }) => (
+  <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
+    <tr>{cols.map((c) => Array.isArray(c) ? <th key={c[0]} scope="col" className={`${TH} text-right`}>{c[0]}</th> : <th key={c} scope="col" className={TH}>{c}</th>)}</tr>
+  </thead>
+);
+
 export default async function InsuredPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const insured = await getInsured(id);
+  const insured = await load(id);
   if (!insured) notFound();
   const [submissions, quotes, policies] = await Promise.all([submissionsForInsured(id), quotesForInsured(id), policiesForInsured(id)]);
   const written = policies.reduce((s, p) => s + Number(p.premium), 0);
@@ -28,13 +46,13 @@ export default async function InsuredPage({ params }: { params: Promise<{ id: st
 
       <div className="mt-6 space-y-6">
         <Section title="Policies">
-          <table className="w-full text-sm"><tbody>
+          <table className="w-full text-sm"><Head cols={["Policy", "Period", "Subjectivities", ["Total", "right"]]} /><tbody>
             {policies.map((p) => {
               const open = p.subjectivities.filter((s) => s.status === "open").length;
               return (
-                <tr key={p.id} className="border-t border-slate-100 first:border-0">
+                <tr key={p.id} className="border-t border-slate-100">
                   <td className="px-4 py-2 font-mono text-xs"><RowLink href={`/policies/${p.id}`}>{p.policy_number}</RowLink></td>
-                  <td className="px-4 py-2 tabular-nums text-xs">{p.effective_date} → {p.expiration_date}</td>
+                  <td className="px-4 py-2 tabular-nums text-xs">{whenDate(p.effective_date)} → {whenDate(p.expiration_date)}</td>
                   <td className="px-4 py-2 text-xs">{open ? <Pill status="open" /> : <Pill status="received" />}{open ? ` ${open} subjectivit${open === 1 ? "y" : "ies"}` : ""}</td>
                   <td className="px-4 py-2 text-right tabular-nums">{money(p.total)}</td>
                 </tr>
@@ -44,11 +62,11 @@ export default async function InsuredPage({ params }: { params: Promise<{ id: st
           {!policies.length && <Empty>No policies yet</Empty>}
         </Section>
         <Section title="Quotes">
-          <table className="w-full text-sm"><tbody>
+          <table className="w-full text-sm"><Head cols={["Quote", "Effective", "Status", "Issued", ["Total", "right"]]} /><tbody>
             {quotes.map((q) => (
-              <tr key={q.id} className={`border-t border-slate-100 first:border-0 ${q.status === "superseded" ? "text-slate-400" : ""}`}>
+              <tr key={q.id} className={`border-t border-slate-100 ${q.status === "superseded" ? "text-slate-500" : ""}`}>
                 <td className="px-4 py-2 font-mono text-xs"><RowLink href={`/quotes/${q.id}`}>{q.quote_number} v{q.version}</RowLink></td>
-                <td className="px-4 py-2 text-xs">eff. {q.effective_date}</td>
+                <td className="px-4 py-2 text-xs">{whenDate(q.effective_date)}</td>
                 <td className="px-4 py-2"><Pill status={q.status} /></td>
                 <td className="px-4 py-2 text-xs text-slate-500">{when(q.issued_at)}</td>
                 <td className="px-4 py-2 text-right tabular-nums">{money(q.total)}</td>
@@ -58,9 +76,9 @@ export default async function InsuredPage({ params }: { params: Promise<{ id: st
           {!quotes.length && <Empty>No quotes yet</Empty>}
         </Section>
         <Section title="Submissions">
-          <table className="w-full text-sm"><tbody>
+          <table className="w-full text-sm"><Head cols={["Ref", "Class", "Receipts", "Status", "Received", ["Next step", "right"]]} /><tbody>
             {submissions.map((s) => (
-              <tr key={s.id} className="border-t border-slate-100 first:border-0">
+              <tr key={s.id} className="border-t border-slate-100">
                 <td className="px-4 py-2 font-mono text-xs"><RowLink href={`/submissions/${s.id}`}>{s.reference}</RowLink></td>
                 <td className="px-4 py-2 text-xs">class {s.class_code ?? "—"}</td>
                 <td className="px-4 py-2 text-xs">{s.receipts ? `${money(s.receipts)} receipts` : ""}</td>

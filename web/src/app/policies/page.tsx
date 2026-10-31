@@ -1,9 +1,14 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { when, whenDate } from "@/components/ui";
 import { listPolicies } from "@/lib/policies";
 import { submissionIdsReceivedBy } from "@/lib/submissions";
+import { iso } from "@/lib/time";
 import { money } from "@/lib/worksheets";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Policies" };   // UX-010
 
 type Params = { underwriter?: string; in_force?: string };
 
@@ -38,16 +43,17 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
             const open = p.subjectivities.filter((s) => s.status === "open");
             return (
               <tr key={p.id} className="border-t border-slate-100">
-                <td className="whitespace-nowrap px-4 py-2 font-mono text-xs"><Link href={`/policies/${p.id}`} className="text-indigo-600 hover:underline">{p.policy_number}</Link><br /><span className="text-slate-400">{p.quote_number} v{p.quote_version}</span></td>
-                <td className="px-4 py-2"><Link href={`/submissions/${p.submission_id}/workbench`} className="hover:underline">{p.insured_name}</Link></td>
-                <td className="whitespace-nowrap px-4 py-2 tabular-nums text-xs">{p.effective_date} → {p.expiration_date}</td>
+                <td className="whitespace-nowrap px-4 py-2 font-mono text-xs"><Link href={`/policies/${p.id}`} className="text-indigo-600 hover:underline">{p.policy_number}</Link><br /><span className="text-slate-500">{p.quote_number} v{p.quote_version}</span></td>
+                {/* UX-013: the insured's name opens the customer; it looks like the link it is. */}
+                <td className="px-4 py-2">{p.insured_id ? <Link href={`/insureds/${p.insured_id}`} className="text-indigo-600 hover:underline">{p.insured_name}</Link> : p.insured_name}</td>
+                <td className="whitespace-nowrap px-4 py-2 tabular-nums text-xs">{whenDate(p.effective_date)} → {whenDate(p.expiration_date)}</td>
                 <td className="px-4 py-2 text-right font-medium tabular-nums">{money(p.total)}</td>
                 <td className="whitespace-nowrap px-4 py-2 text-xs">
                   {open.length
-                    ? <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-800">{open.length} open, due {open[0].due_date}</span>
+                    ? <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-800">{open.length} open, due {whenDate(open[0].due_date!)}</span>
                     : <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700">all received</span>}
                 </td>
-                <td className="px-4 py-2 text-xs text-slate-500">{p.bound_by}, {p.bound_at.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}</td>
+                <td className="whitespace-nowrap px-4 py-2 text-xs text-slate-500">{p.bound_by}, <time dateTime={iso(p.bound_at)}>{when(p.bound_at)}</time></td>
                 <td className="whitespace-nowrap px-4 py-2 text-xs">
                   <a href={`/policies/${p.id}/binder`} target="_blank" className="text-indigo-600 hover:underline">Binder</a>{" · "}
                   <a href={`/policies/${p.id}/policy`} target="_blank" className="text-indigo-600 hover:underline">Policy</a>
@@ -55,7 +61,7 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
               </tr>
             );
           })}
-          {!policies.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">No policies yet. Bind an issued quote from the workbench.</td></tr>}
+          {!policies.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">No policies yet. Bind an issued quote from the workbench.</td></tr>}
         </tbody>
       </table>
     </main>

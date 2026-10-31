@@ -1,5 +1,6 @@
 // One audit timeline from three sources: UW Desktop events (policy.audit_events), rate-table
 // changes (rating service) and rating calls (rating service). Pure module for node:test.
+import { DISPLAY_TIME_ZONE } from "./time.ts";
 
 export type Source = "desktop" | "rate_admin" | "rating";
 
@@ -125,14 +126,20 @@ export function display(v: unknown, max = 140): string {
 
 export type Filters = { source?: string; entityType?: string; actor?: string; q?: string; from?: string; to?: string; correlation?: string };
 
-export function applyFilters(events: TimelineEvent[], f: Filters): TimelineEvent[] {
+/** The calendar day (`YYYY-MM-DD`) an instant falls on in `timeZone` (UX-006: the From/To filters bucket days as the page shows them). */
+export function dayIn(at: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(at));
+}
+
+export function applyFilters(events: TimelineEvent[], f: Filters, timeZone = DISPLAY_TIME_ZONE): TimelineEvent[] {
   const q = f.q?.trim().toLowerCase();
+  const day = (e: TimelineEvent) => dayIn(e.at, timeZone);
   return events.filter((e) =>
     (!f.correlation || e.correlationId === f.correlation)
     && (!f.source || e.source === f.source)
     && (!f.entityType || e.entityType === f.entityType)
     && (!f.actor || e.actor.toLowerCase() === f.actor.toLowerCase())
-    && (!f.from || e.at.slice(0, 10) >= f.from)
-    && (!f.to || e.at.slice(0, 10) <= f.to)
+    && (!f.from || day(e) >= f.from)
+    && (!f.to || day(e) <= f.to)
     && (!q || `${e.summary} ${e.action} ${e.actor} ${e.entityLabel ?? ""}`.toLowerCase().includes(q)));
 }

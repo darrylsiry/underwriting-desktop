@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { ASSISTANT_MODEL, assistantEnabled } from "@/lib/assistant";
 import { currentUser } from "@/lib/user";
 import { AssistantChat } from "./chat";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "AI Assistant" };   // UX-010
 
 const SUGGESTIONS = [
   "What's waiting in the inbox?",

@@ -81,7 +81,7 @@ export default async function McpDocsPage() {
           </div>
         </Card>
 
-        <Card title="Live session" action={<span className="text-slate-400">from this browser</span>}>
+        <Card title="Live session" action={<span className="text-slate-500">from this browser</span>}>
           <McpConsole endpoint="/api/mcp" tools={d.tools} firstJournal={firstJournal} />
         </Card>
 

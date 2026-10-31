@@ -1,6 +1,7 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Fragment } from "react";
-import { Pill, RowLink, Section, money, when } from "@/components/ui";
+import { Fragment, cache } from "react";
+import { Pill, RowLink, Section, money, when, whenDate } from "@/components/ui";
 import { policiesForSubmission } from "@/lib/policies";
 import { getQuote, quoteVersions } from "@/lib/quotes";
 import { changeSummary } from "@/lib/renewal-compare";
@@ -9,10 +10,17 @@ import { INPUT_DEFS, SCHEDULE_CATEGORIES, scheduleMod } from "@/lib/worksheet";
 export const dynamic = "force-dynamic";
 
 const CATEGORY = new Map<string, string>(SCHEDULE_CATEGORIES.map((c) => [c.key, c.label]));
+const load = cache(getQuote);   // once per request, shared by the title and the page
+
+// UX-010
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const q = await load((await params).id);
+  return { title: q ? `${q.quote_number} v${q.version} · Quote` : "Quote" };
+}
 
 export default async function QuotePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const q = await getQuote(id);
+  const q = await load(id);
   if (!q) notFound();
   const [versions, policies] = await Promise.all([quoteVersions(q.quote_number), policiesForSubmission(q.submission_id)]);
   const policy = policies.find((p) => p.quote_id === q.id);
@@ -30,7 +38,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
       <p className="mt-1 text-sm text-slate-500">
         {q.insured_id ? <RowLink href={`/insureds/${q.insured_id}`}>{q.insured_name}</RowLink> : q.insured_name}
         {" · "}<RowLink href={`/submissions/${q.submission_id}/workbench`}>{q.submission_ref}</RowLink>
-        {" · "}issued by {q.issued_by} {when(q.issued_at)} · valid until {q.valid_until}
+        {" · "}issued by {q.issued_by} {when(q.issued_at)} · valid until {whenDate(q.valid_until)}
         {policy && <> · bound as <RowLink href={`/policies/${policy.id}`}>{policy.policy_number}</RowLink></>}
         {" · "}<RowLink href={`/audit?submission=${q.submission_id}`}>case history</RowLink>
         {q.renewal_summary && <> · renewal: premium {changeSummary(q.renewal_summary.bridge)} vs expiring (<RowLink href={`/submissions/${q.submission_id}/renewal`}>comparison</RowLink>)</>}
@@ -40,7 +48,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
         <div className="space-y-6">
           <Section title="Terms">
             <dl className="grid grid-cols-[200px_1fr] gap-y-1.5 p-4 text-sm">
-              <dt className="text-slate-500">Policy period</dt><dd>{q.effective_date} to {q.expiration_date}</dd>
+              <dt className="text-slate-500">Policy period</dt><dd>{whenDate(q.effective_date)} to {whenDate(q.expiration_date)}</dd>
               {q.terms.limits.map((l) => <Fragment key={l.label}><dt className="text-slate-500">{l.label}</dt><dd className="tabular-nums">{money(l.amount)}</dd></Fragment>)}
               <dt className="text-slate-500">Deductible</dt><dd className="tabular-nums">{q.terms.deductible ? money(q.terms.deductible) : "None"}</dd>
               <dt className="text-slate-500">Class</dt><dd>{q.terms.class_code} {q.terms.class_description}</dd>
@@ -51,9 +59,14 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
           </Section>
 
           <Section title="Rating worksheet">
-            <table className="w-full text-sm"><tbody>
+            <table className="w-full text-sm">
+              {/* UX-013 */}
+              <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
+                <tr><th scope="col" className="px-4 py-2 font-medium">Step</th><th scope="col" className="px-4 py-2 text-right font-medium">Factor</th><th scope="col" className="px-4 py-2 text-right font-medium">Premium</th></tr>
+              </thead>
+              <tbody>
               {r.worksheet.map((w, i) => (
-                <tr key={i} className="border-t border-slate-100 first:border-0">
+                <tr key={i} className="border-t border-slate-100">
                   <td className="px-4 py-1.5"><span className="font-medium">{w.step}</span> <span className="text-xs text-slate-500">{w.detail}</span></td>
                   <td className="whitespace-nowrap px-4 py-1.5 text-right text-xs text-slate-500">{w.factor ? `× ${Number(w.factor)}` : ""}</td>
                   <td className="px-4 py-1.5 text-right tabular-nums">{money(w.premium)}</td>

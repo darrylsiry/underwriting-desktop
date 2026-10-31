@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { InboxFolder } from "@/lib/inbox-files";
+import { ServiceError, describeServiceError, errorDetailOf } from "@/lib/service-errors";
 import { ActivityPanel, appendEvent, type ActivityEvent } from "./activity-panel";
 
 const KIND: Record<string, string> = {
@@ -32,7 +33,9 @@ export function InboxList({ items }: { items: InboxFolder[] }) {
       const res = await fetch(`/submissions/inbox/${encodeURIComponent(item.folder)}/extract`, {
         method: "POST", signal: controller.signal,
       });
-      if (!res.ok || !res.body) throw new Error(`Request failed (${res.status})`);
+      // UX-008: the status and the service's own words, turned into a sentence below.
+      if (!res.ok) throw new ServiceError(res.status, errorDetailOf(await res.text()));
+      if (!res.body) throw new ServiceError(502, null);
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -53,7 +56,7 @@ export function InboxList({ items }: { items: InboxFolder[] }) {
       }
     } catch (err) {
       if (!controller.signal.aborted) {
-        setEvents((prev) => [...prev, { type: "error", t: prev.at(-1)?.t ?? 0, message: (err as Error).message }]);
+        setEvents((prev) => [...prev, { type: "error", t: prev.at(-1)?.t ?? 0, message: describeServiceError(err, "document reader") }]);   // UX-008
       }
     } finally {
       setRunning(false);
@@ -82,7 +85,7 @@ export function InboxList({ items }: { items: InboxFolder[] }) {
                 ))}
               </div>
             </div>
-            <span className="font-mono text-xs text-slate-400">{item.folder}</span>
+            <span className="font-mono text-xs text-slate-500">{item.folder}</span>
             <button onClick={() => extract(item)} disabled={running}
               className="whitespace-nowrap rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-60">
               Extract →
@@ -90,7 +93,7 @@ export function InboxList({ items }: { items: InboxFolder[] }) {
           </li>
         ))}
       </ul>
-      {active && <ActivityPanel title={active.title} events={events} running={running} onClose={close} />}
+      {active && <ActivityPanel title={active.title} events={events} running={running} onClose={close} onRetry={() => extract(active)} />}
     </>
   );
 }

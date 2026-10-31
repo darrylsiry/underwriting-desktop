@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { DaysChip } from "@/components/ui";
+import { DaysChip, when, whenDate } from "@/components/ui";
 import { daysUntil, loadDashboard, RENEWAL_WINDOW_DAYS, type Task } from "@/lib/dashboard";
 import { systemHealth } from "@/lib/health";
+import { iso } from "@/lib/time";
 import { currentUser } from "@/lib/user";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,6 @@ export const dynamic = "force-dynamic";
 const usd = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 const usdShort = (n: number) => (n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)}M` : n >= 10_000 ? `$${Math.round(n / 1000)}K` : usd(n));
 const pct = (x: number | null) => (x === null ? "—" : `${Math.round(x * 100)}%`);
-const shortDate = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
 const TASK_KIND: Record<Task["kind"], string> = {
   review: "Intake", rate: "Rate", referral: "Referral", quote: "Quote", bind: "Bind",
@@ -67,13 +67,13 @@ export default async function Home() {
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:col-span-2">
           <div className="flex items-baseline justify-between border-b border-slate-100 bg-slate-50 px-4 py-2">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Next up · {d.tasks.length}</h2>
-            <span className="text-xs text-slate-400">Inbox first, then most urgent: overdue, then by due date</span>
+            <span className="text-xs text-slate-500">Inbox first, then most urgent: overdue, then by due date</span>
           </div>
           {d.tasks.length ? (
             <ul className="divide-y divide-slate-100">
               {d.tasks.slice(0, 10).map((t, i) => (
                 <li key={i} className={`flex items-start gap-3 px-4 py-2.5 ${t.pinned ? "bg-indigo-50/60 shadow-[inset_3px_0_0_0_theme(colors.indigo.400)]" : ""}`}>
-                  <span className={`mt-0.5 w-24 shrink-0 text-xs font-medium uppercase tracking-wide ${t.pinned ? "text-indigo-600" : "text-slate-400"}`}>{TASK_KIND[t.kind]}</span>
+                  <span className={`mt-0.5 w-24 shrink-0 text-xs font-medium uppercase tracking-wide ${t.pinned ? "text-indigo-600" : "text-slate-500"}`}>{TASK_KIND[t.kind]}</span>
                   <div className="min-w-0 flex-1">
                     <Link href={t.href} className="font-medium text-slate-900 hover:text-indigo-600 hover:underline">{t.title}</Link>
                     <div className="truncate text-xs text-slate-500" title={t.detail}>{t.detail}</div>
@@ -82,7 +82,7 @@ export default async function Home() {
                 </li>
               ))}
             </ul>
-          ) : <p className="px-4 py-8 text-center text-sm text-slate-400">Nothing waiting on you.</p>}
+          ) : <p className="px-4 py-8 text-center text-sm text-slate-500">Nothing waiting on you.</p>}
           {d.tasks.length > 10 && <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">+ {d.tasks.length - 10} more</p>}
         </section>
 
@@ -94,7 +94,7 @@ export default async function Home() {
             {d.premiumByClass.map((c) => (
               <li key={c.code} title={`${c.code} ${c.description}: ${usd(c.premium)} across ${c.policies} polic${c.policies === 1 ? "y" : "ies"}`}>
                 <div className="flex justify-between gap-2 text-xs">
-                  <span className="truncate text-slate-600"><span className="font-mono text-slate-400">{c.code}</span> {c.description}</span>
+                  <span className="truncate text-slate-600"><span className="font-mono text-slate-500">{c.code}</span> {c.description}</span>
                   <span className="shrink-0 tabular-nums text-slate-900">{usdShort(c.premium)}</span>
                 </div>
                 <div className="mt-1 h-1.5 rounded-r bg-slate-100">
@@ -102,7 +102,7 @@ export default async function Home() {
                 </div>
               </li>
             ))}
-            {!d.premiumByClass.length && <li className="py-6 text-center text-sm text-slate-400">No policies in force.</li>}
+            {!d.premiumByClass.length && <li className="py-6 text-center text-sm text-slate-500">No policies in force.</li>}
           </ul>
         </section>
       </div>
@@ -110,7 +110,7 @@ export default async function Home() {
       <section id="renewals" className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="flex items-baseline justify-between border-b border-slate-100 bg-slate-50 px-4 py-2">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500"><Link href={`/book?due=${RENEWAL_WINDOW_DAYS}`} className="hover:text-indigo-600 hover:underline">Upcoming renewals · next {RENEWAL_WINDOW_DAYS} days · {d.renewals.length}</Link></h2>
-          <span className="text-xs text-slate-400">{usd(d.renewals.reduce((n, p) => n + p.premium, 0))} expiring premium</span>
+          <span className="text-xs text-slate-500">{usd(d.renewals.reduce((n, p) => n + p.premium, 0))} expiring premium</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -126,10 +126,10 @@ export default async function Home() {
                 const lr = p.premium ? p.incurred / p.premium : 0;
                 return (
                   <tr key={p.id} className="border-t border-slate-100 hover:bg-slate-50">
-                    <td className="whitespace-nowrap px-4 py-2"><span className="mr-2 tabular-nums">{shortDate(p.expiration_date)}</span><DaysChip days={daysUntil(p.expiration_date, d.today)} /></td>
+                    <td className="whitespace-nowrap px-4 py-2"><span className="mr-2 tabular-nums">{whenDate(p.expiration_date)}</span><DaysChip days={daysUntil(p.expiration_date, d.today)} /></td>
                     <td className="px-4 py-2">
-                      <div className="font-medium">{p.href ? <Link href={p.href} className="hover:underline">{p.insured_name}</Link> : p.insured_name}</div>
-                      <div className="font-mono text-xs text-slate-400">{p.policy_number}{p.source === "prior system" && " · prior system"}</div>
+                      <div className="font-medium">{p.href ? <Link href={p.href} className="text-indigo-600 hover:underline">{p.insured_name}</Link> : p.insured_name}</div>{/* UX-013 */}
+                      <div className="font-mono text-xs text-slate-500">{p.policy_number}{p.source === "prior system" && " · prior system"}</div>
                     </td>
                     <td className="px-4 py-2 text-xs"><span className="font-mono">{p.class_code}</span> <span className="text-slate-500">{p.class_description}</span></td>
                     <td className="px-4 py-2 text-xs">{p.states.join(", ")}</td>
@@ -137,13 +137,13 @@ export default async function Home() {
                     <td className="px-4 py-2 text-right tabular-nums">{usd(p.premium)}</td>
                     <td className="px-4 py-2 text-xs">
                       {p.claims ? <>{p.claims} claim{p.claims === 1 ? "" : "s"} · {usd(p.incurred)} · <span className={lr >= 0.65 ? "font-semibold text-rose-700" : ""}>{Math.round(lr * 100)}% LR</span>
-                        {p.open_claims > 0 && <span className="ml-1 rounded bg-amber-50 px-1 text-amber-800">{p.open_claims} open</span>}</> : <span className="text-slate-400">clean</span>}
+                        {p.open_claims > 0 && <span className="ml-1 rounded bg-amber-50 px-1 text-amber-800">{p.open_claims} open</span>}</> : <span className="text-slate-500">clean</span>}
                     </td>
                     <td className="px-4 py-2 text-xs">{p.renewal_status === "in_progress" ? <span className="whitespace-nowrap rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-700">In progress</span> : <span className="whitespace-nowrap text-slate-500">Not started</span>}</td>
                   </tr>
                 );
               })}
-              {!d.renewals.length && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">No renewals in the next {RENEWAL_WINDOW_DAYS} days.</td></tr>}
+              {!d.renewals.length && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">No renewals in the next {RENEWAL_WINDOW_DAYS} days.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -157,18 +157,18 @@ export default async function Home() {
           <ul className="divide-y divide-slate-100 text-sm">
             {d.activity.map((a, i) => (
               <li key={i} className="flex gap-3 px-4 py-2">
-                <span className="w-32 shrink-0 text-xs text-slate-400">{a.occurred_at.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                <time dateTime={iso(a.occurred_at)} className="w-48 shrink-0 whitespace-nowrap text-xs text-slate-500">{when(a.occurred_at)}</time>{/* UX-006 */}
                 <span className="min-w-0 flex-1 truncate text-slate-700" title={a.summary}>{a.summary || a.action}</span>
               </li>
             ))}
-            {!d.activity.length && <li className="px-4 py-6 text-center text-slate-400">No activity yet. <Link href="/audit" className="text-indigo-600 hover:underline">Audit trail →</Link></li>}
+            {!d.activity.length && <li className="px-4 py-6 text-center text-slate-500">No activity yet. <Link href="/audit" className="text-indigo-600 hover:underline">Audit trail →</Link></li>}
           </ul>
         </section>
 
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="flex items-baseline justify-between border-b border-slate-100 bg-slate-50 px-4 py-2">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">System status</h2>
-            <a href="/api/health" className="text-xs text-slate-400 hover:underline">JSON</a>
+            <a href="/api/health" className="text-xs text-slate-500 hover:underline">JSON</a>
           </div>
           <ul className="divide-y divide-slate-100 text-sm">
             {components.map((c) => (

@@ -44,7 +44,7 @@ export async function renderBinderPdf(p: PolicyDocument): Promise<Uint8Array> {
   const { doc, w } = await createDocument({
     title: `Binder ${p.binderNumber} - ${p.insuredName}`,
     subject: "Commercial General Liability binder (illustrative)",
-    footer: `${FOOTER} ${p.binderNumber}`,
+    footer: `${FOOTER} ${p.binderNumber}  ·  Rated on rate version ${p.rateVersion}`,   // UX-016
   });
   masthead(w, {
     reference: `Binder ${p.binderNumber}`,
@@ -83,7 +83,7 @@ export async function renderBinderPdf(p: PolicyDocument): Promise<Uint8Array> {
 
   w.heading("Terms");
   w.para(`Bound on the terms, conditions and forms of quotation ${p.quoteNumber} version ${p.quoteVersion}, `
-    + `which is part of this binder. Rated on rate version ${p.rateVersion}.`, { size: 8.5 });
+    + "which is part of this binder.", { size: 8.5 });
 
   w.y -= 18;
   w.text(`Authorized representative: ${p.boundBy}`, { size: 9 });
