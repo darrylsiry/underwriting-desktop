@@ -2,20 +2,20 @@
 
 export type StageKey = "review" | "unrated" | "referred" | "ready" | "quoted" | "bound";
 
-export type Stage = { key: StageKey; label: string; tone: "amber" | "slate" | "emerald" | "indigo" };
+export type Stage = { key: StageKey; label: string; tone: "amber" | "slate" | "emerald" | "indigo"; href?: string };   // href: the policy, when bound (UX-038)
 
 export type StageInput = {
   status: "needs_review" | "accepted";
   missing: number;                       // rating fields still empty on the intake
   worksheet: { rated: boolean; openReferrals: number } | null;   // null: no worksheet opened yet
   quote: { version: number; total: number | string; status: string } | null;   // the latest version
-  policy: { policy_number: string } | null;
+  policy: { id?: string; policy_number: string } | null;
 };
 
 const usd = (v: number | string) => `$${Math.round(Number(v)).toLocaleString("en-US")}`;
 
 export function stageOf(x: StageInput): Stage {
-  if (x.policy) return { key: "bound", label: `Bound ${x.policy.policy_number}`, tone: "emerald" };
+  if (x.policy) return { key: "bound", label: `Bound ${x.policy.policy_number}`, tone: "emerald", ...(x.policy.id ? { href: `/policies/${x.policy.id}` } : {}) };
   if (x.quote) return { key: "quoted", label: `Quoted v${x.quote.version} · ${usd(x.quote.total)}`, tone: "indigo" };
   if (x.status === "needs_review") return { key: "review", label: x.missing ? `Needs review (${x.missing} missing)` : "Needs review", tone: "amber" };
   if (x.worksheet && x.worksheet.openReferrals > 0) {

@@ -22,6 +22,7 @@ import { ActionDirtyHint, ActionError, ActionForm, ActionFormProvider, ActionInp
 import { IssueQuoteForm } from "../issue-quote-form";
 import { QuoteDriftNotice, StatusChips } from "../status-chips";
 import { bindAction, clearReferralAction, issueQuoteAction, saveAndRateAction } from "./actions";
+import { BindForm } from "./bind-form";
 import { WorksheetInput } from "./worksheet-input";
 
 export const dynamic = "force-dynamic";
@@ -106,16 +107,25 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
           {/* UX-033: the workbench only exists for accepted files, so the chip pair is the whole status. */}
           <StatusChips chips={chips} />
           <span className="ml-auto flex items-center gap-3">
-            <ActionDirtyHint />
-            <ActionSubmit pending="Rating…" title="Enter also saves" className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-500">
-              Save &amp; rate
-            </ActionSubmit>
+            {/* UX-037: once bound, the worksheet is the rating that was bound; nothing here saves. */}
+            {policy ? <span className="text-xs text-slate-500">Worksheet frozen at bind</span> : <>
+              <ActionDirtyHint />
+              <ActionSubmit pending="Rating…" title="Enter also saves" className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-500">
+                Save &amp; rate
+              </ActionSubmit>
+            </>}
           </span>
         </div>
         <p className="mt-1 text-sm text-slate-500">
           Underwriting workbench · {String(sub.data.operations?.description ?? "")} ·{" "}
           <Link href={`/audit?submission=${id}`} className="text-indigo-600 hover:underline">Case history →</Link>
         </p>
+        {policy && (
+          <p className="mt-4 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+            Bound as <Link href={`/policies/${policy.id}`} className="font-medium underline">{policy.policy_number}</Link> by {policy.bound_by} on {whenDate(policy.bound_at)} ·
+            this worksheet is the rating that was bound. Changes to a bound policy need an endorsement; to renew, start the renewal from the policy page.
+          </p>
+        )}
 
         {exp && (
           <p className="mt-4 flex flex-wrap items-center gap-x-3 rounded border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
@@ -131,6 +141,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
           <ActionForm className="space-y-6">
+            <fieldset disabled={!!policy} className={`space-y-6 ${policy ? "opacity-75" : ""}`}>{/* UX-037 */}
             <Card title="Rating inputs">
               <div className="grid gap-x-6 gap-y-3 p-4 sm:grid-cols-2">
                 {INPUT_DEFS.map((d) => (
@@ -173,12 +184,12 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                         <td className="px-4 py-2 text-slate-700">{c.label}</td>
                         <td className="px-2 py-2">
                           {/* UX-001: a whole percent within authority, enforced by the browser first. */}
-                          <ActionInput name={`schedule.${c.key}.pct`} saved={String(item?.pct ?? 0)} type="number" min={-MAX_CATEGORY_PCT} max={MAX_CATEGORY_PCT} step={1} inputMode="numeric"
+                          <ActionInput name={`schedule.${c.key}.pct`} aria-label={`${c.label}: percent (credit negative, debit positive)`} saved={String(item?.pct ?? 0)} type="number" min={-MAX_CATEGORY_PCT} max={MAX_CATEGORY_PCT} step={1} inputMode="numeric"
                             className={`w-16 rounded border px-2 py-1 text-right tabular-nums ${item ? (item.pct < 0 ? "border-emerald-400 bg-emerald-50" : "border-rose-300 bg-rose-50") : ""}`} />
                           <FieldMessage name={`schedule.${c.key}.pct`} />
                         </td>
                         <td className="px-4 py-2">
-                          <ActionInput name={`schedule.${c.key}.rationale`} saved={item?.rationale ?? ""}
+                          <ActionInput name={`schedule.${c.key}.rationale`} aria-label={`${c.label}: reason`} saved={item?.rationale ?? ""}
                             placeholder="Why this credit or debit is justified" className="w-full rounded border px-2 py-1" />
                           <FieldMessage name={`schedule.${c.key}.rationale`} />
                         </td>
@@ -188,6 +199,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                 </tbody>
               </table>
             </Card>
+            </fieldset>
           </ActionForm>
 
           <aside className="space-y-6">
@@ -238,7 +250,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                   ) : (
                     // UX-002: Bind waits for unsaved rating edits to be saved & rated (or reverted).
                     <WaitForSave hint={WAIT}>
-                      <form action={bindAction.bind(null, id, latest.id)} className="space-y-2 rounded-md border border-slate-200 p-3">
+                      <BindForm action={bindAction.bind(null, id, latest.id)} label={`Bind ${latest.quote_number} v${latest.version} for ${money(latest.total)}`}>
                         <p className="text-sm font-medium">Bind {latest.quote_number} v{latest.version}</p>
                         <p className="text-xs text-slate-500">Tick subjectivities already received. The rest stay open on the binder, due in 30 days.</p>
                         {latest.subjectivities.map((text, i) => (
@@ -251,7 +263,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                           className={`w-full rounded-md px-4 py-2 text-sm font-medium ${differs ? "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50" : "bg-emerald-700 text-white hover:bg-emerald-600"}`}>
                           {differs ? `Bind v${latest.version} as issued · ${money(latest.total)}` : `Bind · ${money(latest.total)}`}
                         </SubmitButton>
-                      </form>
+                      </BindForm>
                     </WaitForSave>
                   )
                 )}
@@ -270,7 +282,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
               </div>
             </Card>
 
-            <Card title="Indicative premium">
+            <Card title={policy ? "Premium as bound" : "Indicative premium"}>
               {rating ? (
                 <div className="p-4">
                   {!rated && (
@@ -279,7 +291,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                     </p>
                   )}
                   <p className="text-3xl font-semibold tabular-nums">{money(rating.total)}</p>
-                  <p className="text-xs text-slate-500">total cost to insured · rates {rating.rate_version}</p>
+                  <p className="text-xs text-slate-500">{policy ? `bound ${whenDate(policy.bound_at)}` : "total cost to insured"} · rates {rating.rate_version}</p>
                   <dl className="mt-4 grid grid-cols-2 gap-y-1 text-sm">
                     <dt className="text-slate-500">Premium</dt><dd className="text-right tabular-nums">{money(rating.premium)}</dd>
                     <dt className="text-slate-500">Policy fee</dt><dd className="text-right tabular-nums">{money(rating.policy_fee)}</dd>
@@ -337,7 +349,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                         // UX-002: Clear waits for unsaved rating edits, so a flag isn't cleared against stale facts.
                         <WaitForSave hint={WAIT} className="mt-2">
                           <form action={clearReferralAction.bind(null, id, f.code)} className="flex gap-2">
-                            <input name="note" required minLength={10} placeholder="Why this is acceptable (authority, mitigation)"
+                            <input name="note" aria-label={`Why "${f.title}" is acceptable`} required minLength={10} placeholder="Why this is acceptable (authority, mitigation)"
                               className="min-w-0 flex-1 rounded border border-slate-300 px-2 py-1 text-xs" />
                             <SubmitButton pending="Clearing…" className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50">Clear</SubmitButton>
                           </form>

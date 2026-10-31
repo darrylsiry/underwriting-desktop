@@ -1,3 +1,4 @@
+import { whenDate } from "./time.ts";
 import { audit } from "./audit";
 import { bindBlockers, policyNumbers, subjectivityStatus, type SubjectivityStatus } from "./bind-rules";
 import { customerDb, policyDb } from "./db";
@@ -157,7 +158,7 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
     },
     {
       actor, action: "policy.bound", entityType: "policy", entityId: policyId,
-      summary: `${doc.policyNumber} bound for ${q.insured_name}: ${money(q.total)}, effective ${q.effective_date}`
+      summary: `${doc.policyNumber} bound for ${q.insured_name}: ${money(q.total)}, effective ${whenDate(q.effective_date)}`
         + (open.length ? `, ${open.length} open subjectivit${open.length === 1 ? "y" : "ies"}` : ""),
       after: { quote_id: q.id, binder_number: doc.binderNumber, total: q.total, subjectivities: doc.subjectivities }, correlationId, occurredAt: at ?? undefined,
     },

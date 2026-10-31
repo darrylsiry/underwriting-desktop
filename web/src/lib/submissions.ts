@@ -1,3 +1,4 @@
+import { plural } from "./text.ts";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import { audit } from "./audit";
@@ -118,7 +119,7 @@ export async function storeSubmission(
     const name = (extraction.submission.applicant?.name as string) || "unnamed applicant";
     await audit({
       actor, action: "submission.received", entityType: "submission", entityId: id,
-      summary: `${reference} received for ${name}${inboxFolder ? ` from inbox folder ${inboxFolder}` : ""}: ${files.length} document(s), ${Object.keys(extraction.fields).length} fields extracted`,
+      summary: `${reference} received for ${name}${inboxFolder ? ` from inbox folder ${inboxFolder}` : ""}: ${plural(files.length, "document")}, ${plural(Object.keys(extraction.fields).length, "field")} extracted`,
       after: { inbox_folder: inboxFolder, documents: extraction.documents, missing_for_rating: extraction.missing_for_rating, claude: extraction.claude },
       occurredAt: at ?? undefined,
     });
@@ -241,7 +242,7 @@ export async function acceptSubmission(id: string, actor: string, at: Date | nul
     }] : []),
     {
       actor, action: "submission.accepted", entityType: "submission", entityId: id,
-      summary: `${r.sub.reference} intake accepted (${r.sub.corrected_fields.length} field(s) corrected)`,
+      summary: `${r.sub.reference} intake accepted (${plural(r.sub.corrected_fields.length, "field")} corrected)`,
       after: { insured_id: r.insuredId, corrected_fields: r.sub.corrected_fields }, correlationId, occurredAt: at ?? undefined,
     },
   );

@@ -54,7 +54,7 @@ test("schedules display compactly", () => {
   assert.equal(display([{ pct: 8, category: "subcontractor_controls", rationale: "x" }, { pct: -5, category: "safety", rationale: "y" }]),
     "subcontractor_controls +8%, safety -5%");
   assert.equal(display([{ text: "Signed app", status: "received", due_date: null }, { text: "Loss runs", status: "open", due_date: "2026-11-22" }]),
-    "Signed app: received; Loss runs: open (due 2026-11-22)");
+    "Signed app: received; Loss runs: open (due Nov 22, 2026)");
   assert.equal(display([]), "none");
   assert.equal(display(null), "—");
 });

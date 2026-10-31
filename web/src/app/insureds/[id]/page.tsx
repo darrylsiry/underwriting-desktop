@@ -90,7 +90,7 @@ export default async function InsuredPage({ params }: { params: Promise<{ id: st
                 {/* UX-034: the next step follows the stage: review, work, or open the policy it became. */}
                 <td className="px-4 py-2 text-right text-xs">{(() => {
                   const st = stages.get(s.id);
-                  if (st?.key === "bound") return <RowLink href={`/search?q=${encodeURIComponent(st.label.replace(/^Bound /, ""))}`}>Policy →</RowLink>;
+                  if (st?.key === "bound" && st.href) return <RowLink href={st.href}>Policy →</RowLink>;
                   if (st?.key === "review" || s.status === "needs_review") return <RowLink href={`/submissions/${s.id}`}>Review →</RowLink>;
                   return <RowLink href={`/submissions/${s.id}/workbench`}>Workbench →</RowLink>;
                 })()}</td>

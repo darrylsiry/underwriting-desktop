@@ -1,3 +1,5 @@
+import { plural } from "./text.ts";
+export { plural };
 import { customerDb, policyDb } from "./db";
 import { listInbox } from "./inbox";
 import { missingForRating, type SubmissionRow } from "./submissions";
@@ -133,7 +135,7 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     if (q.status !== "issued") continue;
     const left = daysUntil(q.valid_until, today);
     tasks.push({ kind: "bind", title: `${left < 0 ? "Expired quote" : "Chase bind order"}: ${q.insured_name}`,
-      detail: `${q.quote_number} v${q.version} · $${Math.round(q.total).toLocaleString("en-US")} · ${left < 0 ? `expired ${plural(-left, "day")} ago` : `valid ${plural(left, "day")} more`}`,
+      detail: `${q.quote_number} v${q.version} · $${Math.round(q.total).toLocaleString("en-US")} · ${left < 0 ? `expired ${plural(-left, "day")} ago` : `valid for ${left} more day${left === 1 ? "" : "s"}`}`,
       href: `/quotes/${q.id}`, due: q.valid_until, urgency: left });
   }
   for (const p of policies.rows) {
@@ -209,7 +211,7 @@ export async function submissionStages(subs: SubmissionRow[]): Promise<Map<strin
     customerDb.query<WorksheetRow>("SELECT * FROM worksheets WHERE submission_id = ANY($1)", [ids]),
     policyDb.query<{ submission_id: string; version: number; total: string; status: string }>(
       "SELECT DISTINCT ON (submission_id) submission_id, version, total, status FROM quotes WHERE submission_id = ANY($1) ORDER BY submission_id, version DESC", [ids]),
-    policyDb.query<{ submission_id: string; policy_number: string }>("SELECT submission_id, policy_number FROM policies WHERE submission_id = ANY($1)", [ids]),
+    policyDb.query<{ id: string; submission_id: string; policy_number: string }>("SELECT id, submission_id, policy_number FROM policies WHERE submission_id = ANY($1)", [ids]),
     activeRateVersion(),
   ]);
   const ws = new Map(worksheets.rows.map((w) => [w.submission_id, w]));
@@ -226,8 +228,6 @@ export async function submissionStages(subs: SubmissionRow[]): Promise<Map<strin
   }));
 }
 
-/** UX-031: `1 referral`, `2 referrals`, never `referral(s)`. */
-export const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** UX-034: stages for rows that are not full SubmissionRows (search hits, a customer's files). */
 export async function submissionStagesById(ids: string[]): Promise<Map<string, Stage>> {

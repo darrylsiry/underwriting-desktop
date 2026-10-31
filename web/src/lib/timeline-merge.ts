@@ -1,6 +1,6 @@
 // One audit timeline from three sources: UW Desktop events (policy.audit_events), rate-table
 // changes (rating service) and rating calls (rating service). Pure module for node:test.
-import { DISPLAY_TIME_ZONE, when } from "./time.ts";
+import { DISPLAY_TIME_ZONE, when, whenDate } from "./time.ts";
 
 export type Source = "desktop" | "rate_admin" | "rating";
 
@@ -117,7 +117,7 @@ export function display(v: unknown, max = 140): string {
   }
   if (Array.isArray(v) && v.length && v.every((i) => i && typeof i === "object" && "text" in i && "status" in i)) {
     return (v as { text: string; status: string; due_date?: string | null }[])
-      .map((i) => `${i.text}: ${i.status}${i.due_date ? ` (due ${i.due_date})` : ""}`).join("; ");
+      .map((i) => `${i.text}: ${i.status}${i.due_date ? ` (due ${whenDate(i.due_date)})` : ""}`).join("; ");
   }
   if (Array.isArray(v) && !v.length) return "none";
   const s = JSON.stringify(v);

@@ -43,7 +43,9 @@
           <td class="num">
             {% if editable %}
               {# UX-001: the browser refuses non-numbers and zero/negatives before the post; the server rule is "greater than zero" #}
+              {# UX-040: each cell is named for its row and column #}
               <input class="num {% if c.changed %}changed{% endif %}" name="{{ c.field }}" value="{{ c.value | num(c.fmt) }}"
+                     aria-label="{{ r.label }} {{ {'base_rate': 'rate per $1,000', 'min_premium': 'minimum premium', 'value': 'factor'}.get(c.column, c.column) }}"
                      type="number" min="0.0001" step="any" inputmode="decimal" required>
             {% else %}{{ c.value | num(c.fmt) }}{% endif %}
             {% if c.changed %}<span class="was">was {{ c.base | num(c.fmt) }}</span>{% endif %}

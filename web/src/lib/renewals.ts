@@ -1,3 +1,4 @@
+import { whenDate } from "./time.ts";
 import { audit } from "./audit";
 import { customerDb, policyDb } from "./db";
 import { addYears, formsFor } from "./quote-terms";
@@ -214,7 +215,7 @@ export async function startRenewal(source: "book" | "desktop", policyId: string,
     }] : []),
     {
       actor, action: "renewal.started", entityType: "submission", entityId: submissionId,
-      summary: `${reference}: renewal of ${exp!.policy_number} started (expiring ${premium} on rates ${exp!.rate_version}, expires ${exp!.expiration_date})`,
+      summary: `${reference}: renewal of ${exp!.policy_number} started (expiring ${premium} on rates ${exp!.rate_version}, expires ${whenDate(exp!.expiration_date)})`,
       after: { policy_number: exp!.policy_number, source, expiring_premium: exp!.premium, rate_version: exp!.rate_version }, correlationId,
     },
     {

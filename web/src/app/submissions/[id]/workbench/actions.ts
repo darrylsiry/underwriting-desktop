@@ -1,5 +1,6 @@
 "use server";
 
+import { policiesForSubmission } from "@/lib/policies";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSubmission } from "@/lib/submissions";
@@ -27,6 +28,9 @@ export async function saveAndRateAction(id: string, _prev: FormState, form: Form
   const sub = await getSubmission(id);
   if (!sub) back(id, { error: "Submission not found" });
   const values = formFields(form);
+  // UX-037: a bound file's worksheet is frozen, even from a stale tab.
+  const [bound] = await policiesForSubmission(id);
+  if (bound) return { error: `Bound as ${bound.policy_number}; the worksheet can't change. Changes to a bound policy need an endorsement.`, values };
   let msg: string;
   try {
     const rating = await saveAndRate(sub, values, await currentUser());
