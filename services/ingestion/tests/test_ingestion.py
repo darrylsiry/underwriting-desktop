@@ -208,8 +208,11 @@ def test_class_list_survives_a_cold_start_and_falls_back_to_the_last_good_copy(m
 
 @pytest.mark.parametrize("raw, expected", [
     ("Open", "Open"), ("O", "Open"), ("OPEN-LIT", "Open"), ("RE-OPENED", "Open"), ("Reopened", "Open"),
-    ("Open - suit filed", "Open"), ("Pending", "Open"),
+    ("Open - suit filed", "Open"), ("Pending", "Open"), ("Litigation", "Open"),
     ("Closed", "Closed"), ("C", "Closed"), ("Closed - paid", "Closed"), ("CWP", "Closed"), ("Settled", "Closed"), ("Denied", "Closed"),
+    ("Closed - reopened", "Closed"),
+    # Only whole words count (CR-077): these are kept as written, and the web tier then treats them as open.
+    ("Claim open", "Claim open"), ("Claim Open - litigation", "Claim Open - litigation"), ("Contested", "Contested"), ("CIP", "CIP"),
     ("Subrogation", "Subrogation"), ("", ""), (None, ""),
 ])
 def test_claim_status_is_normalized_for_the_referral_rules(raw, expected):

@@ -81,7 +81,7 @@ test("loss runs are requested whatever the tenure, sized to it (CR-062)", () => 
 });
 
 test("a large claim refers unless its status is recognizably closed (CR-030)", () => {
-  for (const status of ["Open", "O", "OPEN-LIT", "Reopened", "Open - suit filed", "Pending", "", "Subrogation"]) {
+  for (const status of ["Open", "O", "OPEN-LIT", "Reopened", "Open - suit filed", "Pending", "Claim open", "Contested", "CIP", "", "Subrogation"]) {
     assert.equal(isOpenLoss(status), true, status);
     const c = ctx({ data: { ...ctx().data, loss_history: [{ date: "2024-01-01", description: "b", incurred: 150_000, status }] } as SubmissionData });
     assert.deepEqual(codes(c), ["refer:LARGE_OPEN_CLAIM"], status);

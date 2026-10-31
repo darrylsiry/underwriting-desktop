@@ -1,6 +1,6 @@
 import { askAssistant, assistantEnabled, type Turn } from "@/lib/assistant";
 import { glDate } from "@/lib/gl-journal";
-import { requestOrigin } from "@/lib/http";
+import { CROSS_SITE_REFUSED, requestOrigin, sameOrigin } from "@/lib/http";
 import { currentUser } from "@/lib/user";
 
 export const dynamic = "force-dynamic";
@@ -8,6 +8,9 @@ export const maxDuration = 300;
 
 /** Ask the assistant; the answer streams back as newline-delimited JSON events (tool calls as they happen, then the answer). */
 export async function POST(req: Request) {
+  // Each question is up to a dozen Claude calls in the user's name: only this site's own page may ask (CR-079).
+  if (!sameOrigin(req.headers)) return Response.json({ error: CROSS_SITE_REFUSED }, { status: 403 });
+  if (!(req.headers.get("content-type") ?? "").includes("application/json")) return Response.json({ error: "Send JSON: { question, history }" }, { status: 415 });
   let body: { question?: unknown; history?: unknown };
   try { body = await req.json(); } catch { return Response.json({ error: "Send JSON: { question, history }" }, { status: 400 }); }
   const question = String(body.question ?? "").trim().slice(0, 4000);

@@ -67,18 +67,20 @@ class FieldValue:
         return asdict(self)
 
 
-_OPEN_STATUS = re.compile(r"^(o|open|opn|re-?open|pending|litig|in suit|reserved)", re.I)
-_CLOSED_STATUS = re.compile(r"^(c|cl|clsd|closed|paid|settled|denied|declined|cwp|cwop|withdrawn)", re.I)
+# Whole words only (the \b): "C" and "Closed - paid" are closed, "Claim open" and "Contested" are not (CR-077).
+_OPEN_STATUS = re.compile(r"^(o|open|opn|re-?opened?|pending|litig\w*|in suit|reserved)\b", re.I)
+_CLOSED_STATUS = re.compile(r"^(c|cl|clsd|closed|paid|settled|denied|declined|cwp|cwop|withdrawn)\b", re.I)
 
 
 def normalize_status(raw) -> str:
     """A claim status as carriers write it ("O", "OPEN-LIT", "Reopened", "Closed - paid", "CWP") reduced
-    to the two words the underwriting rules test for, "Open" or "Closed"; anything else is kept as written."""
+    to the two words the underwriting rules test for, "Open" or "Closed". Anything else is kept as
+    written, and the web tier treats a status it can't recognize as closed as open."""
     text = str(raw or "").strip()
-    if _CLOSED_STATUS.match(text):
-        return "Closed"
     if _OPEN_STATUS.match(text):
         return "Open"
+    if _CLOSED_STATUS.match(text):
+        return "Closed"
     return text
 
 
