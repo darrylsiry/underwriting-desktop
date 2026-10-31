@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>UX-037 · Bound file workbench</title>
+<style>
+body{margin:0;padding:24px;background:#f8fafc;color:#0f172a;font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+h1{font-size:18px;margin:0 0 4px}.sub{color:#64748b;margin:0 0 20px;font-size:13px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.pane>h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin:0 0 8px}
+.pane.after>h2{color:#4f46e5}
+.bar{display:flex;align-items:center;gap:12px;background:rgba(248,250,252,.95);padding:8px 0}
+.bar .name{font-size:20px;font-weight:600}.mono{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#64748b}
+.chip{border-radius:999px;padding:2px 8px;font-size:12px;font-weight:500;background:#ecfdf5;color:#047857;white-space:nowrap}
+.btn{margin-left:auto;background:#4f46e5;color:#fff;border-radius:6px;padding:8px 16px;font-weight:500;font-size:14px}
+.frozen{margin-left:auto;font-size:12px;color:#64748b}
+.note{margin:12px 0;border:1px solid #a7f3d0;background:#ecfdf5;color:#064e3b;border-radius:6px;padding:8px 12px;font-size:14px}
+.note a{color:#065f46;font-weight:500}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 1px 2px rgba(15,23,42,.05);margin-top:12px}
+.card h3{margin:0;border-bottom:1px solid #f1f5f9;padding:8px 16px;font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:#64748b}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 24px;padding:16px}
+label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#64748b}
+.in{display:flex;align-items:center;border:1px solid #cbd5e1;border-radius:4px;background:#fff;color:#0f172a;font-size:14px;padding:6px 8px}
+.in.num{justify-content:flex-end;font-variant-numeric:tabular-nums}.in .u{color:#64748b;margin:0 6px 0 0}.in .u2{color:#64748b;margin-left:6px}
+.ro .in{background:#f8fafc;color:#334155;border-color:#e2e8f0}
+.prem{padding:16px}.prem .big{font-size:28px;font-weight:600;font-variant-numeric:tabular-nums}.prem .small{font-size:12px;color:#64748b}
+.mark{outline:2px solid #4f46e5;outline-offset:2px;border-radius:4px}
+</style></head><body>
+<h1>UX-037 · A bound file's workbench still looks like a live worksheet</h1>
+<p class="sub">SUB-0001 Desert Bloom Painting, bound as GL-26-00001. Left: today. Right: the worksheet frozen at bind, with the policy named and the next step pointed at.</p>
+<div class="pair">
+<section class="pane"><h2>Before</h2>
+ <div class="bar"><span class="name">Desert Bloom Painting</span><span class="mono">SUB-0001</span><span class="chip">Bound · GL-26-00001</span><span class="btn">Save &amp; rate</span></div>
+ <div class="card"><h3>Rating inputs</h3><div class="grid">
+  <label>Class code<span class="in">98304</span></label>
+  <label>Gross receipts<span class="in num"><span class="u">$</span>650,000</span></label>
+  <label>Deductible<span class="in num"><span class="u">$</span>2,500</span></label>
+  <label>Residential<span class="in num">100<span class="u2">%</span></span></label>
+ </div></div>
+ <div class="card"><h3>Indicative premium</h3><div class="prem"><div class="big">$5,665</div><div class="small">total cost to insured · rates 2026.2</div></div></div>
+</section>
+<section class="pane after"><h2>After</h2>
+ <div class="bar"><span class="name">Desert Bloom Painting</span><span class="mono">SUB-0001</span><span class="chip">Bound · GL-26-00001</span><span class="frozen mark">Worksheet frozen at bind</span></div>
+ <p class="note mark">Bound as <a href="#">GL-26-00001</a> by underwriter · this worksheet is the rating that was bound. Changes to a bound policy need an endorsement; to renew, start the renewal from the policy page.</p>
+ <div class="card ro mark"><h3>Rating inputs</h3><div class="grid">
+  <label>Class code<span class="in">98304</span></label>
+  <label>Gross receipts<span class="in num"><span class="u">$</span>650,000</span></label>
+  <label>Deductible<span class="in num"><span class="u">$</span>2,500</span></label>
+  <label>Residential<span class="in num">100<span class="u2">%</span></span></label>
+ </div></div>
+ <div class="card"><h3 class="mark">Premium as bound</h3><div class="prem"><div class="big">$5,665</div><div class="small">bound Oct 22, 2026 · rates 2026.2</div></div></div>
+</section>
+</div>
+</body></html>
