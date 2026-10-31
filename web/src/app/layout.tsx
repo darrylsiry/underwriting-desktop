@@ -48,6 +48,7 @@ export default async function RootLayout({
             <Link href="/assistant" className="hover:text-slate-900">AI Assistant</Link>
             <AdminMenu items={[
               { href: "/audit", label: "Audit" },
+              { href: "/audit/logins", label: "Sign-ins" },
               { href: "/accounting", label: "Accounting" },
               { href: RATING_ADMIN_URL, label: "Rate tables", external: true },
             ]} />

@@ -52,7 +52,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
       ) : (
         <>
           <h1 className="text-2xl font-semibold">Audit trail</h1>
-          <p className="mt-1 text-sm text-slate-500">All recorded activity: the UW Desktop, rate-table administration, and the rating engine.</p>
+          <p className="mt-1 text-sm text-slate-500">All recorded activity: the UW Desktop, rate-table administration, and the rating engine. <RowLink href="/audit/logins">Sign-ins →</RowLink></p>
         </>
       )}
 

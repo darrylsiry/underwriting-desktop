@@ -15,3 +15,6 @@ web/inbox/*
 .claude/ux-review/
 # submissions the app generates when the inbox runs low (stamped YYYYMMDD-HHMM-<slug>)
 samples/submissions/2[0-9][0-9][0-9][0-9][0-9][0-9][0-9]-*/
+
+# daily sign-in reports (scripts/login-report.sh): addresses and locations stay on this machine
+/reports/

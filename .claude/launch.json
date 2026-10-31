@@ -4,8 +4,20 @@
     {
       "name": "web",
       "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "cd \"$(git rev-parse --show-toplevel)/web\" && npm run dev -- --port 3100"],
+      "runtimeArgs": [
+        "-c",
+        "cd \"$(git rev-parse --show-toplevel)/web\" && npm run dev -- --port 3100"
+      ],
       "port": 3100
+    },
+    {
+      "name": "web-signin",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd \"$(git rev-parse --show-toplevel)/web\" && BASIC_AUTH_USERS=underwriter1:demo-pass-1,underwriter2:demo-pass-2 npm run dev -- --port 3101"
+      ],
+      "port": 3101
     }
   ]
 }

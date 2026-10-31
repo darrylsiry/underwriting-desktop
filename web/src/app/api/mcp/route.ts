@@ -2,7 +2,8 @@ import { glDate } from "@/lib/gl-journal";
 import { glMcpServer } from "@/lib/gl-mcp";
 import { requestOrigin } from "@/lib/http";
 import { serveMcpHttp } from "@/lib/mcp";
-import { currentUser } from "@/lib/user";
+import { noteApiLogin } from "@/lib/login-events";
+import { currentUser, signedInUser } from "@/lib/user";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ const server = glMcpServer();
 
 async function serve(req: Request) {
   const origin = requestOrigin(req.headers);
+  noteApiLogin(await signedInUser(), req.headers);   // the sign-in report counts MCP clients' logins too
   const ctx = { actor: await currentUser(), origin, today: glDate(new Date()) };
   const body = req.method === "POST" ? await req.text() : null;
   const out = await serveMcpHttp(server, { method: req.method, headers: req.headers, body }, ctx, { origin, path: "/api/mcp" });
