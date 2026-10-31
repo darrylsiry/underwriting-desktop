@@ -48,6 +48,12 @@ Review everything that executes, defines behavior, or configures the runtime:
 - `db/init/**`, `docker-compose.yml`, `scripts/**`, `samples/*.py`, every `Dockerfile`
 - `.env.example`, `.gitignore`, `.dockerignore`, `web/package.json`, each `pyproject.toml` and lock file (for dependency versions only)
 - `.claude/**` (hooks, commands and agent definitions are executable configuration too)
+- `.github/workflows/**`, every `fly.toml`, and any deploy or CI configuration
+- **Anything else that executes.** The list above is a starting point, not a
+  boundary: run `git ls-files` plus `git ls-files -o --exclude-standard` and
+  review every new directory or service you find (for example an MCP server,
+  a REST API, seeding or generator scripts). Say in Coverage notes which new
+  areas you added.
 
 Read `docs/PLAN.md` and `docs/BUILD_LOG.md` first so you understand intent and
 can tell a deliberate demo shortcut from an actual exposure. Skip

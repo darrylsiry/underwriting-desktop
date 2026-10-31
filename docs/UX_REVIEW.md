@@ -8,70 +8,77 @@ chosen, keep the `UX-NNN` ID in your commit message, and leave this file
 alone. The reviewer marks items resolved when it sees the change. Mockups
 live in `docs/ux-mockups/`.*
 
-- **Run:** 2026-10-22 23:50
-- **Commit reviewed:** `3ce97bd` (`step-12: Fly.io deploy config, private networking and a password gate`). Working tree has no uncommitted UI changes (only `scripts/fly-deploy.sh` and untracked agent/tooling files).
-- **Previous run:** none
-- **Reviewed against:** source only for the web app (the Underwriting Desktop web container was not running; port 3000 was held by an unrelated application and was not reviewed); running rating admin at localhost:8001 (`/admin`, `/admin/versions/3` draft, `/admin/versions/2?section=territory` active).
+- **Run:** 2026-10-31 07:35
+- **Commit reviewed:** `ef6eb44` (`fix: CR-077 whole-word claim statuses; CR-079 same-origin check on the assistant`). The working tree has no uncommitted UI changes (only `.claude/agents/security-reviewer.md`, the two other review docs and `.DS_Store` files).
+- **Previous run:** 2026-10-22 23:50 (commit `3ce97bd`, step-12)
+- **Reviewed against:** source only for the web app (port 3000 was held by an unrelated node process answering a plain-text 401; see Coverage notes); running rating admin at localhost:8001 (`/admin`, `/admin/versions/3`).
 
 ## Summary
 
 | Priority | Open | New this run | Improved | Resolved this run |
 |----------|------|--------------|----------|-------------------|
-| P1 Blocker | 1 | 1 | 0 | 0 |
-| P2 Major | 9 | 9 | 0 | 0 |
-| P3 Minor | 8 | 8 | 0 | 0 |
-| P4 Polish | 2 | 2 | 0 | 0 |
+| P1 Blocker | 1 | 0 | 0 | 0 |
+| P2 Major | 7 | 1 | 1 | 0 |
+| P3 Minor | 12 | 3 | 3 | 1 |
+| P4 Polish | 4 | 1 | 1 | 0 |
 
-For an underwriter the product already does the hard things right: every extracted value carries its confidence, basis and quoted source; a stale rating says why it is stale; referrals block quoting until someone writes down why they are acceptable; the binder shows OPEN items with due dates. What hurts is the plain-HTML-form plumbing around that: every form validates on the server and redirects, so one typo discards everything the user typed, and the four forms that share the workbench and review pages silently drop each other's unsaved edits. The single most valuable change is UX-001 (keep typed input on validation errors, with browser-side constraints so most errors never reach the server), because it removes the one way this UI makes an underwriter redo work. The best quick win is UX-004 (show rating inputs as `$2,300,000` and `100 %` instead of `2300000` and `100`), one file, under an hour, and it directly reduces wrong-zero mistakes on the most-edited form.
+Eleven steps landed since the last run and most of them are good for the underwriter: the desk (`/`) now answers "what do I do next" with a pinned inbox task and due-date chips, the live extraction panel makes the slowest moment of the demo the most watchable, the renewal comparison explains a premium change factor by factor, and the rating service no longer wipes the last premium when it is merely down. What has not moved is the plain-form plumbing underneath: every validation error still redirects and discards what was typed (UX-001), the neighbouring Accept/Clear/Bind/Issue forms still drop unsaved edits (UX-002), only the upload button shows a pending state (UX-009), and the workbench chip still says "Not rated" while a live quote is out (UX-003). The single most valuable change remains UX-001, because it is the one place the product makes the underwriter redo work, and it now has more victims (the issue-quote date fields, the renewal quote form). The best quick win is UX-004 (format the rating inputs as `$2,300,000` and `100 %`): one file, under an hour, and it directly reduces wrong-zero errors on the most-edited form. The one new P2 is UX-022: pushing the sub-ledger to the GL downloads a file but leaves the page saying "not yet pushed" until someone reloads.
 
 ## Outstanding items
 
 | ID | Priority | Effort | Status | Screen | Recommendation (one line) | First seen |
 |----|----------|--------|--------|--------|----------------------------|------------|
-| UX-001 | P1 | M | New | Intake review, Workbench, Rate admin editor | Keep what the user typed when validation fails, and stop obvious errors in the browser before submit | 2026-10-22 |
-| UX-002 | P2 | M | New | Intake review, Workbench | Accept / Clear / Issue / Bind must not silently discard unsaved edits in the neighbouring form | 2026-10-22 |
-| UX-003 | P2 | M | New | Workbench Quote card, status chip | Flag when the worksheet no longer matches the latest issued quote; keep "Quoted" visible while a quote is live | 2026-10-22 |
-| UX-004 | P2 | S | New | Workbench Rating inputs | Format money and percent inputs with separators and units (`$2,300,000`, `100 %`, `0 ft`) | 2026-10-22 |
-| UX-005 | P2 | M | New | Submission inbox | Add a Stage column (not rated / 3 referrals / ready / quoted / bound) and a count line so the queue can be triaged | 2026-10-22 |
-| UX-006 | P2 | S | New | All timestamps, Audit filters, Rate admin | Render times in one named zone with the zone shown; admin currently shows UTC as if local | 2026-10-22 |
-| UX-007 | P2 | M | New | Rate admin version page | Before Activate, list the differences from the *active* version and warn about unsaved edits | 2026-10-22 |
-| UX-008 | P2 | S | New | Upload form, Workbench, Issue quote | Replace raw "fetch failed" / "Ingestion service returned 500" with plain-language messages; don't wipe the last premium on a connection failure | 2026-10-22 |
-| UX-009 | P2 | S | New | Every submit button | Pending labels ("Rating…", "Issuing quote…", "Binding…") and disable on submit | 2026-10-22 |
-| UX-010 | P2 | S | New | Layout / all pages | Per-page browser titles, active nav state, and a path back from workbench to inbox and from admin to desktop | 2026-10-22 |
-| UX-011 | P3 | S | New | Intake review field rows | Show the full source snippet (expandable), not a one-line truncation with a hover title | 2026-10-22 |
-| UX-012 | P3 | S | New | 11 locations | Replace `text-slate-400` on white with `slate-500` for real content (2.9:1 fails AA) | 2026-10-22 |
-| UX-013 | P3 | S | New | 6 tables, 2 lists | Add column headers to headerless tables; make insured-name links look like links; rename inbox "Review" column | 2026-10-22 |
-| UX-014 | P3 | S | New | Policy detail | "Coverage" should show limits, deductible, class and forms, not only money | 2026-10-22 |
-| UX-015 | P3 | S | New | Rate admin header and forms | Link back to the desktop; prefill "Your name" from the desktop's Working-as cookie | 2026-10-22 |
-| UX-016 | P3 | S | New | Quote PDF | State "Supersedes version 1" on revised quotes; drop internal rate-version jargon from broker documents | 2026-10-22 |
-| UX-017 | P3 | S | New | Workbench Referrals | Show when a referral was cleared, next to who and why | 2026-10-22 |
-| UX-018 | P3 | S | New | Home status page | Add "OK" / "Down" text next to the colour dot | 2026-10-22 |
-| UX-019 | P4 | S | New | Rate admin tables | Consistent decimals for factors (`1.00`, `0.90`, `1.35`) | 2026-10-22 |
-| UX-020 | P4 | S | New | Review subtitle, Audit, History panels | Hide developer detail (model name, token counts, `worksheet.input_changed`, JSON-quoted values) behind human labels | 2026-10-22 |
+| UX-001 | P1 | M | Open | Intake review, Workbench, Issue quote, Rate admin editor | Keep what the user typed when validation fails, and stop obvious errors in the browser before submit | 2026-10-22 |
+| UX-002 | P2 | M | Open | Intake review, Workbench | Accept / Clear / Issue / Bind must not silently discard unsaved edits in the neighbouring form | 2026-10-22 |
+| UX-003 | P2 | M | Open | Workbench Quote card, status chip | Flag when the worksheet no longer matches the latest issued quote; keep "Quoted" visible while a quote is live | 2026-10-22 |
+| UX-004 | P2 | S | Open | Workbench Rating inputs | Format money and percent inputs with separators and units (`$2,300,000`, `100 %`, `0 ft`) | 2026-10-22 |
+| UX-006 | P2 | S | Improved | All timestamps, Audit filters, Rate admin | One named zone everywhere; Accounting now shows Eastern while Audit and the admin show other zones for the same event | 2026-10-22 |
+| UX-007 | P2 | M | Open | Rate admin version page | Before Activate, list the differences from the *active* version and warn about unsaved edits | 2026-10-22 |
+| UX-009 | P2 | S | Open | Every submit button | Pending labels ("Rating…", "Binding…", "Pushing…") and disable on submit | 2026-10-22 |
+| UX-022 | P2 | M | New | Accounting · Push to the general ledger | After Export, show "Pushed batch GLX-… · n lines marked" on the page instead of only a download | 2026-10-31 |
+| UX-005 | P3 | M | Improved | Submission inbox (Received table) | Add a Stage column to the Received table; the desk now triages, the list still does not | 2026-10-22 |
+| UX-008 | P3 | S | Improved | Upload form, Extract panel, Workbench | Plain-language messages for the remaining raw errors (`fetch failed`, `Request failed (404)`, `returned 500`) | 2026-10-22 |
+| UX-010 | P3 | S | Improved | Layout / all pages | Per-page browser titles and active state on the main nav links | 2026-10-22 |
+| UX-011 | P3 | S | Open | Intake review field rows | Show the full source snippet (expandable), not a one-line truncation with a hover title | 2026-10-22 |
+| UX-012 | P3 | S | Open | 23 files (63 uses) | Replace `text-slate-400` on white for real content (2.9:1 fails AA); usage has grown from 11 to 63 | 2026-10-22 |
+| UX-013 | P3 | S | Open | 7 tables, 8 link sites | Add column headers to headerless tables; make insured-name and quote links look like links; rename "Review" column | 2026-10-22 |
+| UX-014 | P3 | S | Open | Policy detail | "Coverage" should show limits, deductible, class and forms, not only money | 2026-10-22 |
+| UX-016 | P3 | S | Open | Quote PDF | State "Supersedes version 1" on revised quotes; drop internal rate-version jargon from broker documents | 2026-10-22 |
+| UX-017 | P3 | S | Open | Workbench Referrals | Show when a referral was cleared, next to who and why | 2026-10-22 |
+| UX-021 | P3 | S | New | Workbench, Intake review | Keep the header Save button in view while scrolling the form (sticky header row) | 2026-10-31 |
+| UX-023 | P3 | S | New | Policy detail, Prior-system policy | "Start renewal" creates a renewal on one click with no confirm and no sense of how far off expiry is | 2026-10-31 |
+| UX-024 | P3 | S | New | Expiring vs renewing | "Re-rate" leaves the comparison page; land back on the comparison with the refreshed bridge | 2026-10-31 |
+| UX-015 | P4 | S | Improved | Rate admin inside the desktop | Match the desktop's page width and font; the header and signed-in user are now right | 2026-10-22 |
+| UX-019 | P4 | S | Open | Rate admin tables | Consistent decimals for factors (`1.00`, `0.90`, `1.35`) | 2026-10-22 |
+| UX-020 | P4 | S | Open | Review subtitle, Audit, History panels, Assistant, Inbox | Hide developer detail (model, tokens, `worksheet.input_changed`, env var names, folder stamps) behind human labels | 2026-10-22 |
+| UX-025 | P4 | S | New | Quotes list, dates everywhere | Amber means "needs attention", so use emerald/indigo for "just issued"; one date format per surface | 2026-10-31 |
 
 ## What changed since last run
 
-- First run; nothing to compare against.
+- `web/src/app/page.tsx` (step-15, follow-ups): the status page became the underwriter's desk with KPI tiles that open their lists, a pinned-inbox "Next up" list with days-left chips, renewals and recent activity. **Helped**: this is now the triage screen the persona needed, and it resolved UX-018 (status text next to the dot).
+- `web/src/app/submissions/page.tsx`, `inbox-list.tsx`, `activity-panel.tsx` (steps 13, 14, 20, 23): inbox from the drop folder, live extraction panel, self-refilling inbox, amber warning when the refill fails. **Helped** for the demo and the first click; the Received table underneath is unchanged (UX-005), and the panel's error row is still raw (UX-008).
+- `web/src/app/submissions/[id]/page.tsx`, `workbench/page.tsx` (76ff843): Save buttons moved from a sticky bottom bar into the page header. **Mixed**: cleaner page, but the only Save control now scrolls out of view on a form that is taller than the viewport (UX-021, new).
+- `web/src/app/submissions/[id]/renewal/*`, `policies/[id]/page.tsx`, `policies/book/[id]/page.tsx`, `quotes/[id]/page.tsx` (step-16): renewal workflow, premium bridge, memo, document list on the policy page. **Helped** (the bridge and the "changed" marks are exactly what a manager wants); two seams added: Re-rate leaves the comparison (UX-024), Start renewal has no guard (UX-023).
+- `web/src/app/accounting/**` (steps 17, 18): sub-ledger, exports, API and MCP docs. **Helped** for the accountant; the push itself gives no on-page confirmation (UX-022, new). Note that Accounting is the one screen that renders times in a named zone (UX-006).
+- `web/src/app/assistant/*` (step-21): chat with live tool calls and linked answers. **Helped**; the not-configured message and the model/token footer are developer-facing (folded into UX-020).
+- `web/src/app/layout.tsx`, `components/admin-menu.tsx`, `signin/page.tsx`, `error.tsx`, `not-found.tsx` (steps 21–23, nav follow-ups): Admin drop-down with a current state, sign-in page, styled error pages. **Helped**; main nav links still have no active state and every tab is still titled "Underwriting Desktop" (UX-010, improved).
+- `services/rating/app/templates/*.html`, `admin.py` (c7f437f, d257fc9, step-23): the desktop's top bar inside `/admin`, actor from the login, `data-confirm` on Activate. **Helped** (UX-015 improved); the Activate card and the number formatting are unchanged (UX-007, UX-019 verified on the running admin).
+- `web/src/lib/rating-api.ts`, `worksheets.ts` (step-23): readable 502s, 15 s timeout, last rating kept when the service is down. **Helped** (UX-008 improved).
 
 ## P1 Blocker
 
 ### UX-001 — Keep what the user typed when validation fails
-- **Status:** New
+- **Status:** Open (first seen 2026-10-22)
 - **Effort:** M
-- **Who / when:** Underwriter correcting intake fields or editing rating inputs and schedule reasons; rate-table administrator saving a variable.
-- **Where:** `web/src/app/submissions/actions.ts:29-41` + `web/src/lib/submissions.ts:132-147` (`/submissions/[id]`); `web/src/app/submissions/[id]/workbench/actions.ts:19-31` + `web/src/lib/worksheet.ts:75-129` (`/submissions/[id]/workbench`); `services/rating/app/admin.py:171-193` + `services/rating/app/repository.py:188-194` (`/admin/versions/{id}`).
-- **What the user experiences:** The underwriter fixes five fields on the review page, mistypes one ("2,3o0,000"), clicks **Save corrections**, and lands back on the page with a red banner `Gross receipts: "2,3o0,000" is not a number` and all five fields reset to the extracted values. The same happens on the workbench for any input or schedule error (`Safety program & training: write a reason for the credit`), and in the rate admin: edit ten class rates, forget the reason, click **Save class base rates**, get `A reason is required for rate changes`, and every edited cell is back to its old value. In all three places the server action parses first and redirects with `?error=`; the page re-renders from the database.
-- **Why it matters:** This is the only place the UI destroys work, and it does so on the most frequently used forms. Error prevention plus preserved input means the underwriter fixes one field instead of redoing the whole screen, and stops distrusting the Save button.
-- **Recommendation:**
-  1. Browser-side constraints so most errors never submit: money/int/pct inputs get `inputMode="numeric"` and `pattern="[\d$,.% ]+"` (parsers already strip `$ , %`), pct inputs `max` via pattern or `type=number min=0 max=100`, state inputs `pattern="[A-Za-z]{2}"` with `title="2-letter state code"`, date inputs `type="date"` (the parser already expects `YYYY-MM-DD`), schedule `%` inputs `type=number min=-10 max=10 step=1`. In the admin, add `required` to the "Reason for change" input (the server already requires it whenever a value changed) and `type=number min=0.0001 step=any` to value cells.
-  2. For the errors that still reach the server (mod out of bounds, cross-field rules, rating 422), return `{ error, values }` from the action via `useActionState` and render `defaultValue={state.values?.[key] ?? saved}` so the form comes back as typed, with the error under the offending field and the banner at the top. The upload form already uses this pattern (`upload-form.tsx`), so it is a known shape in this codebase.
-  3. Admin: on error, re-render the template with the posted values instead of redirecting (`templates.TemplateResponse(... rows=current_with_posted_values, error=...)`).
+- **Who / when:** Underwriter correcting intake fields, editing rating inputs and schedule reasons, or typing quote dates and subjectivities; rate-table administrator saving a variable.
+- **Where:** `web/src/app/submissions/actions.ts:29-41` + `web/src/lib/submissions.ts:139-164` (`/submissions/[id]`); `web/src/app/submissions/[id]/workbench/actions.ts:19-31` + `web/src/lib/worksheet.ts:75-129` (`/submissions/[id]/workbench`); **new since last run:** `web/src/app/submissions/[id]/issue-quote-form.tsx:9,12` (free-text date inputs) + `web/src/lib/quotes.ts:79-81` (`/submissions/[id]/workbench`, `/submissions/[id]/renewal`); `services/rating/app/admin.py:198-218` + `templates/version.html:52` (`/admin/versions/{id}`, reason input not `required`).
+- **What the user experiences:** Unchanged from last run: every action parses on the server and redirects with `?error=`, so the page re-renders from the database and every edit is gone. New victim: the issue-quote form. The underwriter edits four suggested subjectivities, types the effective date as `12/1/2026`, clicks **Issue quote · $5,777**, and gets `Effective date: use YYYY-MM-DD` with the subjectivities back to the suggested list. In the admin, verified on the running `/admin/versions/3`: the "Reason for change" input has no `required`, so ten edited cells and a forgotten reason come back as `A reason is required for rate changes` with every cell reset.
+- **Why it matters:** This is the only place the UI destroys work, and it does so on the most frequently used forms. Error prevention plus preserved input means the underwriter fixes one field instead of redoing the screen.
+- **Recommendation:** As before, in three layers. (1) Browser constraints: `inputMode="numeric"` + `pattern` on money/int/pct inputs, `pattern="[A-Za-z]{2}"` on state, `type="date"` on the quote's effective/expiration inputs (the parser already wants `YYYY-MM-DD`; the browser then shows a date picker and cannot send `12/1/2026`), `type=number min=-10 max=10 step=1` on schedule `%`, and `required` on the admin reason input. (2) `useActionState` on the review, worksheet and issue-quote forms returning `{ error, field, values }`, rendering `defaultValue={state.values?.[k] ?? saved}` with the message under the offending field. (3) Admin: re-render `version.html` with the posted values on error instead of redirecting.
   ```tsx
-  // workbench/page.tsx (client wrapper) — shape only
-  const [state, action] = useActionState(saveAndRateAction.bind(null, id), {});
-  <input name={d.key} defaultValue={state.values?.[d.key] ?? inputValue(ws.rating_inputs, d.key)}
-         inputMode="numeric" pattern="[\d$,.% ]+" aria-invalid={state.field === d.key} />
-  {state.field === d.key && <p className="text-xs text-rose-700">{state.error}</p>}
+  // issue-quote-form.tsx: the smallest slice
+  <input type="date" name="effective_date" defaultValue={effective} required … />
+  <input type="date" name="expiration_date" defaultValue={expiration} min={effective} … />
   ```
 - **Before / after:**
   ```
@@ -87,26 +94,22 @@ For an underwriter the product already does the hard things right: every extract
   every edit reverted                      only the bad field is flagged
   ```
   Mockup: `docs/ux-mockups/UX-001.html`
-- **Verify:** On the workbench change three inputs, put letters in one, click Save & rate: the other two keep their new values and the bad one shows an inline message. In `/admin/versions/<draft>`, change two class rates, leave the reason empty, click Save: the browser blocks the submit; the two edits are still in the cells.
+- **Verify:** On the workbench change three inputs, put letters in one, click Save & rate: the other two keep their values and the bad one shows an inline message. In the issue-quote form the date fields open a picker and refuse `12/1/2026`. In `/admin/versions/<draft>`, change two rates, leave the reason empty, click Save: the browser blocks the submit and the edits are still in the cells.
 
 ## P2 Major
 
 ### UX-002 — Accept, Clear, Issue and Bind must not discard unsaved edits in the neighbouring form
-- **Status:** New
+- **Status:** Open (first seen 2026-10-22)
 - **Effort:** M
 - **Who / when:** Underwriter finishing intake review; underwriter or manager on the workbench.
-- **Where:** `web/src/app/submissions/[id]/page.tsx:53` (save form) vs `:97` (accept form); `web/src/app/submissions/[id]/workbench/page.tsx:91` (Save & rate form) vs `:181` (bind), `:197` (issue), `:268` (clear referral).
-- **What the user experiences:** On the review page the natural sequence is "type the FEIN, click **Accept intake**". Accept is a separate `<form>`, so the browser submits only it; the typed FEIN is gone and the file is accepted without it. The side panel's "Save corrections first" is the only defence. On the workbench, editing "Max height" to 45 and then clicking **Clear** on the Work-at-height referral submits only the clear form: the height edit is lost, and the flag is cleared against the old facts.
+- **Where:** `web/src/app/submissions/[id]/page.tsx:35` (header **Save corrections**, `form="review-form"`) vs `:92-101` (separate Accept form); `web/src/app/submissions/[id]/workbench/page.tsx:73` (header **Save & rate**) vs `:184-195` (bind), `:200-204` (revise quote), `:271-275` (clear referral).
+- **What the user experiences:** Unchanged. On the review page the two primary actions now live in different places (Save in the page header, Accept in the right-hand card), which makes it even less obvious that only one of them saves. Typing the FEIN and clicking **Accept intake** accepts without the FEIN; the only defence is the grey line "Save corrections first." On the workbench, editing "Max height" to 45 and clicking **Clear** on the Work-at-height referral submits only the clear form: the height edit is lost and the flag is cleared against the old facts.
 - **Why it matters:** Recognition over recall: the screen should not require the user to remember which of four buttons also saves. Fixing this removes a silent data-loss path on the two busiest pages.
-- **Recommendation:**
-  - Review page: one form, two submit buttons. `Accept intake` uses `formAction={saveAndAcceptAction.bind(null, id)}`, which calls `saveReview` then `acceptSubmission` in that order (both already exist). Label it **Save & accept intake** when the form is dirty (or always).
-  - Workbench: keep the referral/issue/bind forms, but make them aware of unsaved edits. Cheapest: a tiny client component that marks the page dirty on `input` in the main form and, on submit of any other form, asks `confirm("You have unsaved rating input changes. Save & rate first?")`. Better: render the Clear/Issue/Bind buttons `disabled` with the hint "Save & rate your changes first" while dirty.
+- **Recommendation:** Review page: one form, two submit buttons; `Accept intake` uses `formAction={saveAndAcceptAction.bind(null, id)}` which calls `saveReview` then `acceptSubmission`, and is labelled **Save & accept intake**. Workbench: a tiny client component marks the page dirty on `input` in `#worksheet-form` and renders Clear/Issue/Bind `disabled` with the hint "Save & rate your changes first" while dirty (or, cheaper, `confirm("You have unsaved rating input changes. Save & rate first?")` on their submit).
   ```tsx
-  // review page: single form
-  <form action={saveReviewAction.bind(null, id)}> …fields…
-    <button>Save corrections</button>
-    <button formAction={saveAndAcceptAction.bind(null, id)} disabled={missing.length > 0}>Save & accept intake</button>
-  </form>
+  <form id="review-form" action={saveReviewAction.bind(null, id)}> …fields… </form>
+  <button form="review-form">Save corrections</button>
+  <button form="review-form" formAction={saveAndAcceptAction.bind(null, id)} disabled={missing.length > 0}>Save & accept intake</button>
   ```
 - **Before / after:**
   ```
@@ -115,8 +118,8 @@ For an underwriter the product already does the hard things right: every extract
   │ FEIN [75-123…] │ │ Accept intake │    │ FEIN [75-123…] │ │ Save & accept ◀   │
   │ Entity [LLC  ] │ │ Save correc-  │    │ Entity [LLC  ] │ │ intake            │
   │                │ │ tions first.  │    │                │ │ Saves your 2  ◀   │
-  │ [Save correc-] │ │ [Accept]      │    │ [Save correc-] │ │ edits, then       │
-  │ [tions       ] │ │   ↑ drops the │    │ [tions       ] │ │ accepts.          │
+  │ (Save is up in │ │ [Accept]      │    │ (Save is up in │ │ edits, then       │
+  │  the header)   │ │   ↑ drops the │    │  the header)   │ │ accepts.          │
   └────────────────┘ │   FEIN typed  │    └────────────────┘ └───────────────────┘
                      └───────────────┘
   ```
@@ -124,18 +127,18 @@ For an underwriter the product already does the hard things right: every extract
 - **Verify:** Type a FEIN, click the accept button without saving: the accepted file shows the FEIN and History records the correction. On the workbench, change an input and click Clear: either the edit is saved first or the UI tells you to Save & rate before clearing.
 
 ### UX-003 — Flag when the worksheet no longer matches the latest issued quote
-- **Status:** New
+- **Status:** Open (first seen 2026-10-22)
 - **Effort:** M
-- **Who / when:** Underwriter revising terms after a quote is out (the demo's own step 08: "change the deductible, issue v2"); manager glancing at the status chip.
-- **Where:** `web/src/app/submissions/[id]/workbench/page.tsx:47` (`bindBlockers` only checks status and dates), `:78-80` (status chip), `:177-206` (Quote card).
-- **What the user experiences:** After issuing Q-2026-0001 v1 at $5,777, the underwriter changes the deductible to $2,500 and clicks Save & rate. The Indicative premium card now shows $6,102, but the Quote card still offers a big green **Bind · $5,777** for v1 with no hint that the worksheet has moved on, while "Revise quote (v2)" is a small `<details>` toggle underneath. The header chip flips from "Quoted · Q-2026-0001 v1" to "Not rated" the moment an input changes, although an issued quote is live.
-- **Why it matters:** The two numbers on screen disagree and nothing says which one the broker has. Making the mismatch explicit prevents binding on terms the underwriter has already decided to change, and stops the chip lying about the file's commercial state.
-- **Recommendation:** Select `rating_inputs` and `schedule` in `quotesForSubmission` and compute `quoteCurrent = inputsHash(latest.rating_inputs, latest.schedule) === inputsHash(ws.rating_inputs, ws.schedule)`. When false and a rating exists: show an amber notice at the top of the Quote card, `Worksheet differs from Q-2026-0001 v1: deductible $1,000 → $2,500 · total $5,777 → $6,102. Issue v2 to quote the new terms, or bind v1 exactly as issued.`, promote **Issue revised quote (v2)** to a primary button (no `<details>`), and demote Bind to a secondary (outlined) button. Split the chip into two: a commercial chip that persists (`Quoted · Q-2026-0001 v1` / `Bound · GL-26-00001`) and a worksheet chip (`Not rated` / `Inputs changed` / `3 referrals open` / `Ready to quote`).
+- **Who / when:** Underwriter revising terms after a quote is out (demo step 08: "change the deductible, issue v2"); manager glancing at the status chip.
+- **Where:** `web/src/app/submissions/[id]/workbench/page.tsx:70-72` (chip), `:180-197` (Bind form stays primary), `:198-204` (revise quote hidden in `<details>`); compare `web/src/app/submissions/[id]/renewal/page.tsx:57-58`, which already says `Rating out of date` for the same state.
+- **What the user experiences:** Unchanged. After issuing Q-2026-0001 v1 at $5,777 the underwriter changes the deductible and clicks Save & rate: the Indicative premium card shows $6,102 but the Quote card still offers a big green **Bind · $5,777** for v1, "Revise quote (v2)" is a small toggle under it, and the header chip flips to "Not rated" although a quote is live. The new renewal comparison page handles the same moment better (`Quoted · Q… v1` persists; a separate amber banner says inputs changed), so the two pages now disagree about one file.
+- **Why it matters:** Two numbers on screen disagree and nothing says which one the broker has. Making the mismatch explicit prevents binding on terms the underwriter has already decided to change, and stops the chip lying about the file's commercial state.
+- **Recommendation:** Compute `quoteCurrent = inputsHash(latest.rating_inputs, latest.schedule) === inputsHash(ws.rating_inputs, ws.schedule)`. When false: an amber notice at the top of the Quote card (`Worksheet differs from Q-2026-0001 v1: deductible $1,000 → $2,500 · total $5,777 → $6,102. Issue v2 to quote the new terms, or bind v1 exactly as issued.`), promote **Issue revised quote (v2)** to the primary button, demote Bind to an outlined secondary. Split the chip into a commercial chip that persists (`Quoted · Q-2026-0001 v1` / `Bound · GL-26-00001`) and a worksheet chip using the renewal page's wording (`Not rated` / `Rating out of date` / `3 referrals open` / `Ready to quote`), and use the same pair on the renewal page so the vocabulary is one.
 - **Before / after:**
   ```
   BEFORE                                 AFTER
   [accepted] [Not rated]                 [accepted] [Quoted · Q-2026-0001 v1] ◀
-  ┌ QUOTE ───────────────────┐           [Inputs changed since rating]       ◀
+  ┌ QUOTE ───────────────────┐           [Rating out of date]                ◀
   │ Q-2026-0001 v1 issued    │           ┌ QUOTE ───────────────────────────┐
   │   $5,777   PDF           │           │ ⚠ Worksheet differs from v1:  ◀  │
   │ Bind Q-2026-0001 v1      │           │   deductible $1,000 → $2,500,    │
@@ -143,24 +146,22 @@ For an underwriter the product already does the hard things right: every extract
   │ [ Bind · $5,777 ]        │           │ [ Issue revised quote (v2) ]  ◀  │
   │ ▸ Revise quote (v2)      │           │ Bind v1 as issued · $5,777    ◀  │
   └──────────────────────────┘           └──────────────────────────────────┘
-  ┌ INDICATIVE PREMIUM ──────┐
-  │ $6,102                   │
   ```
   Mockup: `docs/ux-mockups/UX-003.html`
 - **Verify:** Issue a quote, change the deductible, Save & rate: the notice names the changed field and both totals, Issue v2 is the primary action, and the header still says Quoted v1.
 
 ### UX-004 — Format money and percent inputs with separators and units
-- **Status:** New
+- **Status:** Open (first seen 2026-10-22)
 - **Effort:** S
-- **Who / when:** Underwriter editing rating inputs, many times a day.
-- **Where:** `web/src/app/submissions/[id]/workbench/page.tsx:94-106`, `:300-303` (`inputValue` returns `String(v)`).
-- **What the user experiences:** The form shows `2300000`, `1000000`, `2000000`, `0`, `100`, `0`, `0`, `1` in identical boxes. Nothing says which are dollars, percents, feet or a factor; the labels "Residential %" and "Max height (ft)" carry the unit, "Gross receipts" and the limits do not. Counting zeros in `15000000` is exactly how a `LARGE_ACCOUNT` referral gets tripped or missed. `parseInputs` already strips `$`, `,` and `%`, so formatted defaults are safe today.
-- **Why it matters:** Dense, aligned, unit-labelled numbers are what a workstation user scans; this change cuts magnitude errors on the inputs that drive premium and referrals.
-- **Recommendation:** In `inputValue`, format by `d.kind`: money → `Number(v).toLocaleString("en-US")`; pct/int/mod → unchanged. Wrap money inputs in a prefix adornment `$` and pct/int in a suffix `%` / `ft`, right-align numeric inputs with `tabular-nums`, and add `inputMode="numeric"`. Consider `<select>` for the limits (the rating service only accepts known ILF keys; invalid combinations today fail at Save & rate with a 422).
+- **Who / when:** Underwriter editing rating inputs, many times a day; now also on every renewal, where the "expiring:" line under each input *is* formatted (`inputText`) while the input above it is not.
+- **Where:** `web/src/app/submissions/[id]/workbench/page.tsx:103-104`, `:303-306` (`inputValue` returns `String(v)`); contrast `:106-110` (expiring value rendered via `inputText`, e.g. `$5,800,000`).
+- **What the user experiences:** The form shows `2300000`, `1000000`, `2000000`, `0`, `100`, `0`, `0`, `1` in identical boxes. On a renewal the line beneath reads `expiring: $5,800,000` while the box reads `6200000`, so the underwriter compares two formats of the same number. `parseInputs` already strips `$`, `,` and `%`, so formatted defaults are safe today.
+- **Why it matters:** Dense, aligned, unit-labelled numbers are what a workstation user scans; this cuts magnitude errors on the inputs that drive premium and referrals (`15000000` versus `1500000` is the LARGE_ACCOUNT rule).
+- **Recommendation:** In `inputValue`, format by `d.kind` (money → `toLocaleString("en-US")`), wrap money inputs with a `$` prefix and pct/int with a `%`/`ft` suffix, right-align with `tabular-nums`, add `inputMode="numeric"`. Reuse `inputText` so the input and the "expiring:" line agree.
   ```tsx
   const unit = d.kind === "money" ? "$" : d.kind === "pct" ? "%" : d.key === "max_height_ft" ? "ft" : null;
   <span className="flex items-center rounded border border-slate-300">
-    {d.kind === "money" && <span className="px-2 text-slate-500">$</span>}
+    {unit === "$" && <span className="px-2 text-slate-500">$</span>}
     <input name={d.key} inputMode="numeric" className="w-full px-2 py-1.5 text-right tabular-nums"
            defaultValue={d.kind === "money" ? Number(v).toLocaleString("en-US") : String(v)} />
     {unit && unit !== "$" && <span className="px-2 text-slate-500">{unit}</span>}
@@ -171,7 +172,6 @@ For an underwriter the product already does the hard things right: every extract
   BEFORE                              AFTER
   Gross receipts   [2300000     ]     Gross receipts   [$   2,300,000 ] ◀
   Each occurrence  [1000000     ]     Each occurrence  [$   1,000,000 ] ◀
-  General aggregate[2000000     ]     General aggregate[$   2,000,000 ] ◀
   Deductible       [0           ]     Deductible       [$           0 ] ◀
   Residential %    [100         ]     Residential      [        100 %] ◀
   Max height (ft)  [0           ]     Max height       [          0 ft] ◀
@@ -180,60 +180,36 @@ For an underwriter the product already does the hard things right: every extract
   Mockup: `docs/ux-mockups/UX-004.html`
 - **Verify:** Open any accepted workbench: receipts read `$2,300,000`; typing `2,500` in Deductible and clicking Save & rate still rates correctly.
 
-### UX-005 — Make the inbox triageable: a Stage column and a count line
-- **Status:** New
-- **Effort:** M
-- **Who / when:** Underwriter starting the day on `/submissions`; manager looking for files waiting on them.
-- **Where:** `web/src/app/submissions/page.tsx:18-59`; data would come from `worksheets` (customer DB) and `quotes`/`policies` (policy DB).
-- **What the user experiences:** Every accepted row shows the pill `accepted` and the link `Workbench →`, whether the file is unrated, blocked by three referrals, ready to quote, quoted a week ago, or bound. The only way to find "which files are waiting on a manager" is to open each workbench. The page has no count, no filter, and the sort order (newest first) is not stated.
-- **Why it matters:** Triage is the first task in the persona description. A queue that shows stage lets the underwriter pick the next file in one glance and lets the manager find referrals without being told.
-- **Recommendation:** Replace the `Status` column with **Stage**, computed per row: `Needs review` (with the existing `2 missing` / `5 to check` chips), `Accepted · not rated`, `3 referrals open` (amber), `Ready to quote` (emerald), `Quoted Q-2026-0001 v2 · $5,777`, `Bound GL-26-00001`. Compute with three batched queries (worksheets for the listed ids; latest quote per submission; policies per submission) and the existing `readiness()`. Add a line under the heading: `8 submissions · 3 need review · 2 referrals open · newest first`, and a status filter (`?stage=`) as plain links. Rename the `Review` column to `Next step`.
-- **Before / after:**
-  ```
-  BEFORE
-  REF      APPLICANT        REVIEW        STATUS    RECEIVED
-  SUB-0003 Gulf Coast Roof  Workbench →   accepted  Oct 22, 2:10 PM
-  SUB-0002 Lone Star Elec   Workbench →   accepted  Oct 22, 1:55 PM
-  SUB-0001 Desert Bloom     Workbench →   accepted  Oct 22, 1:40 PM
-
-  AFTER   8 submissions · 1 needs review · 1 referral open · newest first ◀
-  REF      APPLICANT        STAGE                          NEXT STEP  ◀
-  SUB-0003 Gulf Coast Roof  [3 referrals open]             Workbench →
-  SUB-0002 Lone Star Elec   [Ready to quote]               Workbench →
-  SUB-0001 Desert Bloom     [Bound GL-26-00001] $5,777     Policy →
-  ```
-  Mockup: `docs/ux-mockups/UX-005.html`
-- **Verify:** With the demo data loaded, the inbox distinguishes the roofing file (referrals), the electric file (ready/quoted) and Desert Bloom (bound) without opening any of them.
-
 ### UX-006 — Render times in one named zone, and show it
-- **Status:** New
+- **Status:** Improved (first seen 2026-10-22). Accounting now renders in `America/New_York` (`GL_TIME_ZONE`); every other screen and the rate admin still render in the server's zone with no zone shown, so one bind can now show two different clock times in the same product.
 - **Effort:** S
-- **Who / when:** Manager reconciling "who did what and when" across the desktop audit and the rate admin; anyone using the Audit From/To filters.
-- **Where:** `web/src/components/ui.tsx:34` (`when`), `web/src/app/submissions/page.tsx:51`, `submissions/[id]/page.tsx:36,157`, `workbench/page.tsx:285`, `quotes/page.tsx:35`, `policies/page.tsx:35`, `audit/page.tsx:110` (all `toLocaleString("en-US", …)` with no `timeZone`); `web/src/lib/timeline-merge.ts:134-135` (day filters compare UTC date strings); `services/rating/app/templates/_audit.html:5`, `versions.html:19` (`strftime` with no zone).
-- **What the user experiences:** Verified on the running admin: the activation of 2026.2 is listed as `2026-10-23 01:55` while this review ran at `2026-10-22 23:50` local. Nothing on the page says UTC, so a manager reads it as "tomorrow at 2 am". In the containerised web app every `toLocaleString` call renders in the container's zone (UTC) with the same ambiguity, and the Audit page's From/To day filters cut at UTC midnight, so an evening event falls into "tomorrow".
-- **Why it matters:** Audit trails are only trustworthy if times are unambiguous. One display zone with its abbreviation shown restores that trust at almost no cost.
-- **Recommendation:** Add `DISPLAY_TZ` (default `America/New_York` or the office zone) and one helper used everywhere: `fmt(d, { dateStyle: "medium", timeStyle: "short", timeZone: TZ, timeZoneName: "short" })` → `Oct 22, 2026, 9:55 PM EDT`. Wrap outputs in `<time dateTime={iso}>`. Apply the same zone when bucketing days in `applyFilters`. Admin: `a.created_at.astimezone(ZoneInfo(TZ)).strftime("%Y-%m-%d %H:%M %Z")`.
+- **Who / when:** Manager reconciling "who did what and when" across `/accounting`, `/audit` and `/admin`; anyone using the Audit From/To filters.
+- **Where:** `web/src/components/ui.tsx:45` (`when`, no `timeZone`); `web/src/app/accounting/page.tsx:14` (named zone, the model to copy); `web/src/app/audit/page.tsx:119`; `web/src/app/page.tsx:160`; `submissions/page.tsx:70`; `submissions/[id]/page.tsx:38,152`; `workbench/page.tsx:288`; `quotes/page.tsx:73`; `policies/page.tsx:50`; `services/rating/app/templates/_audit.html:5`, `versions.html:19` (verified on the running admin: `2026-10-23 01:55` for an event that happened at 21:55 local).
+- **What the user experiences:** A policy bound at 11:30 pm Eastern on the 31st is a journal "posted Oct 31, 11:30 PM" on Accounting and, in a UTC container, "11/1/26, 3:30:00 AM" on the Audit page it links to with **UW action →**. Nothing on either page says which zone it is. The admin's activation times read as "tomorrow at 2 am".
+- **Why it matters:** Audit trails and books are only trustworthy if times are unambiguous; the accounting page proves the fix is one option away.
+- **Recommendation:** Promote `GL_TIME_ZONE` to `DISPLAY_TZ` and use it in `when()` with `timeZoneName: "short"` (`Oct 31, 2026, 11:30 PM EDT`), wrap outputs in `<time dateTime={iso}>`, apply the same zone when bucketing days in `applyFilters`, and in the admin `a.created_at.astimezone(ZoneInfo(TZ)).strftime("%Y-%m-%d %H:%M %Z")`.
 - **Before / after:**
   ```
-  BEFORE (rate admin)                    AFTER
-  2026-10-23 01:55  Darryl  activate     2026-10-22 21:55 EDT  Darryl  activate ◀
-  2026-10-23 01:55  Darryl  update …     2026-10-22 21:55 EDT  Darryl  update …  ◀
+  BEFORE                                  AFTER
+  /accounting  JE-000012 · Oct 31, 11:30 PM  Oct 31, 2026, 11:30 PM EDT      ◀
+  /audit       11/1/26, 3:30:00 AM            Oct 31, 2026, 11:30 PM EDT      ◀
+  /admin       2026-10-23 01:55               2026-10-22 21:55 EDT            ◀
   ```
   Mockup: inline only
-- **Verify:** The same event shows the same wall-clock time, with a zone abbreviation, on `/audit`, the workbench history, and `/admin`.
+- **Verify:** The same bind shows the same wall-clock time, with a zone abbreviation, on `/accounting`, `/audit?correlation=…` and the workbench history.
 
 ### UX-007 — Before Activate, show what will change against the active version and warn about unsaved edits
-- **Status:** New
+- **Status:** Open (first seen 2026-10-22); verified unchanged on the running `/admin/versions/3`.
 - **Effort:** M
-- **Who / when:** Rate-table administrator / actuary activating a draft (a few times a quarter).
-- **Where:** `services/rating/app/templates/version.html:28-57` (editor form) and `:60-69` (separate activate form); `services/rating/app/admin.py:146-152` (`with_base` compares to `based_on`, not to the active version); `versions.html:27-29` (the Copy-from list includes retired versions).
-- **What the user experiences:** The Activate card says only "Activating retires the current active version", then a browser `confirm("Activate 2026.3? New ratings will use it immediately.")`. There is no list of what will differ in production. The `N changed` badges compare to the version the draft was copied from; if the admin drafted from retired `2026.1` (offered in the Copy-from list), activating silently reverts Florida from 1.35 to 1.25 and the badges show nothing. Separately, the Activate form sits directly under the editor; values typed in the editor but not saved are not part of the activation and nothing says so.
-- **Why it matters:** "Needs to be certain what will change before activating" is the persona's whole job here. A diff against the live version turns a leap of faith into a checked decision, and the unsaved-edits warning prevents activating a draft that is missing the change the admin just typed.
-- **Recommendation:** In `version_page`, also compute `with_base(current, active_rows)` and pass a `live_diff` list (`[{section, key, label, active_value, draft_value}]`). Render the Activate card as: heading `Activate 2026.3 — 1 value differs from active 2026.2`, the list (`Territory · FL Florida · 1.25 → 1.35`), a red line when `live_diff` is empty (`No differences from the active version; activating changes nothing`) or when the base is retired (`Copied from retired 2026.1: activating also reverts FL 1.35 → 1.25`). Put the diff in the confirm text too. Add a muted line `Unsaved edits in the editor above are not included. Save them first.`, and a one-line inline handler on the editor (`oninput="document.getElementById('activate').disabled=true"`) or move Activate to the version header.
+- **Who / when:** Rate-table administrator / actuary activating a draft.
+- **Where:** `services/rating/app/templates/version.html:60-69` (Activate card under the editor form); `services/rating/app/admin.py:171-183` (`with_base` compares to `based_on`, not to the active version); `versions.html:27-29` (Copy-from list includes retired versions).
+- **What the user experiences:** The card still says only "Activating retires the current active version", then `confirm("Activate 2026.3? New ratings will use it immediately.")`. The `N changed` badges compare to the version the draft was copied from; a draft copied from retired 2026.1 would revert Florida 1.35 → 1.25 on activation with no badge. Values typed in the editor but not saved are not part of the activation and nothing says so.
+- **Why it matters:** "Needs to be certain what will change before activating" is the persona's whole job here; a diff against the live version turns a leap of faith into a checked decision.
+- **Recommendation:** Compute `live_diff = with_base(current, active_rows)` for every section and render the Activate card as `Activate 2026.3 · 1 value differs from active 2026.2` with the list (`Territory · FL Florida · 1.25 → 1.35`), a red line when the list is empty, a warning when the base is retired, the diff in the `data-confirm` text, and `Unsaved edits in the editor above are not included. Save them first.` with `oninput` on the editor disabling the Activate button.
   ```html
   <h2>Activate {{ version.label }} · {{ live_diff|length }} value(s) differ from active {{ active.label }}</h2>
   <ul>{% for d in live_diff %}<li>{{ d.section }} · <code>{{ d.key }}</code> {{ d.label }} · {{ d.active|num }} → <strong>{{ d.draft|num }}</strong></li>{% endfor %}</ul>
-  {% if not live_diff %}<p class="flash err">No differences from the active version.</p>{% endif %}
+  {% if not live_diff %}<p class="flash err">No differences from the active version; activating changes nothing.</p>{% endif %}
   ```
 - **Before / after:**
   ```
@@ -241,49 +217,27 @@ For an underwriter the product already does the hard things right: every extract
   ACTIVATE                              ACTIVATE 2026.3 · 1 value differs   ◀
   Activating retires the current        from active 2026.2
   active version. Existing quotes       • Territory FL Florida 1.25 → 1.35 ◀
-  keep the version they were rated on.  Copied from 2026.2 (active)         ◀
-  Reason [            ] Your name [  ]  Unsaved edits above are not          ◀
-  [Activate 2026.3]                     included; save them first.
-                                        Reason [            ] Your name [  ]
+  keep the version they were rated on.  Unsaved edits above are not          ◀
+  Reason [            ]                 included; save them first.
+  [Activate 2026.3]                     Reason [            ]
                                         [Activate 2026.3]
   ```
   Mockup: `docs/ux-mockups/UX-007.html`
 - **Verify:** On `/admin/versions/3` the Activate card lists the exact values that would change in production; create a draft from 2026.1 and the card warns about the FL revert.
 
-### UX-008 — Plain-language service errors; do not wipe the last premium on a connection failure
-- **Status:** New
-- **Effort:** S
-- **Who / when:** Underwriter when ingestion or rating is down or slow (also the demo's failure mode).
-- **Where:** `web/src/lib/submissions.ts:63-66` and `web/src/app/submissions/actions.ts:17-20` (upload); `web/src/lib/worksheets.ts:84-94,122-127` (rate); `web/src/lib/quotes.ts:78-79` (issue).
-- **What the user experiences:** With ingestion stopped, Upload shows `fetch failed`. With a 500 it shows `Ingestion service returned 500: Internal Server Error`. On the workbench a rating-service outage shows `fetch failed` or `The operation was aborted due to timeout`, and because `saveAndRate` clears `last_rating` on any failure, the Indicative premium card drops to "Not rated yet" and the previous $5,777 disappears. Issue quote shows `Rating: {"detail":…}` JSON.
-- **Why it matters:** The user needs to know whether it is their input or the system, and what to do next. Keeping the last premium (already marked stale by the inputs hash) preserves the number they were working from.
-- **Recommendation:** Map errors in one helper: network/timeout → `The rating service isn't responding. Your inputs are saved; try Save & rate again in a moment.`; upload network → `The document reader isn't responding. Nothing was uploaded; try again in a moment.`; 4xx with `detail` → show `detail` only. In `saveAndRate`, clear `last_rating` only on a 4xx (unrateable input), not on connection errors (the stale banner already covers "inputs changed since this rating").
-- **Before / after:**
-  ```
-  BEFORE                                 AFTER
-  ✖ fetch failed                          ✖ The rating service isn't       ◀
-  ┌ INDICATIVE PREMIUM ─────┐               responding. Your inputs are
-  │ Not rated yet. Check    │               saved; try Save & rate again.
-  │ the inputs and click    │             ┌ INDICATIVE PREMIUM ─────────┐
-  │ Save & rate.            │             │ ⚠ Inputs changed since this │ ◀
-  └─────────────────────────┘             │ $5,777   rates 2026.2       │ ◀
-  ```
-  Mockup: inline only
-- **Verify:** Stop the rating container, click Save & rate: message is in plain words, the last premium remains with the stale banner.
-
 ### UX-009 — Pending states on every submit; disable the button while the action runs
-- **Status:** New
+- **Status:** Open (first seen 2026-10-22). The number of silent buttons grew with steps 16–18.
 - **Effort:** S
 - **Who / when:** Everyone, every click; demo audience watching a button that appears to do nothing.
-- **Where:** `web/src/app/submissions/[id]/page.tsx:88,102` (Save corrections, Accept); `workbench/page.tsx:65,141,189,271` (Issue, Save & rate, Bind, Clear); `services/rating/app/templates/version.html:55,67`, `versions.html:34`.
-- **What the user experiences:** Only the upload form shows "Reading documents…". Save & rate (a network call), Issue quote (re-rate plus PDF build) and Bind (two PDFs) give no feedback until the redirect lands; the page looks frozen for a second or two. Bind is protected server-side (`FOR UPDATE`), but Issue quote has no client-side guard against a second click, and nothing stops two clicks on Accept.
-- **Why it matters:** Visibility of system status; also prevents double submits on the one action (issue) that would create an unwanted extra version.
-- **Recommendation:** One client component `web/src/components/submit-button.tsx` using `useFormStatus`, with a `pending` label prop; use it for all seven buttons: `Rating…`, `Issuing quote and building PDF…`, `Binding…`, `Saving…`, `Accepting…`, `Clearing…`. Admin: `onsubmit="this.querySelector('button').disabled=true"` on the three forms.
+- **Where:** No pending state: `web/src/app/submissions/[id]/page.tsx:35,97` (Save corrections, Accept); `workbench/page.tsx:73,192,274` (Save & rate, Bind, Clear); `issue-quote-form.tsx:18` (Issue quote, used on two pages); `renewal/page.tsx:169` (Re-rate); `policies/[id]/page.tsx:95`, `policies/book/[id]/page.tsx:78` (Start renewal: creates a submission); `accounting/page.tsx:97-99` (three Export buttons); admin `version.html:55,67`, `versions.html:34`. Already good: `upload-form.tsx:7-15`, `inbox-list.tsx:86` (disabled while running), `assistant/chat.tsx:132` ("Working…").
+- **What the user experiences:** Save & rate (a 15 s-timeout network call), Issue quote (re-rate plus PDF), Bind (two PDFs and a journal), Re-rate and Start renewal give no feedback until the redirect lands. Issue quote and Start renewal have no guard against a second click; a double click on Issue creates v2 and v3.
+- **Why it matters:** Visibility of system status; also prevents double submits on the actions that create records.
+- **Recommendation:** One client component `web/src/components/submit-button.tsx` using `useFormStatus`, used for every button above with labels `Saving…`, `Accepting…`, `Rating…`, `Issuing quote and building PDF…`, `Binding…`, `Clearing…`, `Re-rating…`, `Starting renewal…`, `Preparing file…`. Admin: `onsubmit="this.querySelector('button').disabled=true"` on the three forms.
   ```tsx
   "use client";
-  export function SubmitButton({ children, pending, className }: {...}) {
+  export function SubmitButton({ children, pending, className, ...rest }: …) {
     const { pending: p } = useFormStatus();
-    return <button disabled={p} aria-busy={p} className={`${className} disabled:opacity-60`}>{p ? pending : children}</button>;
+    return <button {...rest} disabled={p} aria-busy={p} className={`${className} disabled:opacity-60`}>{p ? pending : children}</button>;
   }
   ```
 - **Before / after:**
@@ -291,38 +245,100 @@ For an underwriter the product already does the hard things right: every extract
   BEFORE                      AFTER (while running)
   [ Save & rate ]  (no change) [ Rating…        ] (dimmed, disabled) ◀
   [ Bind · $5,777 ]            [ Binding…       ]                    ◀
+  [ Start renewal ]            [ Starting renewal… ]                 ◀
   ```
   Mockup: inline only
-- **Verify:** Click Save & rate: the button reads "Rating…" and is disabled until the page reloads.
+- **Verify:** Click Save & rate: the button reads "Rating…" and is disabled until the page reloads; double-clicking Issue quote creates one version.
 
-### UX-010 — Per-page titles, active nav, and a way back
+### UX-022 — After pushing to the GL, say so on the page
 - **Status:** New
+- **Effort:** M
+- **Who / when:** Accountant (or the underwriting manager playing one in the demo) pushing a month's journals to the general ledger from `/accounting`.
+- **Where:** `web/src/app/accounting/page.tsx:90-106` (the three Export buttons post to `/accounting/export`), `:166` ("not yet pushed" per journal), `:102` ("0 of 12 already pushed"), `:51` (`msg` banner that nothing ever sets); `web/src/app/accounting/export/route.ts:11-26` (returns the file with `Content-Disposition: attachment`, so the browser stays on the page as it was); `web/src/app/api/gl/postings/route.ts` (a GET that renders the same file for a batch without stamping).
+- **What the user experiences:** They click **Export Excel (.xlsx)**. A file downloads. The page does not change: every journal still reads "not yet pushed", the line still says "0 of 12 already pushed", and the buttons are still enabled. Nothing says which batch id was created or how many lines it stamped. The natural next move, clicking Export again to be sure, is allowed and reports a new batch with "0 newly marked" only inside the file. The one place the batch is visible is the `X-GL-Export-Batch` response header.
+- **Why it matters:** "Did that save?" is the question this persona cannot afford to guess at; a push to the GL is the one state change on the page, and it is invisible until a reload. The audit trail already records `gl.exported`, so the data exists.
+- **Recommendation:** Make the push a two-step that the page can confirm: the POST stamps the batch and redirects (303) to `/accounting?period=…&batch=GLX-20261031-001&pushed=12&format=xlsx`; the page renders an emerald banner `Pushed batch GLX-20261031-001 · 12 lines marked · Excel file ready` with a **Download** link to `/api/gl/postings?batch=GLX-20261031-001&format=xlsx` (reads render files without stamping) and a `<meta http-equiv="refresh" content="0;url=…">` or a tiny client effect that starts the download. Journals in the batch show `pushed · GLX-20261031-001 · just now`. Keep the Export buttons, but when every line shown is already pushed, change the helper text to `All 12 lines shown were pushed (last batch GLX-… on Oct 31). Exporting again re-stamps nothing.`
+  ```tsx
+  // export/route.ts, after exportLedger(...)
+  return Response.redirect(`${origin}/accounting?${new URLSearchParams({ ...p, batch: file.batch, pushed: String(file.newlyMarked), format })}`, 303);
+  // page.tsx
+  {p.pushed && <p className="mt-4 rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+    Pushed batch <code>{p.batch}</code> · {p.pushed} lines marked · <a href={`/api/gl/postings?batch=${p.batch}&format=${p.format}`} className="underline">Download {p.format}</a></p>}
+  ```
+- **Before / after:**
+  ```
+  BEFORE (after clicking Export Excel)    AFTER
+  ┌ PUSH TO THE GENERAL LEDGER ────────┐  ┌ PUSH TO THE GENERAL LEDGER ────────┐
+  │ [Export Excel] [CSV] [JSON]        │  │ ✔ Pushed batch GLX-20261031-001 ◀  │
+  │ Downloads the 12 lines shown …     │  │   12 lines marked · Download .xlsx │
+  │ (0 of 12 already pushed)           │  │ [Export Excel] [CSV] [JSON]        │
+  └────────────────────────────────────┘  │ All 12 lines shown are pushed.  ◀  │
+  JE-000012 · … · not yet pushed          └────────────────────────────────────┘
+  JE-000011 · … · not yet pushed          JE-000012 · … · pushed · GLX-…-001 ◀
+  (file downloaded; page unchanged)       JE-000011 · … · pushed · GLX-…-001 ◀
+  ```
+  Mockup: `docs/ux-mockups/UX-022.html`
+- **Verify:** Push a period: the page reloads with the batch banner, the journals show the batch id, the file still downloads, and the audit trail's `gl.exported` link (`/accounting?batch=…`) lands on the same view.
+
+## P3 Minor
+
+### UX-005 — Make the Received table triageable with a Stage column
+- **Status:** Improved (first seen 2026-10-22, was P2). The desk's "Next up" (`web/src/app/page.tsx:67-87`, `lib/dashboard.ts:105-165`) now lists every file by what it needs (Review intake, Rate, Clear 2 referrals, Issue quote, Chase bind order), so the daily triage task is covered. The Submissions page itself is unchanged.
+- **Effort:** M
+- **Who / when:** Underwriter or manager scanning all files on `/submissions`, or looking for a colleague's file (the desk is per user).
+- **Where:** `web/src/app/submissions/page.tsx:39-41` (columns `Review` / `Status`), `:60-69` (every accepted row: `Workbench →` + pill `accepted`, whether unrated, blocked, quoted or bound).
+- **What the user experiences:** With 60+ seeded files, every accepted row looks the same. The only way to tell a bound file from an unrated one is to open it, and the two most useful facts for a manager (open referrals, quote out) are invisible.
+- **Recommendation:** Replace `Status` with **Stage** computed from `readiness()` and the latest quote/policy: `Needs review (2 missing)`, `Not rated`, `3 referrals open` (amber), `Ready to quote` (emerald), `Quoted v2 · $5,777`, `Bound GL-26-00001`; rename `Review` to `Next step`; add a count line `62 submissions · 3 need review · 2 referrals open · newest first` and `?stage=` filter links. Use the same words as the workbench chip (UX-003) so one vocabulary covers list, chip and desk.
+- **Before / after:**
+  ```
+  BEFORE                                  AFTER
+  REF      APPLICANT   REVIEW      STATUS REF      APPLICANT   STAGE               ◀
+  SUB-0003 Gulf Coast  Workbench → accepted SUB-0003 Gulf Coast [3 referrals open]
+  SUB-0002 Lone Star   Workbench → accepted SUB-0002 Lone Star  [Quoted v1 · $5,777]
+  SUB-0001 Desert Bl.  Workbench → accepted SUB-0001 Desert Bl. [Bound GL-26-00001]
+  ```
+  Mockup: `docs/ux-mockups/UX-005.html`
+- **Verify:** The Received table distinguishes a referred, a quoted and a bound file without opening any of them.
+
+### UX-008 — Plain-language service errors in the places that still show raw ones
+- **Status:** Improved (first seen 2026-10-22, was P2). Step-23 fixed the rating half: a down service keeps the last premium (`lib/worksheets.ts:131-137`) and an HTML 502 becomes `Rating service error 502: …` (`lib/rating-api.ts:52`).
 - **Effort:** S
-- **Who / when:** Underwriter with many tabs open; demo audience orienting; admin returning from `/admin`.
-- **Where:** `web/src/app/layout.tsx:21-24` (only global `title`), `:39-46` (nav without active state); `workbench/page.tsx:73` (`← Intake` only); `services/rating/app/templates/base.html:45-49` (no link to the desktop).
-- **What the user experiences:** Every tab is titled "Underwriting Desktop": five open files are indistinguishable in the tab strip. The nav never shows where you are. From the workbench, the inbox is two hops away (`← Intake`, then `← Inbox`). The rating admin, even when proxied at `/admin`, has a different header with "Rating admin · Contractors GL rate tables · API docs" and no link back; the only way home is the browser back button or editing the URL.
-- **Why it matters:** Orientation is cheap and the persona explicitly works with many tabs; the admin jump currently feels like leaving the product.
-- **Recommendation:** `export async function generateMetadata()` on each detail page: `SUB-0003 Gulf Coast Roofing · Workbench`, `SUB-0003 · Intake review`, `Q-2026-0001 v2 · Quote`, `GL-26-00001 · Policy`, `Case history SUB-0003`, and static titles for lists. A small `NavLink` client component with `usePathname()` setting `aria-current="page"` and `text-slate-900 font-medium border-b-2 border-indigo-600`. Workbench breadcrumb `Inbox › SUB-0003 intake › Workbench`. Admin header: `<a href="{{ desktop_url }}">← Underwriting Desktop</a>` (env `DESKTOP_URL`, default `/`).
+- **Who / when:** Underwriter when ingestion is down, slow, or mid-restart (the demo's most likely failure).
+- **Where:** `web/src/app/submissions/inbox-list.tsx:35` (`Request failed (404)` / `(500)` when the extract route or ingestion fails) rendered by `activity-panel.tsx:92` as a red `error` row in the console with no next step; `web/src/lib/submissions.ts:77` (`Ingestion service returned 500: <body>` on upload); `web/src/lib/rating-api.ts:47` (`Rating service unreachable (fetch failed)`).
+- **What the user experiences:** In the extraction panel the log ends with `+3.2s  error  Request failed (502)`, the dot turns red, and the button reads "Close". Nothing says whether the folder was consumed, whether to retry, or that the document reader is starting up. Upload shows the raw response body.
+- **Recommendation:** One `describeServiceError(err, service)` helper: network/timeout → `The document reader isn't responding. Nothing was saved; try again in a moment.`; 5xx → `The document reader hit a problem (502). Nothing was saved; try again.`; 4xx with `detail` → the detail only. In the panel, render it as a sentence above the footer with a **Try again** button that calls `extract(item)` again, and keep "Rating service unreachable" but append "Your inputs are saved; the last premium is kept."
+- **Before / after:**
+  ```
+  BEFORE (activity panel)                AFTER
+  +3.2s  error  Request failed (502)     +3.2s  error  The document reader   ◀
+  [Close]                                 isn't responding. Nothing was saved.
+                                          [Try again]  [Close]              ◀
+  ```
+  Mockup: inline only
+- **Verify:** Stop the ingestion container, click Extract: the message is in plain words and offers a retry; the folder is still in the inbox.
+
+### UX-010 — Per-page titles and active state on the main nav
+- **Status:** Improved (first seen 2026-10-22, was P2). The rate admin now carries the desktop's top bar (c7f437f), and the Admin drop-down marks its current page (`components/admin-menu.tsx:19,34`).
+- **Effort:** S
+- **Who / when:** Underwriter with many tabs open; demo audience orienting.
+- **Where:** `web/src/app/layout.tsx:23-26` (only global `title`; no page exports `generateMetadata`), `:43-48` (Customers … AI Assistant links have no `aria-current`/active style); `workbench/page.tsx:65` (`← Intake` only; the inbox is two hops away).
+- **What the user experiences:** Five open files are five tabs titled "Underwriting Desktop". The nav never shows which section you are in, except for Admin.
+- **Recommendation:** `generateMetadata()` per detail page (`SUB-0003 Gulf Coast Roofing · Workbench`, `Q-2026-0001 v2 · Quote`, `GL-26-00001 · Policy`, `Case history SUB-0003`, `Accounting · October 2026`) and static titles for lists. A `NavLink` client component with `usePathname()` setting `aria-current="page"` and `font-medium text-slate-900`, matching what `AdminMenu` already does. Workbench breadcrumb `Inbox › SUB-0003 intake › Workbench`.
 - **Before / after:**
   ```
   BEFORE tabs: [Underwriting Desktop] [Underwriting Desktop] [Underwriting Desktop]
   AFTER  tabs: [SUB-0003 Gulf Coast · Workbench] [Q-2026-0001 v2 · Quote] [Rate tables] ◀
-  nav:  Customers  Submissions  Quotes  Policies  Audit  Rate tables
-  AFTER nav:       ‾‾‾‾‾‾‾‾‾‾‾ (underlined, aria-current)                   ◀
   ```
   Mockup: inline only
-- **Verify:** Open three different records: the tab strip names each; the nav underlines the current section; `/admin` has a link back to the desktop.
-
-## P3 Minor
+- **Verify:** Open three different records: the tab strip names each; the nav highlights the current section.
 
 ### UX-011 — Show the full source snippet, not a one-line truncation with a hover title
-- **Status:** New
+- **Status:** Open (first seen 2026-10-22)
 - **Effort:** S
 - **Who / when:** Underwriter deciding whether to trust an extracted value.
-- **Where:** `web/src/app/submissions/[id]/page.tsx:206-210` (`truncate` + `title={meta.snippet}`).
-- **What the user experiences:** The snippet is the evidence for the value, and it is cut to one line in `text-slate-400` with the full text available only on mouse hover; keyboard and touch users never see it.
-- **Why it matters:** Trusting the extraction is the whole point of the review page; evidence that cannot be read is not evidence.
-- **Recommendation:** Render the snippet with `line-clamp-2` and a `<details><summary>Show full snippet</summary>` for longer ones, or simply allow wrapping (the grid already uses `minmax(0,1fr)` so wrapping no longer breaks the layout). Use `text-slate-600` for the quote and keep the source document in `text-slate-500`.
+- **Where:** `web/src/app/submissions/[id]/page.tsx:201-205` (`truncate` + `title={meta.snippet}`, in `text-slate-400`).
+- **What the user experiences:** The snippet is the evidence for the value and it is cut to one line with the full text only on mouse hover; keyboard and touch users never see it.
+- **Recommendation:** Render with `line-clamp-2` plus `<details><summary>Show full snippet</summary>` for longer ones, in `text-slate-600` for the quote and `text-slate-500` for the source.
 - **Before / after:**
   ```
   BEFORE                                    AFTER
@@ -334,22 +350,21 @@ For an underwriter the product already does the hard things right: every extract
 - **Verify:** Tab through the review page: every snippet is readable without a mouse.
 
 ### UX-012 — Replace low-contrast `text-slate-400` on white for real content
-- **Status:** New
+- **Status:** Open (first seen 2026-10-22). Usage grew from 11 sites to 63 across 23 files as new pages copied the pattern.
 - **Effort:** S
-- **Who / when:** Everyone; most noticeable on projectors (demo) and for low-vision users.
-- **Where:** `web/src/components/ui.tsx:26` (`Empty`); `web/src/app/page.tsx:23`; `submissions/page.tsx:37,56`; `submissions/[id]/page.tsx:122,157,207`; `workbench/page.tsx:168` (whole superseded quote row incl. money), `:285`; `quotes/page.tsx:27` (whole superseded row); `policies/page.tsx:26`; `insureds/[id]/page.tsx:49`; `audit/page.tsx:142`.
-- **What the user experiences:** slate-400 (#94a3b8) on white is about 2.9:1, below the 4.5:1 body-text minimum. Timestamps, file sizes, empty states and whole superseded rows (including their totals) are hard to read.
-- **Why it matters:** Superseded quotes still need to be legible to compare versions; empty-state text is the instruction for what to do next.
-- **Recommendation:** Use `text-slate-500` (4.8:1) for secondary text; de-emphasise superseded rows with `text-slate-500` plus the existing pill, never lighter.
-- **Verify:** No `text-slate-400` remains on text (keep it for decorative borders).
+- **Who / when:** Everyone; most noticeable on a projector.
+- **Where:** `web/src/components/ui.tsx:28` (`Empty`); whole superseded rows including their totals: `workbench/page.tsx:171`, `quotes/page.tsx:62`, `renewal/page.tsx:187`, `policies/[id]/page.tsx:107`, `insureds/[id]/page.tsx:49`; captions and footers: `page.tsx:70,76,85,113,132`, `signin/page.tsx:36`, `assistant/chat.tsx:115,135`, `submissions/page.tsx:22,26`, `inbox-list.tsx:85`, `accounting/page.tsx:147,173`, `audit/page.tsx:151`, `book/page.tsx:80,90`, `policies/book/[id]/page.tsx:110`; plus `docs.tsx:21` and the two accounting docs pages.
+- **What the user experiences:** slate-400 (#94a3b8) on white is about 2.9:1, below the 4.5:1 minimum. Superseded quote totals, every empty state, the desk's "Nothing waiting on you", the sign-in footer and the assistant's footer are hard to read.
+- **Recommendation:** `text-slate-500` (4.8:1) for secondary text; de-emphasise superseded rows with `text-slate-500` plus the pill, never lighter. A one-line codemod (`text-slate-400` → `text-slate-500` on text, keep it on decorative arrows) does most of it.
+- **Verify:** No `text-slate-400` remains on text.
 
 ### UX-013 — Headers on headerless tables, real link styling, and an honest column name
-- **Status:** New
+- **Status:** Open (first seen 2026-10-22); more link sites added by steps 15–16.
 - **Effort:** S
 - **Who / when:** Underwriter scanning numbers; screen-reader users.
-- **Where:** No `<thead>`: `submissions/[id]/page.tsx:71` (loss history: date, description, incurred, status), `workbench/page.tsx:226` and `quotes/[id]/page.tsx:51` (worksheet: step, factor, premium), `insureds/[id]/page.tsx:31,47,61` (three tables). Links styled as plain text: `quotes/page.tsx:29`, `policies/page.tsx:27` (insured name → workbench, `hover:underline` only). Column name: `submissions/page.tsx:23` ("Review" holds `Workbench →` for accepted rows).
-- **What the user experiences:** Columns of dates and dollars with nothing above them; a name that is secretly a link to the workbench; a "Review" column that is really "next step".
-- **Recommendation:** Add `<thead>` rows (`Date · Description · Incurred · Status`; `Step · Factor · Premium`) with `scope="col"`; style the insured-name links `text-indigo-600` or point them at `/insureds/[id]` (both rows already carry the id in the DB; add it to the SELECT); rename the inbox column to `Next step`.
+- **Where:** No `<thead>`: `submissions/[id]/page.tsx:73-85` (loss history), `workbench/page.tsx:229-239` and `quotes/[id]/page.tsx:54-62` (worksheet: step, factor, premium), `insureds/[id]/page.tsx:31,47,61`. Links styled as plain text (`hover:underline` only): `quotes/page.tsx:67`, `policies/page.tsx:42`, `page.tsx:131` (desk renewals), `book/page.tsx:79`, `workbench/page.tsx:172`, `renewal/page.tsx:188`, `policies/[id]/page.tsx:108`, `policies/book/[id]/page.tsx:91`. Column name: `submissions/page.tsx:41` ("Review" holds `Workbench →`).
+- **What the user experiences:** Columns of dates and dollars with nothing above them; insured names that are secretly links to the workbench; quote numbers in mono that do not look clickable.
+- **Recommendation:** Add `<thead>` rows (`Date · Description · Incurred · Status`; `Step · Factor · Premium`) with `scope="col"`; style the links with `text-indigo-600` (or use `RowLink`); point the insured-name links in Quotes and Policies at `/insureds/[id]` (the detail pages already carry `insured_id`); rename the inbox column `Next step`.
 - **Before / after:**
   ```
   BEFORE                             AFTER
@@ -357,15 +372,15 @@ For an underwriter the product already does the hard things right: every extract
   2023-07-02  Paint overspr  $4,200   2024-03-11  Slip and fall   $12,500  Open
   ```
   Mockup: inline only
-- **Verify:** Every table has a header row; insured names in lists are visibly links.
+- **Verify:** Every table has a header row; insured names and quote numbers in lists are visibly links.
 
 ### UX-014 — Policy page "Coverage" should show what is covered
-- **Status:** New
+- **Status:** Open (first seen 2026-10-22)
 - **Effort:** S
 - **Who / when:** Manager or underwriter checking a bound policy.
-- **Where:** `web/src/app/policies/[id]/page.tsx:31-39`; `web/src/lib/policies.ts:26-31` (`getPolicy` already joins `quotes`).
-- **What the user experiences:** The section titled Coverage lists period, premium, fee, tax and total, but not limits, deductible, class, states or forms. To answer "what limits did we bind?" the user must open the PDF.
-- **Recommendation:** Select `q.terms, q.rating_inputs` in `getPolicy` and render Limits (each occurrence, general aggregate, products agg.), Deductible, Class, States, and Forms, as the quote page does; move the money into a separate "Premium" section.
+- **Where:** `web/src/app/policies/[id]/page.tsx:66-74`; `web/src/lib/policies.ts` (`getPolicy` already joins `quotes`).
+- **What the user experiences:** The section titled Coverage lists period, premium, fee, tax and total, but not limits, deductible, class, states or forms. The prior-system policy page (`policies/book/[id]/page.tsx:39-51`) *does* show limits and deductible, so the imported policy is more informative than the one the desktop wrote.
+- **Recommendation:** Select `q.terms, q.rating_inputs` in `getPolicy` and render Limits, Deductible, Class, States and Forms as the quote page does; move the money into a separate "Premium" section.
 - **Before / after:**
   ```
   BEFORE COVERAGE            AFTER COVERAGE
@@ -374,101 +389,145 @@ For an underwriter the product already does the hard things right: every extract
   Policy fee           $250  General aggregate         $2,000,000 ◀
   SL tax               $277  Deductible                    $2,500 ◀
   Total              $5,777  Class 98304 Painting · AZ, NV        ◀
-                             Forms (6) …                          ◀
   ```
   Mockup: inline only
 - **Verify:** `/policies/<id>` answers limits, deductible and class without opening a PDF.
 
-### UX-015 — Make the rate admin feel like part of the product and stop asking for a name again
-- **Status:** New
-- **Effort:** S
-- **Who / when:** Administrator arriving from the desktop's "Rate tables" link.
-- **Where:** `services/rating/app/templates/base.html:45-49`; `services/rating/app/admin.py:34` (`ACTOR_COOKIE = "rating_admin_user"`) vs `web/src/lib/user.ts:5` (`uw_user`); `versions.html:33`, `version.html:54,66` ("Your name" `required` on every form).
-- **What the user experiences:** Verified on the running admin: "Your name" is empty and required on all three forms even though the desktop already knows the user as "Working as". The unified audit then shows `underwriter` for desktop events and `Darryl` for rate changes made by the same person. Typography (system font vs Geist), header layout and the missing back link make it feel like a different tool.
-- **Recommendation:** In `admin.py`, `actor = request.cookies.get(ACTOR_COOKIE) or request.cookies.get("uw_user", "")` (the proxy forwards cookies). Add the back link (UX-010), match the header's brand text and spacing, and consider collapsing "Your name" to a small "acting as Darryl (change)" line.
-- **Verify:** Set Working as "Pat" on the desktop, open Rate tables: forms are prefilled with Pat; the header has a link back.
-
 ### UX-016 — Quote PDF: say what a revised version supersedes; keep internal jargon off broker documents
-- **Status:** New
+- **Status:** Open (first seen 2026-10-22). Step-16 added `renewalOf` to the masthead (good); supersession is still unstated.
 - **Effort:** S
 - **Who / when:** Broker and insured reading the quote; underwriter sending v2.
-- **Where:** `web/src/lib/quote-pdf.ts:39-43,62`; `web/src/lib/quotes.ts:63,105-114` (`previous` is known at issue time but not passed in); `policy-pdf.ts:86` ("Rated on rate version").
-- **What the user experiences:** v2 reads "Quote Q-2026-0001 · Version 2" and nothing else about v1; a broker holding both has to infer which is live. "Premium is fully earned at inception. Rated on rate version 2026.2." puts an internal table label on a customer document.
-- **Recommendation:** Add `supersedes?: { version: number; issuedAt: string }` to `QuoteDocument` and render in the masthead right column: `Supersedes version 1 issued 10/20/2026; that version is withdrawn.` Keep the rate version on the internal quote page, not the PDF (or move it to the 7pt footer). Optionally add `To bind: return the items under Subjectivities to your underwriter, {issuedBy}.`
+- **Where:** `web/src/lib/quote-pdf.ts:39-44` (masthead), `:63` ("Rated on rate version 2026.2"); `web/src/lib/quotes.ts:83-88` (`previous` is known at issue time but not passed into `QuoteDocument`); `policy-pdf.ts:86` (same jargon on the binder).
+- **What the user experiences:** v2 reads "Quote Q-2026-0001 · Version 2" and nothing else about v1; a broker holding both has to infer which is live. "Rated on rate version 2026.2" is an internal table label on a customer document.
+- **Recommendation:** Add `supersedes?: { version: number; issuedAt: string }` and render in the masthead's right column `Supersedes version 1 issued 10/20/2026; that version is withdrawn.` Move the rate version to the 7 pt footer.
 - **Before / after:**
   ```
   BEFORE                                 AFTER
   Quote Q-2026-0001 · Version 2          Quote Q-2026-0001 · Version 2
   Issued 10/22/2026 · Valid until …      Issued 10/22/2026 · Valid until …
-  Underwriter: underwriter               Supersedes v1 issued 10/20/2026   ◀
-                                         Underwriter: underwriter
+  Underwriter: underwriter1              Supersedes v1 issued 10/20/2026   ◀
+                                         Underwriter: underwriter1
   ```
   Mockup: inline only
 - **Verify:** Issue v2; the PDF names v1 as superseded in the masthead.
 
 ### UX-017 — Show when a referral was cleared
-- **Status:** New
+- **Status:** Open (first seen 2026-10-22)
 - **Effort:** S
 - **Who / when:** Manager reviewing a decision.
-- **Where:** `web/src/app/submissions/[id]/workbench/page.tsx:257-261` (shows `clearance.by` and `note`; `clearance.at` exists in `lib/worksheet.ts:23` but is not rendered).
-- **What the user experiences:** `cleared · Manager Pat: "Approved per roofing guidelines"` with no time; the manager has to cross-reference the Worksheet history or the Audit page. Note: the rule text "requires manager approval" is advisory; any Working-as name can clear (a deliberate demo cut per BUILD_LOG step-04/06, so not raised as a finding).
-- **Recommendation:** `… {clearance.by} · {fmt(clearance.at)}: "{note}"` using the UX-006 formatter.
+- **Where:** `web/src/app/submissions/[id]/workbench/page.tsx:260-264` (renders `clearance.by` and `note`; `clearance.at` exists in `lib/worksheet.ts:23` but is not shown).
+- **What the user experiences:** `underwriter4: "Approved per roofing guidelines"` with no time; the manager has to cross-reference the history panel.
+- **Recommendation:** `{clearance.by} · {when(new Date(clearance.at))}: "{note}"` using the UX-006 formatter.
 - **Verify:** A cleared referral shows who, when and why on one line.
 
-### UX-018 — Home status: text next to the colour dot
-- **Status:** New
+### UX-021 — Keep the Save button in view while the form scrolls
+- **Status:** New. Regression introduced by 76ff843 ("action buttons in the page header, not a floating bottom bar"), which was a deliberate request to remove the bottom bar; this recommendation keeps the header placement and only makes it stick.
 - **Effort:** S
-- **Who / when:** Demo audience on the first screen; colour-blind users.
-- **Where:** `web/src/app/page.tsx:21`.
-- **What the user experiences:** State is an unlabeled 10px dot; the detail line helps only when it says "connected".
-- **Recommendation:** `<span role="img" aria-label={c.ok ? "OK" : "Down"} …/>` plus visible `OK` / `Down` text in emerald/rose.
+- **Who / when:** Underwriter on every Save & rate; the schedule table (six categories with reasons) sits at the bottom of the form, below the fold at 1280×720.
+- **Where:** `web/src/app/submissions/[id]/workbench/page.tsx:66-74` (header row with **Save & rate**, `form="worksheet-form"`), `:92-146` (the form: 12 rating inputs plus a 6-row schedule table); `web/src/app/submissions/[id]/page.tsx:31-36` (**Save corrections**) with four field sections and the loss table below.
+- **What the user experiences:** They scroll down to write "Safety program & training: −5%, documented toolbox talks…", and the only Save control is at the top of the page. Enter in a text input does submit (the button is associated via `form=`), but nothing on screen says so, and nothing says the form is dirty. The review page is longer still (four sections of fields).
+- **Why it matters:** Visibility of the primary action on the page's main task; a sticky header costs nothing and keeps the bottom bar gone.
+- **Recommendation:** Make the title row `sticky top-0 z-10 -mx-8 bg-slate-50/95 px-8 py-2 backdrop-blur` so the name, chips and the Save button stay visible, and add a small dirty indicator next to the button (`Unsaved changes` in amber, set by a 5-line client component listening to `input` on the form). Add `Enter saves` as the button's `title`.
+  ```tsx
+  <div className="sticky top-0 z-10 -mx-8 bg-slate-50/95 px-8 py-2 backdrop-blur">
+    <div className="flex flex-wrap items-center gap-3"> …h1, chips…
+      <DirtyHint formId="worksheet-form" />   {/* "Unsaved changes" */}
+      <button form="worksheet-form" title="Enter also saves" …>Save &amp; rate</button>
+    </div>
+  </div>
+  ```
 - **Before / after:**
   ```
-  BEFORE  ● rating-service        service     AFTER  ● OK  rating-service   service ◀
+  BEFORE (scrolled to schedule)         AFTER (scrolled to schedule)
+  ┌──────────────────────────────┐      ┌──────────────────────────────┐
+  │ Equipment & premises  [ 0 ]  │      │ Gulf Coast Roofing SUB-0003  │ ◀ sticky
+  │ Loss experience …     [ -5]  │      │ [accepted] [3 referrals open]│
+  │ [documented toolbox talks… ] │      │ Unsaved changes [Save & rate]│ ◀
+  │ Classification …      [ 0 ]  │      ├──────────────────────────────┤
+  │                              │      │ Loss experience …     [ -5]  │
+  │ (Save & rate is 900 px up)   │      │ [documented toolbox talks… ] │
+  └──────────────────────────────┘      └──────────────────────────────┘
+  ```
+  Mockup: `docs/ux-mockups/UX-021.html`
+- **Verify:** Scroll to the schedule table at 1280×720: the Save & rate button is still visible; editing a reason shows "Unsaved changes" next to it.
+
+### UX-023 — "Start renewal" needs a sense of time and a confirm
+- **Status:** New
+- **Effort:** S
+- **Who / when:** Underwriter or manager on any policy page; demo audience clicking around.
+- **Where:** `web/src/app/policies/[id]/page.tsx:87-96` and `policies/book/[id]/page.tsx:70-79` (the **Start renewal** button is offered on every policy without a renewal, regardless of expiry); `web/src/app/policies/actions.ts:8-18` (one click creates a `renewal` submission and redirects to its workbench, no confirmation).
+- **What the user experiences:** On a policy bound yesterday with 364 days to run, the section reads "Renewal · not started" with a primary indigo **Start renewal** button. One click creates SUB-00xx, marks the policy's renewal `in_progress`, and lands on a workbench; there is no undo, and the policy now shows "In progress" on the desk's renewals table and in the book filters. The copy ("Starting a renewal copies this policy's terms…") says what happens but not when it is appropriate.
+- **Why it matters:** Error prevention on an irreversible record-creating action; the desk already knows the window (`RENEWAL_WINDOW_DAYS` = 120).
+- **Recommendation:** Show the time context in the section (`Expires 2027-10-30 · 364 days`), style the button as secondary outside the 120-day window with the hint `Renewals usually start within 120 days of expiry`, and add `onSubmit` `confirm("Start the renewal of GL-26-00001 now? This creates a renewal submission.")` (the Activate form in the admin already uses this pattern).
+- **Before / after:**
+  ```
+  BEFORE                                  AFTER
+  RENEWAL · NOT STARTED                   RENEWAL · NOT STARTED · expires in 364 days ◀
+  Expires 2027-10-30. Starting a renewal  Expires 2027-10-30. Renewals usually start ◀
+  copies this policy's terms…             within 120 days of expiry. Starting one…
+  [ Start renewal ]  (primary)            [ Start renewal ]  (outlined, confirm)   ◀
   ```
   Mockup: inline only
-- **Verify:** Each card reads OK or Down in words.
+- **Verify:** A policy 300 days from expiry shows an outlined button and asks for confirmation; one inside 120 days shows the primary button.
+
+### UX-024 — "Re-rate" on the comparison page should return to the comparison
+- **Status:** New. The build log records that the original prompt asked for "re-rate from the comparison and go back to the rating page", so this was built as asked; the recommendation changes that deliberate choice.
+- **Effort:** S
+- **Who / when:** Underwriter on `/submissions/[id]/renewal` after a rate-table change ("Rates changed since this rating (2026.1 → 2026.2). Re-rate to refresh the comparison.").
+- **Where:** `web/src/app/submissions/[id]/renewal/page.tsx:168-171` (Rate card: **Re-rate**, "then returns to the rating page"); `renewal/actions.ts:15-28` (redirects to the workbench with the msg).
+- **What the user experiences:** The banner tells them to re-rate to refresh *this* comparison; the button does so and then drops them on the workbench, where the renewal banner's "Expiring vs renewing →" takes them back. Two clicks and a page change to see the number they asked for.
+- **Recommendation:** Redirect back to `/submissions/[id]/renewal?msg=Re-rated on rates 2026.2: $6,102 total` and rename the helper line `Rates the renewing terms as saved on current rates and refreshes this comparison.` Keep **Adjust terms on the workbench →** as the way to change inputs.
+- **Before / after:**
+  ```
+  BEFORE                                   AFTER
+  [ Re-rate ]                              [ Re-rate ]
+  Rates the renewing terms as saved on     Rates the renewing terms as saved   ◀
+  current rates, then returns to the       on current rates and refreshes
+  rating page.          → lands on         this comparison.      → stays here ◀
+  /workbench
+  ```
+  Mockup: inline only
+- **Verify:** Click Re-rate on the comparison: the page reloads in place with the refreshed bridge and a green confirmation.
 
 ## P4 Polish
 
+### UX-015 — Make the rate admin look like the same product
+- **Status:** Improved (first seen 2026-10-22, was P3) · **Effort:** S · **Where:** `services/rating/app/templates/base.html:11,34` (system font stack, `max-width: 1100px`) vs the desktop's Geist and `max-w-7xl`/`max-w-6xl`; `base.html:48-51` (badges) vs `components/ui.tsx:15-25` (pills). The header is now mirrored (c7f437f) and the actor comes from the login (d257fc9), which were the two parts that cost the user something. What remains is cosmetic: the page narrows and the type changes on the jump. Set `max-width: 1280px`, load the same font (or `font-family: var(--font-geist-sans), ui-sans-serif`), and match the pill padding/weights.
+
 ### UX-019 — Consistent decimals in the rate admin
-- **Status:** New · **Effort:** S · **Where:** `services/rating/app/admin.py:22-29` (`num` normalises away trailing zeros). Verified on `/admin/versions/2?section=territory`: factors render as `1`, `0.9`, `1.35`, `1.6`. Show factors as `1.00 / 0.90 / 1.35`, rates per $1,000 to two decimals, and keep normalisation for parameters that are genuinely integers (fees). Aligned decimals let the actuary compare a column at a glance.
+- **Status:** Open (first seen 2026-10-22) · **Effort:** S · **Where:** `services/rating/app/admin.py:22-29` (`num` normalises away trailing zeros). Verified again on `/admin/versions/3`: `9.4`, `2500`, and on territory `1`, `0.9`, `1.35`. Show factors as `1.00 / 0.90 / 1.35` and rates per $1,000 to two decimals; keep normalisation for integer parameters (fees). Aligned decimals let the actuary compare a column at a glance.
 
 ### UX-020 — Hide developer detail behind human labels
-- **Status:** New · **Effort:** S · **Where:** `submissions/[id]/page.tsx:37` (`read by claude-opus-5-5 (12,345 in / 678 out tokens)` in the page subtitle), `:146-147` and `:160` (`applicant.fein`, `JSON.stringify` values with quotes), `workbench/page.tsx:288` (same), `audit/page.tsx:116,71` (raw `worksheet.input_changed`, entity types `rate_version`). Map action codes to labels (`Rating input changed`, `Referral cleared`, `Quote issued`), use field labels from `FIELD_DEFS`/`INPUT_DEFS` instead of paths, print values via `formatValue`, and move the model/token line into the Documents panel. Underwriters read labels, not identifiers; the demo audience may still enjoy the model line where it is less prominent.
+- **Status:** Open (first seen 2026-10-22); new locations added · **Effort:** S · **Where:** `submissions/[id]/page.tsx:39` (`read by claude-opus-5-5 (12,345 in / 678 out tokens)` in the subtitle), `:141-142,155` and `workbench/page.tsx:291` (raw paths and JSON-quoted values), `audit/page.tsx:125` (`worksheet.input_changed`), **new:** `assistant/chat.tsx:76` (not-configured message tells an underwriter to "set `ANTHROPIC_API_KEY` for the web app … and restart it"), `:59,118` (answer footer `claude-opus-5-5 · 2 rounds · 14,312 tokens`), `inbox-list.tsx:85` (folder stamp `20261031-0712-lone-star-millwork` beside every inbox title). Map action codes to labels, use `FIELD_DEFS`/`INPUT_DEFS` labels, print values with `formatValue`, move the model/token lines into a collapsed "Details" line, reword the assistant message to `The assistant isn't set up on this instance. Ask whoever runs it to add the Claude API key.`, and drop the folder stamp (or show it as `received Oct 31, 7:12 AM`).
+
+### UX-025 — Colour meaning and date formats, one each
+- **Status:** New · **Effort:** S · **Where:** `quotes/page.tsx:37,62,65` (the "just issued" banner, row wash and badge are amber, which everywhere else means stale/needs attention: `workbench:217`, `renewal:78`, `submissions:24`); dates: `policies/page.tsx:43` and `quotes/page.tsx:68` show `2026-12-01`, the desk and book show `Dec 1`/`Dec 1, 2026` (`page.tsx:12`, `book/page.tsx:10`), PDFs show `12/01/2026`, audit shows `11/1/26`. Use emerald (done) or indigo (action) for "just issued", and pick `Dec 1, 2026` for every on-screen date (keep `MM/DD/YYYY` on the broker documents). A first-time viewer reads amber as a warning and ISO dates as system output.
 
 ## What works well
 
-- **Evidence on every extracted field** (`web/src/app/submissions/[id]/page.tsx:206-231`): confidence pill `85% Claude` / `100% form`, `inferred` tag, attention reason and the quoted snippet with its source document. Keep this; UX-011 only asks for the snippet to be readable.
-- **Corrections are reversible in the eye** (`submissions/[id]/page.tsx:211-213`): `Corrected by underwriter · extracted value: …` keeps the original visible after a fix.
-- **Stale ratings say why** (`workbench/page.tsx:213-217`, `lib/worksheets.ts:74-82`): `Rates changed since this rating (2026.1 → 2026.2). Save & rate again.` versus `Inputs changed since this rating.` is exactly the right distinction; and a clearance that no longer matches the facts says so (`:262-266`).
-- **Rate admin "was 1.25"** (`templates/version.html:43`, verified rendered): the changed cell carries its base value inline and the nav shows `1 changed`; the activation confirm and the "Existing quotes keep the version they were rated on" line are good error-prevention copy.
-- **Binder subjectivities** (`lib/policy-pdf.ts:69-82`): `Received` / `OPEN - due 11/21/2026` in bold, right-aligned, followed by the consequence sentence. The broker cannot miss it.
-- **Readable validation messages** (`lib/worksheet.ts:86,100,123`): `Experience mod: enter a factor like 0.95 or 1.10`, `enter a whole percent between -10 (credit) and +10 (debit)`. UX-001 is about where they appear, not what they say.
-- **Case history grouping** (`lib/timeline-merge.ts:96-108`, `audit/page.tsx:98-102`): one Save & rate reads as one action with the engine call inside it.
+- **The desk's "Next up"** (`web/src/app/page.tsx:67-87`, `lib/dashboard.ts:105-165`): one list, inbox pinned, plain verbs ("Clear 2 referrals", "Chase bind order"), a days chip whose number carries the meaning and colour only reinforces it. Keep it; UX-005 only asks the Submissions table to use the same words.
+- **The live extraction panel** (`submissions/activity-panel.tsx`): running timer, form-vs-Claude counters, confidence colour plus percentage, "Claude is reading the documents and reasoning…" during the quiet spell, and a 2.5 s "Saved as SUB-…" pause before the review opens. Exactly right for the demo; UX-008 only asks for a readable error row.
+- **Evidence on every extracted field and reversible corrections** (`submissions/[id]/page.tsx:181-226`): confidence pill, `inferred` tag, attention reason, snippet with source, and `Corrected by underwriter · extracted value: …` after a fix.
+- **The renewal comparison** (`submissions/[id]/renewal/page.tsx:85-162`): Expiring / Renewing / Change columns, the premium bridge split into "terms" and "rates" with the rate versions named, `changed` marks on terms, and a cause badge per factor. The memo PDF says the same thing in the insured's words.
+- **Stale ratings say why, and a clearance that no longer fits the facts says so** (`workbench/page.tsx:216-219`, `:265-269`, `lib/referrals.ts:44-47`).
+- **Binder subjectivities** (`lib/policy-pdf.ts:69-82`): `Received` / `OPEN - due 11/21/2026` bold and right-aligned, followed by the consequence sentence.
+- **Accounting journals link to the exact underwriting action** (`accounting/page.tsx:164` → `/audit?submission=…&correlation=…`), and the styled error and not-found pages (`error.tsx`, `not-found.tsx`) give a search box and a way home instead of a stack trace.
 
 ## Declined
 None.
 
 ## Resolved since last run
-First run; nothing to compare against.
+- **UX-018 — Home status: text next to the colour dot** — resolved: the System status panel on the desk shows `ok` / `down` text beside the dot (`web/src/app/page.tsx:176-178`), commit `71c2cb5` (step-15).
 
 ## Coverage notes
-- The Underwriting Desktop web container was **not running**. Port 3000 was occupied by an unrelated application (a CRM redirecting to `/signin`); it was not reviewed and nothing it returned was treated as this app. The web app was therefore reviewed from source only: all files under `web/src/app/**`, `web/src/components/ui.tsx`, `globals.css`, the server actions, and the libs whose copy reaches the screen (`referrals`, `bind-rules`, `quote-terms`, `worksheet`, `worksheets`, `quotes`, `policies`, `submissions`, `submission`, `insureds`, `search`, `timeline`, `timeline-merge`, `health`, `user`) and the three PDF builders.
-- The rating service **was running** at localhost:8001. Fetched read-only: `/admin`, `/admin/versions/3` (draft 2026.3), `/admin/versions/2?section=territory` (active, read-only, with the FL `was 1.25` highlight), and `/health`. The UTC timestamp evidence in UX-006 comes from these rendered pages.
-- Not judged from rendered output: header wrapping at 1280/1440/1920, hover and focus behaviour, actual PDF rendering (judged from the drawing code), and the pending state of the upload form. Layout observations for the web app are inferred from Tailwind classes, not pixels.
+- The Underwriting Desktop web app was **not running**. Port 3000 was held by a non-Docker `node` process answering `/api/health` with a plain-text `401 Unauthorized`, no JSON `components` and no `WWW-Authenticate` header, which does not match this app's health route; nothing it returned was treated as this app. The web app was therefore reviewed from source only: every file under `web/src/app/**` (layout, desk, submissions inbox/review/workbench/renewal, quotes, policies, prior-system policy, book, customers, search, audit, accounting and its API/MCP docs pages, assistant, sign-in, error and not-found) and `web/src/components/**`, the server actions, the libs whose copy reaches the screen (`referrals`, `bind-rules`, `quote-terms`, `worksheet`, `worksheets`, `rating-api`, `quotes`, `submissions`, `dashboard`, `health`, `user`), and the four PDF builders (`pdf-writer`, `quote-pdf`, `policy-pdf`, `renewal-memo-pdf`).
+- The rating service **was running** at localhost:8001 and was reviewed standalone (not through the desktop proxy, so the mirrored desktop header was judged from `base.html`). Fetched read-only: `/admin` and `/admin/versions/3` (draft 2026.3). The UTC timestamps (UX-006), the number formatting (UX-019), the non-required reason input (UX-001) and the unchanged Activate card (UX-007) were verified on the rendered pages.
+- Not judged from rendered output: header wrapping at 1280/1440/1920, hover and focus behaviour, pending states, the extraction panel and assistant in motion, and actual PDF rendering (judged from the drawing code). Layout observations for the web app are inferred from Tailwind classes, not pixels.
+- `web/src/lib/renewals.ts` (`startRenewal`) was not read in full; UX-023 is based on the page and the action that calls it.
 - No file was created or modified; no POST was sent; no service was started.
 
 ## Mockup files
 
-- docs/ux-mockups/UX-001.html
+- docs/ux-mockups/UX-021.html
 
-- docs/ux-mockups/UX-002.html
-
-- docs/ux-mockups/UX-003.html
-
-- docs/ux-mockups/UX-004.html
-
-- docs/ux-mockups/UX-005.html
-
-- docs/ux-mockups/UX-007.html
+- docs/ux-mockups/UX-022.html

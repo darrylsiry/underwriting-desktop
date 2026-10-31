@@ -5,21 +5,21 @@ run overwrites this file. Coding agents: fix items top-down by severity, keep
 the `CR-NNN` ID in your commit message, and leave this file alone. The auditor
 marks items resolved when it sees the fix.*
 
-- **Run:** 2026-10-22 23:00
-- **Commit reviewed:** `e46c8c1` (step-07: underwriting workbench with schedule mods and referral rules)
-- **Previous run:** none
+- **Run:** 2026-10-31 16:12
+- **Commit reviewed:** `2781d28` (step-24: the sign-in report (who signed in, from where, daily))
+- **Previous run:** 2026-10-31 12:12
 
 ## Summary
 
 | Severity | Open | New this run | Resolved this run |
 |----------|------|--------------|-------------------|
 | Critical | 0 | 0 | 0 |
-| High | 2 | 2 | 0 |
-| Medium | 4 | 4 | 0 |
-| Low | 7 | 7 | 0 |
-| Suggestion | 3 | 3 | 0 |
+| High | 0 | 0 | 0 |
+| Medium | 6 | 1 | 1 |
+| Low | 48 | 3 | 1 |
+| Suggestion | 8 | 0 | 0 |
 
-The premium math, versioned rate tables and SQL parameterisation are sound; no money-wrong or injection defect was found. The most important fix is CR-001: every Save & rate with a non-empty schedule writes a bogus `worksheet.schedule_changed` audit event because jsonb reorders object keys, so the audit trail (a headline feature) is already wrong on the step-07 demo path.
+Three commits landed since the previous run (`35b3e78`, `e4cff3c`, `2781d28`): the CR-078/CR-081 fixes are confirmed and resolved, and step 24 added a sign-in log and report (`login_events`, `/audit/logins`, `/api/reports/logins`, `scripts/login-report.sh`). Type-check, lint and all 83 web unit tests pass; every source file in scope was re-read in full. The new code brings one Medium: header text from unauthenticated sign-in attempts flows unescaped into the Markdown report that the build log says a scheduled Claude task reads (CR-090), plus three Lows around geo-lookup retries, the assistant's `audit_search` fallback and uneven API-login recording. Fix CR-090 (small) and CR-084 next, then CR-066, then the lost-update pair CR-017/CR-052.
 
 ## Critical
 
@@ -27,176 +27,537 @@ None.
 
 ## High
 
-### CR-001 — Stop writing a spurious `worksheet.schedule_changed` audit event on every save
-- **Status:** New
-- **Where:** `web/src/lib/worksheets.ts:88` (and `:99-103`)
-- **Problem:** `scheduleChanged` compares `JSON.stringify(ws.schedule)` (read back from the `schedule` jsonb column) with `JSON.stringify(schedule)` (freshly parsed). Postgres jsonb stores object keys shortest-first, so stored items come back as `{pct, category, rationale}` while parsed items are `{category, pct, rationale}`. The strings never match when the schedule is non-empty, so every Save & rate emits a `worksheet.schedule_changed` event whose before and after are identical (summary reads e.g. `schedule +18% → +18%`). The same gotcha was fixed for `inputsHash` (BUILD_LOG step-07) but missed here.
-- **Evidence:** Verified against the local compose DB: `SELECT $1::jsonb` of `[{"category":"safety","pct":-5,"rationale":"…"}]` returns `[{"pct":-5,"category":"safety","rationale":"…"}]`.
-  ```ts
-  const scheduleChanged = JSON.stringify(ws.schedule) !== JSON.stringify(schedule);
-  ```
-- **Fix:** Compare a canonical form with fixed key order, e.g. `const canon = (s: ScheduleItem[]) => JSON.stringify(s.map((i) => [i.category, i.pct, i.rationale]));` and `const scheduleChanged = canon(ws.schedule) !== canon(schedule);`. Export it from `worksheet.ts` next to `inputsHash`.
-- **Verify:** Add a `node --test` case in `referrals.test.ts` (or a new `worksheet.test.ts`) that reverses the keys of each schedule item and asserts `canon(a) === canon(b)`. Manually: Save & rate twice with the same schedule and confirm the Worksheet history shows only one schedule event.
-
-### CR-002 — Document download route crashes on filenames with non-Latin-1 characters
-- **Status:** New
-- **Where:** `web/src/app/submissions/[id]/documents/[docId]/route.ts:14`
-- **Problem:** The original filename is written verbatim into `Content-Disposition`. HTTP header values must be Latin-1 (ByteString); undici throws a `TypeError` for anything above U+00FF, so a broker file named like `Submission – ACME.pdf` (en dash, very common in real attachments) uploads fine but every click on it in the Documents panel is a 500.
-- **Evidence:** Confirmed on the repo's Node (v26): `new Response("x", { headers: { "Content-Disposition": 'inline; filename="Submission – ACME.pdf"' } })` throws `TypeError: Cannot convert argument to a ByteString because the character at index 29 has a value of 8211`.
-  ```ts
-  "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${doc.filename.replace(/"/g, "")}"`,
-  ```
-- **Fix:** Send an ASCII fallback plus an RFC 5987 encoded name:
-  ```ts
-  const ascii = doc.filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "");
-  const disp = inline ? "inline" : "attachment";
-  "Content-Disposition": `${disp}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(doc.filename)}`,
-  ```
-- **Verify:** Upload any sample PDF renamed to contain an en dash or an accented character, open it from the review page; expect 200 and the original name in the browser's download dialog.
+None.
 
 ## Medium
 
-### CR-003 — Ingestion `/extract` runs the whole synchronous pipeline on the event loop
-- **Status:** New
-- **Where:** `services/ingestion/app/main.py:37-46`, `services/ingestion/app/claude.py:132-145`
-- **Problem:** `extract` is `async def`, but `rateable_classes()` (blocking `urllib`), `pipeline.run` (pypdf/docx parsing) and `claude.extract` (a synchronous `anthropic.Anthropic` call with a 300 s timeout) all run inline. For the 20 s to several minutes an extraction takes, the single uvicorn worker cannot serve anything else: `/health` hangs (the web status page's 3 s timeout marks ingestion red while a demo upload is running) and concurrent uploads serialise.
-- **Evidence:**
-  ```python
-  @app.post("/extract")
-  async def extract(files: list[UploadFile] = File(...), use_claude: bool = True):
-      uploads = [(f.filename or "upload", await f.read()) for f in files]
-      ...
-      return pipeline.run(uploads, rateable_classes(), use_claude=use_claude)
-  ```
-- **Fix:** Either make the handler a plain `def` (FastAPI then runs it in the threadpool) and read uploads with `f.file.read()`, or keep it async and `return await run_in_threadpool(pipeline.run, uploads, await run_in_threadpool(rateable_classes), use_claude)` (from `starlette.concurrency`).
-- **Verify:** Start a Claude extraction of case 05 via `/docs`, and in parallel run `curl -m 2 localhost:8002/health`; it must return immediately. The existing `test_extract_endpoint` still passes.
+### CR-066 — The desk's "New business" tile counts renewals bound in the Desktop, and "Renewals · 90 days" counts policies already renewed that the table below excludes
+- **Status:** Open (first seen 2026-10-30)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/dashboard.ts:61-68` (policies query selects no `renewed_from`), `:80-91`, `:185-191`; rendered at `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/page.tsx:59-62`; `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/book/page.tsx:25` inherits the same filter; the assistant's `book_summary` (`/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/assistant-tools.ts:264-266`) reports the same numbers
+- **Problem:** Step 16 made a Desktop-bound policy a renewal when `policies.renewed_from` is set and marks the expiring policy `renewal_status = 'renewed'`, but the KPIs were not updated. `written` (every in-force Desktop policy) feeds `newBusinessPremium`/`newBusinessPolicies`, so binding a renewal raises "New business … bound in the UW Desktop". `renewalsDue90`/`renewalPremium90` filter `book` by date only, while the "Upcoming renewals" table (`renewals`) also drops `renewal_status === "renewed"`, so after a renewal is bound the tile (and `/book?due=90`) say one more renewal than the table lists.
+- **Evidence:** `newBusinessPremium: written.reduce((n, p) => n + p.premium, 0)` with the comment "Everything written in the UW Desktop is new business"; `renewalsDue90: book.filter((p) => daysUntil(p.expiration_date, today) <= 90).length` versus `const renewals = book.filter((p) => … && p.renewal_status !== "renewed")`; the policies query selects `p.renewal_status, p.renewal_submission_id` but not `renewed_from` (re-read this run).
+- **Fix:** Select `(p.renewed_from IS NOT NULL) AS is_renewal`; compute `newBusiness*` from `written.filter((p) => !p.is_renewal)`; derive `renewalsDue90`/`renewalPremium90` from `renewals` (`daysUntil(...) <= 90`) and apply the same `renewal_status !== "renewed"` filter in `/book?due=`, so tile, list, table and `book_summary` agree.
+- **Verify:** Bind a renewal from the workbench and reload `/`: "New business" is unchanged, "Renewals · 90 days" drops by one and equals the rows in "Upcoming renewals" within 90 days; `/book?due=90` lists the same rows.
 
-### CR-004 — "Ready to quote" ignores rate-version activation; a rating stays "current" on retired rates
+### CR-090 — Unauthenticated sign-in attempts put raw `Accept-Language`, `User-Agent` and (off Fly) `X-Forwarded-For` text into the Markdown sign-in report that a scheduled Claude task reads, unescaped and unbounded
 - **Status:** New
-- **Where:** `web/src/lib/worksheets.ts:61-66`, `web/src/lib/worksheet.ts:134-136`
-- **Problem:** `readiness()` treats `last_rating` as current when `rated_inputs_hash` matches the inputs fingerprint. The fingerprint has no rate-version component, so after an admin activates a new version (step-04 flow), every workbench keeps showing the old indicative premium with no stale warning and remains "Ready to quote". Step 08 persists quotes from `last_rating`, so this becomes a wrong-price quote without anyone being told.
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/signin/actions.ts:26` (every attempt is recorded; `/signin` is outside the gate per `/Users/djsiry/GitHub/underwriting-desktop/web/src/middleware.ts:9`), `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/login-events.ts:15-20` (the INSERT), `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/login-meta.ts:33-41` (`clientInfo`: `user_agent` up to 500 chars, `accept_language` up to 100, `ip` from the first `X-Forwarded-For` hop when `Fly-Client-IP` is absent, no length limit), `:59-72` (`browserLabel` falls back to the first 30 characters of an unrecognised UA), `:140-159` (`esc()` neutralises only `|`; `eventsTable` prints `e.ip`, `e.edge_region` and `e.accept_language.split(",")[0]` with no escaping at all); consumers `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/api/reports/logins/route.ts:30-31` and `/Users/djsiry/GitHub/underwriting-desktop/scripts/login-report.sh:2-13` ("Run it daily … from a scheduled Claude task"); the CSV form at `login-meta.ts:181-184` passes the raw `user_agent` through `toCsv` (see CR-071)
+- **Problem:** Anyone on the internet can post the sign-in form with a made-up user and any `Accept-Language`/`User-Agent` (and, under compose or `next dev`, any `X-Forwarded-For`); the attempt is stored as `(unknown user)` with those header values, with no rate limit and no cap on rows. The daily Markdown report then prints the language tag verbatim (100 characters, unescaped: a `|` shifts every later column of that row) and the UA's first 30 characters, and the build log says the file is read by an automated Claude task, which makes it a prompt-injection channel from unauthenticated traffic. The `/audit/logins` page renders the same strings through React (safe), and the JSON/CSV forms carry the full 500-character UA, where CR-071's CSV guard misses leading `-`/tab.
 - **Evidence:**
   ```ts
-  const rated = !!ws.last_rating && ws.rated_inputs_hash === inputsHash(ws.rating_inputs, ws.schedule);
+  await recordLogin(ok || users.has(name) ? name : "(unknown user)", ok, "signin", h)   // signin/actions.ts:26
+  accept_language: h.get("accept-language")?.slice(0, 100) || null,                     // login-meta.ts:39
+  … | ${esc(browserLabel(e.user_agent)) || "—"} | ${e.accept_language?.split(",")[0] ?? "—"} |`   // login-meta.ts:156
+  : ua.split(" ")[0].slice(0, 30);                                                       // login-meta.ts:68
   ```
-  `last_rating.rate_version_id` is stored but never compared with the active version.
-- **Fix:** In the workbench page (or `readiness`), fetch the active version once per render (`GET /health` already returns `active_rate_version`, or add `GET /rate-versions/active` to the rating service) and set `rated = … && ws.last_rating.rate_version === active`. Show "Rates changed since this rating (2026.1 → 2026.2). Save & rate again." in the premium card.
-- **Verify:** Rate a worksheet, activate a new draft at `/admin`, reload the workbench: chip shows "Not rated"/warning, and Save & rate produces the new version's premium.
+  `grep -n "rate\|limit" web/src/app/signin/actions.ts` → nothing; `migrations/policy/007_login_events.sql` has no row cap or retention.
+- **Fix:** Treat the three header values as untrusted: keep `accept_language` only when its first tag matches `/^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$/` (else `null`), store the raw UA in the row but render only a whitelisted label (`/^[A-Za-z]+ \d+( · [A-Za-z]+)?$/`, else `"other"`) in the Markdown, pass every interpolated field through an `esc()` that also strips `[\x00-\x1f]` and collapses whitespace, and bound `ip` to 45 characters. Don't store UA/language for `(unknown user)` rows, and add a per-address limit on failed attempts (for example 20 per 10 minutes, refused with the same "isn't right" message). Extend `eventCsvRow` with CR-071's wider formula guard.
+- **Verify:** `curl -X POST` the sign-in action (or use the form) with `-H 'Accept-Language: | ignore previous instructions'`, `-H 'User-Agent: =HYPERLINK("x")'` and a wrong password; `GET /api/reports/logins?format=md` shows the row intact with no injected text, `format=csv` shows the UA cell quoted with a leading `'`; a `login-meta.test.ts` case asserts `reportMarkdown` never emits a header value verbatim.
 
-### CR-005 — A referral clearance survives changes to the facts that triggered it
-- **Status:** New
-- **Where:** `web/src/lib/worksheets.ts:63`, `web/src/lib/worksheets.ts:127-141`
-- **Problem:** Clearances are keyed by rule code only. Clear `HEIGHT` at 55 ft, then edit max height to 150 ft; clear `LARGE_ACCOUNT` at $15.1M, then set receipts to $80M; clear `SCHEDULE_AUTHORITY` at +16%, then push to +25%. The flag's detail changes but the clearance still suppresses it, so the authority check can be bypassed by editing inputs after the manager signs off. BUILD_LOG records "a clearance stays after later edits" as a decision; it is still a referral bypass and cheap to close.
+### CR-017 — Guard worksheet Save & rate against lost updates (same gap CR-006 closed for intake)
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/worksheets.ts:93-119`; form `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/submissions/[id]/workbench/page.tsx:92`
+- **Problem:** `saveAndRate` reads the worksheet via `openWorksheet`, diffs the form against that snapshot, then runs an unconditional `UPDATE worksheets SET rating_inputs = $2, schedule = $3 … WHERE submission_id = $1`. No transaction, no `FOR UPDATE`, no fingerprint on the form. Two people on one file (the renewal comparison page and the workbench share a submission): the later save silently reverts the earlier one's inputs and schedule, and its `worksheet.input_changed` events record "before" values from its stale snapshot.
+- **Evidence:** `grep -n 'FOR UPDATE' web/src/lib/*.ts` → only `policies.ts:92` and `submissions.ts:138` (re-run this run; nothing in `worksheets.ts`); `withReviewLock`/`dataFingerprint` in `submissions.ts:134-155` show the pattern already used for review.
+- **Fix:** Render a hidden `_fingerprint` = `inputsHash(ws.rating_inputs, ws.schedule)` on the workbench form. In `saveAndRate`, `BEGIN`, `SELECT * FROM worksheets WHERE submission_id = $1 FOR UPDATE`, compare the fingerprint and throw `"${sub.reference} was changed by someone else since you opened it. Reload, then save again."` on mismatch, diff and UPDATE inside the transaction, commit before calling rating.
+- **Verify:** Open one workbench in two tabs; change receipts in A and save; save B with the old receipts: B must be refused, not revert A; the Worksheet history shows only A's change.
+
+### CR-052 — Rate admin "Save <section>" writes every stale cell back, silently reverting a colleague's change and auditing it under the wrong name and reason
+- **Status:** Open (first seen 2026-10-24)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/admin.py:198-220`, `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/repository.py:179-210`, form `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/templates/version.html:28-58`
+- **Problem:** The section form posts every cell, and `apply_edits` treats any posted value that differs from the database as an intended edit. A changes FL 1.25 → 1.35 and saves; B, whose page still shows 1.25, changes TX and saves: B's form carries FL = 1.25, which now differs from 1.35, so FL is written back and audited as `update_factor territory:FL 1.35 → 1.25` under B's name and reason. `_lock_draft` serialises transactions but cannot detect a stale form. The JSON API is immune.
+- **Evidence:** `edit.values[column] = Decimal(str(raw).strip())` … `updates = {c: v for c, v in edit.values.items() if Decimal(v) != row[c]}`; `grep -c '|was' services/rating/app/templates/version.html` → 0 (re-run this run).
+- **Fix:** Add `<input type="hidden" name="{{ c.field }}|was" value="{{ c.value | num }}">` per cell; in `save_section` skip cells whose value equals their `was` and pass `expected` per `Edit`; in `apply_edits` raise `ValueError(f"{_entity(edit)} was changed by someone else since you opened it (now {row[c]}). Reload and try again.")` when `row[c] != expected[c]`.
+- **Verify:** `test_rate_admin.py`: post `FL=1.35, FL|was=1.25`; then `FL=1.25, FL|was=1.25, TX=1.2, TX|was=1.1`: only TX changes and FL stays 1.35 with no revert in the audit; then `FL=1.40, FL|was=1.25` redirects with a "changed by someone else" error.
+
+### CR-084 — `startRenewal` claims the policy in the policy DB before it connects to the customer DB, and the connect sits outside the `try` that undoes the claim, so one failed connection leaves a dangling `renewal_submission_id` that 404s every renewal path for that policy forever
+- **Status:** Open (first seen 2026-10-30)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/renewals.ts:168-206` (`startRenewal`), `:146,158,166` (`existing` short-circuit), `:230-233` (`renewalOfPolicy`); consumers `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/policies/actions.ts:15-18`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/policies/[id]/page.tsx:89-96`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/policies/book/[id]/page.tsx:72-79`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/dashboard.ts:146-158`
+- **Problem:** The claim is a two-database write with no transaction across them: first `UPDATE policies|book_policies SET renewal_status = 'in_progress', renewal_submission_id = $2 WHERE … renewal_submission_id IS NULL` (policy DB), then `const client = await customerDb.connect()` and the `INSERT INTO submissions`/`worksheets` transaction. The compensating `UPDATE … SET renewal_status = 'not_started', renewal_submission_id = NULL` lives in the `catch` of that transaction, but `customerDb.connect()` is called *before* the `try`, so a pool timeout, a customer-DB restart or a crash at that instant leaves the policy pointing at a submission id that was never inserted. From then on `renewalOfPolicy()` finds no submission and the policy page shows "Start renewal" again; clicking it returns `{ submissionId: existing }` because `renewal_submission_id` is set, and the action redirects to `/submissions/<dangling>/renewal`, which `notFound()`s. The desk's "Finish renewal" task (status `in_progress`, ≤ 30 days) links to the same 404, and outside that window the `in_progress` policy is skipped by the task list entirely. Only hand SQL recovers it.
 - **Evidence:**
   ```ts
-  const open = flags.filter((f) => f.severity === "refer" && !ws.referral_clearances[f.code]);
+  const claimed = await policyDb.query(`UPDATE ${table} SET renewal_status = 'in_progress', renewal_submission_id = $2 WHERE id = $1 AND renewal_submission_id IS NULL`, …);
+  …
+  const client = await customerDb.connect();          // line 180, outside the try/catch below
+  …
+  try { await client.query("BEGIN"); … } catch (err) { …; await policyDb.query(`UPDATE ${table} SET renewal_status = 'not_started', renewal_submission_id = NULL WHERE id = $1`, …); throw err; }
   ```
-  `Clearance` is `{ by, at, note }` with nothing identifying what was cleared.
-- **Fix:** Store `detail: flag.detail` in the clearance (`clearReferral` already has `flag`). In `readiness`, count a flag as cleared only when `clearance.detail === f.detail`; render a stale clearance as "cleared for: <old detail>, re-clear needed".
-- **Verify:** `node --test`: build a ctx with `max_height_ft: 55`, a clearance for `HEIGHT`, assert `ready`; change to 120 ft, assert `HEIGHT` is open again.
+  and the short-circuit `existing = p.renewal_submission_id; … if (existing) return { submissionId: existing, created: false };` with no check that the submission exists (re-read this run).
+- **Fix:** Reverse the order so the policy DB is written last: insert the submission and worksheet in the customer DB first (id generated up front, as now), then run the conditional claim `UPDATE … WHERE renewal_submission_id IS NULL`; if the claim stamps zero rows (a concurrent start won), delete the just-inserted submission/worksheet and return the winner's id. Also make the `existing` path self-healing: when `renewal_submission_id` is set but `getSubmission(existing)` is null, clear the claim and proceed as a fresh start. Move `customerDb.connect()` inside the `try` regardless.
+- **Verify:** Point `CUSTOMER_DATABASE_URL` at a closed port, click "Start renewal" on a book policy, restore the URL, reload: the page still offers "Start renewal" and clicking it creates the renewal (no 404); `SELECT renewal_submission_id FROM book_policies WHERE id = …` is null after the failed attempt. Add a `renewals.test.ts` case for the self-healing branch.
 
-### CR-006 — Intake review saves are a non-atomic read-modify-write and the UPDATE does not enforce status
-- **Status:** New
-- **Where:** `web/src/lib/submissions.ts:96-126`, `web/src/lib/submissions.ts:133-171`
-- **Problem:** `saveReview` reads the row, mutates a clone, then `UPDATE submissions SET data = $2 … WHERE id = $1` with no transaction, row lock or `status = 'needs_review'` predicate. Two underwriters saving the same submission lose one set of corrections silently, and a save racing an accept overwrites accepted data (and `applicant_name`) after the insured was created. `acceptSubmission` has the same check-then-act gap between the status read and its UPDATE.
-- **Evidence:**
-  ```ts
-  await customerDb.query(
-    "UPDATE submissions SET data = $2, corrected_fields = $3, applicant_name = $4 WHERE id = $1", …);
-  ```
-- **Fix:** Do the read and write in one transaction with `SELECT * FROM submissions WHERE id = $1 FOR UPDATE`, and add `AND status = 'needs_review'` to both UPDATEs, throwing when `rowCount === 0`. The audit writes can stay after COMMIT.
-- **Verify:** Fire two `saveReview` calls concurrently (e.g. `Promise.all` in a small script against the compose DB) with different fields; both corrections must be present. Accept, then call `saveReview`: expect "already accepted".
+### CR-029 — One unreadable or forwarded attachment discards the entire broker email
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/documents.py:81-86` (and `:46-48`)
+- **Problem:** `_email` calls `load(name, part.get_payload(decode=True), parent=filename)` per attachment, catching only `UnsupportedDocument`. A `message/rfc822` part (forwarded email) yields `get_payload(decode=True) is None`, so `load` evaluates `data[:5]` on `None` and raises `TypeError` (or, for a `.pdf`-named part, `PdfReader(BytesIO(None))` raises); a corrupt PDF raises from `pypdf` the same way. The exception escapes `_email`, and `pipeline.run` drops the whole `.eml`: the body (the main source for sparse submissions like cases 05 and 14, and every generated `broker_email_sparse` folder) and every good attachment are never read. Unsupported attachment types are skipped with no warning.
+- **Evidence:** `try: docs += load(name, part.get_payload(decode=True), parent=filename) except UnsupportedDocument: continue`; `load()` begins `if suffix == ".pdf" or data[:5] == b"%PDF-":`; `pipeline.run:31-34` catches the escaped error per file (re-read this run).
+- **Fix:** Read `payload = part.get_payload(decode=True)`; `if payload is None: continue` (or recurse with `_email` for `message/rfc822`); widen the per-attachment `except` to `Exception`; pass a `warnings` list into `load` so a skipped attachment is reported by name.
+- **Verify:** Test an `.eml` with the case 04 body, its loss-run PDF and a forwarded `message/rfc822` part: `load()` returns body and loss run and `pipeline.run` does not warn the `.eml` was unreadable; also an `.eml` with a `b"%PDF-garbage"` PDF and one with an `.xlsx` (expect a named warning).
 
 ## Low
 
-### CR-007 — `setUserAction` can 500 on a malformed Referer and allows a protocol-relative redirect
-- **Status:** New
-- **Where:** `web/src/app/submissions/actions.ts:56-58`
-- **Problem:** `new URL(referer)` throws on a non-absolute Referer (500 instead of a redirect). The guard `path.startsWith("/")` is always true for a `pathname`, including `//evil.example`, which `redirect()` emits as a protocol-relative URL (the root layout, with this form, also renders on 404 pages such as `/​/evil.example`).
+### CR-019 — `issueQuote` does side-effecting work before it has fully validated dates or taken a lock
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/quotes.ts:78-81`, `:83-94`, `:147-169`; `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/submission.ts:136`
+- **Problem:** Dates are checked by regex only. `2026-02-30` passes, is rated through the API (writing a `rating_log` row `Q-… vN`), rendered to PDF (and, for a renewal, to a memo), and only then fails at the `date` cast, so the rating log shows a quote version that never existed. `2026-13-01` with blank expiration throws `RangeError` from `addYears`. `fromInput` has the same hole. `previous`/`version` are read without a lock and rating plus PDF render precede the transaction, so a double-click yields a raw `quotes_quote_number_version_key` violation and another orphan log row.
+- **Evidence:** `if (!/^\d{4}-\d{2}-\d{2}$/.test(effective)) throw …` is the only check; `Date.parse("2026-02-30T00:00:00Z")` → `1772409600000` (re-run this run); `fromInput(date, "2026-02-30")` → `"2026-02-30"`; `addYears("2026-13-01", 1)` → `RangeError: Invalid time value` (re-run this run); Postgres `'2026-02-30'::date` → out of range.
+- **Fix:** Add `isIsoDate(s)` (regex plus round-trip `new Date(s + "T00:00:00Z").toISOString().slice(0,10) === s`) in `quote-terms.ts`; use it for both quote dates before any external call, in `fromInput` for `date`, and for CR-068. Take the next version inside the transaction (`SELECT … FOR UPDATE`) and map the unique violation to "already issued, reload". Also closes CR-050.
+- **Verify:** `node --test` for `isIsoDate` on `2026-02-30`, `2026-13-01`, `2026-02-28`; issuing with `2026-02-30` gives a friendly error and no new `rating_log` row.
+
+### CR-050 — A bind that commits while a re-quote is in flight leaves a bound v1 and an issued v2, writes a false `quote.superseded` event, and disables the "already bound" guard for that file
+- **Status:** Open (first seen 2026-10-24)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/quotes.ts:83-84`, `:147-169`, `:171-176`; `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/policies.ts:75-143`
+- **Problem:** `issueQuote` reads `previous` and checks `bound` unlocked, then rates and renders before opening its transaction. If a bind commits in that window, `UPDATE quotes SET status = 'superseded' … AND status = 'issued'` matches zero rows (rowCount unchecked), v2 is inserted as `issued`, the audit records `quote.superseded` for a bound quote, and every later `issueQuote` sees `previous` = v2 and passes the bound check.
+- **Evidence:** `const previous = (await quotesForSubmission(sub.id))[0]; if (previous?.status === "bound") throw …` before rating (re-read this run); nothing in the migrations prevents an `issued` row beside a `bound` row.
+- **Fix:** Inside the transaction `SELECT … FROM quotes WHERE submission_id = $1 ORDER BY version DESC FOR UPDATE`, derive number/version from the locked rows, refuse if any is `bound`, and use the UPDATE's `rowCount` to decide which `quote.superseded` events to write. Fix with CR-019.
+- **Verify:** Add a temporary 3 s pause after line 84 and bind during it: the re-quote fails with "already bound", `/quotes` shows v1 bound and no v2.
+
+### CR-034 — Quote, bind, GL-posting and renewal audit events are written outside the policy-DB transaction, and `audit()` is not atomic
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/quotes.ts:163-187`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/policies.ts:137-167`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/renewals.ts:199-225`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/audit.ts:16-28`
+- **Problem:** `quotes`, `policies`, `gl_postings` and `audit_events` live in one database, yet `issueQuote`, `bindQuote` and `startRenewal` COMMIT then call `audit()`, which inserts each event separately with no `BEGIN`. A failure between leaves a quote, policy or ledger journal with no `quote.issued`/`policy.bound`/`gl.posted` event or a partial correlated group; the GL API's `journalDocument` then shows a journal whose "underwriting action" has no events. The seeded history (step 19) runs this path 50 times unattended.
+- **Evidence:** `await client.query("COMMIT"); … finally { client.release(); } … await audit(…)` in all three (re-confirmed this run); `for (const e of events) await policyDb.query(INSERT …)`.
+- **Fix:** Let `audit()` accept an optional `PoolClient` and call it before COMMIT on the same client; otherwise wrap the loop in one transaction.
+- **Verify:** Temporarily throw inside `audit()` after the first insert and bind: the bind must roll back rather than leave a policy and journal with a partial trail.
+
+### CR-049 — An audit-insert failure after a committed upload is reported as an upload error, inviting a duplicate submission and a second Claude call
+- **Status:** Open (first seen 2026-10-24)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/submissions.ts:110-124`; surfaced by `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/submissions/actions.ts:16-20` and `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/submissions/inbox/[folder]/extract/route.ts:63-67`
+- **Problem:** `storeSubmission` commits the customer-DB transaction then calls `audit()` (policy DB) inside the same `try`; a failure there runs `ROLLBACK` after `COMMIT` (no-op) and rethrows, so the upload form shows an error although `SUB-000N` was stored, and the natural retry re-runs the 20–40 s extraction and creates a second reference. On the inbox path the activity panel shows "error" while the folder has silently left the inbox.
+- **Evidence:** `await client.query("COMMIT"); … await audit({…}); return { id, reference }; } catch (err) { await client.query("ROLLBACK"); …; throw err; }` (re-confirmed this run).
+- **Fix:** Isolate the transaction in its own `try/catch/finally`; call `audit()` after it in a separate `try`, logging and returning the id (or a non-blocking warning) on failure. Apply the same split to `saveReview`, `acceptSubmission` and `saveAndRate`.
+- **Verify:** Point `POLICY_DATABASE_URL` at a closed port, upload case 01: the action redirects to the new review page and the inbox shows one new row.
+
+### CR-067 — A transient rating-service failure while computing the renewal bridge is swallowed and persisted as "rate version X couldn't be rated on"
+- **Status:** Open (first seen 2026-10-30)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/worksheets.ts:173-183`; shown at `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/submissions/[id]/renewal/page.tsx:112`, baked into the memo at `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/renewal-memo-pdf.ts:94-97` via `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/quotes.ts:131-145`
+- **Problem:** `bridgeRating` wraps `rateVersionId()` and `rateOn()` (both 15 s) in `catch { return null }`. A cold-start timeout or a 5xx therefore looks exactly like "the expiring version no longer exists": Save & rate reports success, `bridge_rating` is stored as `null`, the comparison page says "Rate version 2026.1 couldn't be rated on, so the change can't be split", and if the underwriter issues the renewal quote the memo PDF (frozen, never regenerated) tells the insured the same thing. Nothing is logged. `RatingServiceError.rejectedInputs` is the right discriminator and is not used here.
+- **Evidence:** `try { const versionId = await rateVersionId(exp.rate_version); return versionId ? await rateOn(…) : null; } catch { return null; }` (re-read this run).
+- **Fix:** Return `null` only when `rateVersionId` resolves to `null` (or the error is a `RatingServiceError` with `rejectedInputs`); let transport and 5xx errors propagate (Save & rate then fails loudly like any other rating failure), or store `{ error: message }` in `bridge_rating` and render "rating service unavailable; re-rate" instead of blaming the version.
+- **Verify:** Temporarily make `rateVersionId` throw; Save & rate on a renewal must show an error banner and leave `bridge_rating` untouched; with a real missing label it must still show the "couldn't be rated on" note.
+
+### CR-036 — Check-then-insert races on unique keys surface as raw constraint errors (rate activation, draft label, insured FEIN)
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/repository.py:148-157`, `:213-224`, `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/main.py:91-99`, `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/admin.py:153-163,223-231`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/submissions.ts:214-219`
+- **Problem:** (1) `activate()` locks only its own draft; two concurrent activations both pass `_lock_draft` and the second hits `one_active_version`. (2) `create_draft()` checks `SELECT 1 … WHERE label = %s` before inserting into a `UNIQUE` column. (3) `acceptSubmission` does `SELECT id FROM insureds WHERE fein = $1` then `INSERT`. Data stays consistent but the `UniqueViolation` is unmapped: a bare 500 in the admin, Postgres's raw message on the review page.
+- **Evidence:** `previous = conn.execute("UPDATE rate_versions SET status = 'retired' WHERE status = 'active' RETURNING label")` after locking only the draft (re-confirmed at `repository.py:219-221`); `const existing = fein ? … : undefined; const insuredId = existing?.id ?? (await client.query("INSERT INTO insureds …"))`.
+- **Fix:** In `activate()`, also `SELECT id FROM rate_versions WHERE status = 'active' FOR UPDATE`; in `create_draft()` catch `psycopg.errors.UniqueViolation` → `ValueError`; map `IntegrityError` to 409 in `admin_errors`; in `acceptSubmission` use `INSERT … ON CONFLICT (fein) WHERE fein <> '' DO UPDATE SET name = insureds.name RETURNING id, (xmax = 0) AS created`.
+- **Verify:** Activate two drafts from two threads via `TestClient`: one 200, one 409, exactly one active; accept two submissions with one FEIN from two tabs: one insured, no raw error.
+
+### CR-069 — A GL push stamps batches outside any transaction, so two concurrent pushes (or a render failure) produce files whose batch column disagrees with the database
+- **Status:** Open (first seen 2026-10-30)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/ledger.ts:206-224` (`exportLedger`), called from `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/accounting/export/route.ts:18` and `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/gl-service.ts:129-148` (REST `POST /api/gl/exports` and MCP `gl_push`)
+- **Problem:** `exportLedger` runs `listPostings`, then `nextval('gl_export_seq')`, then `UPDATE … WHERE id = ANY($3) AND export_batch IS NULL`, then renders from the rows read first. Two pushes of the same month at once both read the unstamped rows; one UPDATE stamps them, the other stamps zero, but the loser's file labels those lines `r.export_batch ?? meta.batch` = its own batch and its `gl.exported` event claims the same N lines. If `renderLedger`/`toXlsx` throws after the UPDATE, lines are marked pushed and no file was delivered.
+- **Evidence:** `const rows = await listPostings(f); const batch = … nextval('gl_export_seq') …; const fresh = (await policyDb.query("UPDATE gl_postings SET export_batch = $1 … RETURNING id", …)).rows.length; const file = renderLedger(rows, …)` (re-read this run).
+- **Fix:** Do the read, the stamp and the audit insert in one transaction on a `PoolClient` with `SELECT … FOR UPDATE` on the filtered rows (or `UPDATE … RETURNING *` and render from the returned rows so the file carries each line's real `export_batch`); render before COMMIT and roll back on a render error.
+- **Verify:** Fire two `POST /api/gl/exports` with `period=all` concurrently: each JSON response's journals show the batch that `/api/gl/postings?batch=<that batch>` actually returns, and `/api/gl/batches` shows `lines_stamped` = `lines_in_file` for exactly one of them.
+
+### CR-068 — Calendar-invalid dates pass the accounting filters and the GL API and reach the Postgres `::date` cast as a 500
+- **Status:** Open (first seen 2026-10-30)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/accounting/page.tsx:15,23`; `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/gl-query.ts:18` (used by `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/accounting/export/route.ts:16`, every `/api/gl/*` route via `gl-http.ts:20-22`, and the MCP tools via `gl-mcp.ts:33-38`); cast at `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/ledger.ts:32-33`
+- **Problem:** The page's `isDate` is the regex `/^\d{4}-\d{2}-\d{2}$/`; `gl-query.ts` adds `!Number.isNaN(Date.parse(s + "T00:00:00Z"))`, but V8 accepts `2026-02-30T00:00:00Z`, so `from=2026-02-30` is "valid" to both and is bound as `$1::date`, where Postgres raises `date/time field value out of range`. `/accounting?period=custom&from=2026-02-30` renders the error boundary, `/api/gl/postings?from=2026-02-30` returns an unhandled 500 although the OpenAPI document promises 400 with `details`, and an MCP `gl_summary` with that date gets a JSON-RPC internal error.
+- **Evidence:** `Date.parse("2026-02-30T00:00:00Z")` → `1772409600000` (re-run this run); `WHERE ($1::date IS NULL OR (posted_at AT TIME ZONE $5)::date >= $1)`.
+- **Fix:** One `isIsoDate(s)` (regex plus `new Date(s + "T00:00:00Z").toISOString().slice(0, 10) === s`) in `quote-terms.ts` or `http.ts`, used by `gl-query.ts`, the accounting page and CR-019.
+- **Verify:** `curl -i '<web>/api/gl/postings?from=2026-02-30'` → 400 with `from must be a date formatted YYYY-MM-DD`; `/accounting?period=custom&from=2026-02-30` renders with the default range; `2026-02-28` still works. Add to `mcp.test.ts`'s `parseLedgerQuery` case.
+
+### CR-086 — The Accounting page ignores `from`/`to` unless `period=custom` is also present, but the GL API's `summary` document (and so the assistant) links to `/accounting?from=…&to=…`, which opens "this month" instead of the named month
+- **Status:** Open (first seen 2026-10-31)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/accounting/page.tsx:21-23` (preset resolution), `:66-71` (the "From (custom)"/"To (custom)" inputs); link emitter `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/gl-service.ts:56` (`summaryDocument`, served by `/api/gl/summary` and the `gl_summary` MCP/assistant tool); the parser the API uses `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/gl-query.ts:33-35`; `presetRange` at `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/gl-journal.ts:85-98`
+- **Problem:** `parseLedgerQuery` (the REST API, the MCP tools and the export route) treats bare `from`/`to` as a custom range (`else if (get("from") || get("to")) period = "custom"`), but the Accounting page computes `preset` from `p.period` alone, defaulting to `this_month`, and `presetRange` ignores `custom` for every preset except `"custom"`. `summaryDocument` emits one link per accounting month of exactly the shape the page mishandles (`${origin}/accounting?from=2026-03-01&to=2026-03-31`), so an accountant following the API's own `url` for March, or the assistant's link from a `gl_summary` answer, lands on a page titled with this month's postings and a filter form showing "This month". The page's own From/To inputs have the same trap: filling them while the Period select stays on "This month" silently shows this month.
+- **Evidence:** `presetRange("this_month", "2026-10-31", { from: "2026-03-01", to: "2026-03-31" })` → `{"from":"2026-10-01","to":"2026-10-31"}`, while `parseLedgerQuery({ from: "2026-03-01", to: "2026-03-31" }, "2026-10-31").query` → `{"period":"custom","from":"2026-03-01","to":"2026-03-31",…}` (executed in an earlier run; code unchanged, re-read this run); `url: \`${ctx.origin}/accounting?from=${g.period}-01&to=${monthEnd(g.period)}\`` at `gl-service.ts:56`; `const preset: PeriodPreset = (PERIOD_PRESETS as readonly string[]).includes(p.period ?? "") ? … : p.batch ? "all" : "this_month";` at `page.tsx:21`.
+- **Fix:** Make the page use the shared parser: `const { query } = parseLedgerQuery(p, today, p.batch ? "all" : "this_month")` and take `preset`/`from`/`to`/`type`/`batch` from `query` (the export route already does this), so bare `from`/`to` mean a custom range everywhere. Alternatively (belt and braces) emit `period=custom&from=…&to=…` from `summaryDocument`, and have the page switch the select to "Custom range" when `from`/`to` are present.
+- **Verify:** `/accounting?from=2026-03-01&to=2026-03-31` shows March's journals with the Period select on "Custom range"; `GET /api/gl/summary?period=ytd` → open any `periods[].url` → the page shows that month; `mcp.test.ts`/a new `accounting` test asserts the page and `parseLedgerQuery` resolve the same range for the same params.
+
+### CR-070 — `requestOrigin` trusts a client-supplied `X-Forwarded-Host`, so the links baked into GL export files and the OpenAPI document can be pointed at another host
+- **Status:** Open (first seen 2026-10-30)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/http.ts:64-68`; used by `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/accounting/export/route.ts:18`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/gl-http.ts:16`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/api/gl/openapi.json/route.ts:9`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/api/mcp/route.ts:16`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/assistant/ask/route.ts:22`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/api/reports/logins/route.ts:31`, and the session cookie's `secure` flag at `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/signin/actions.ts:31`
+- **Problem:** `h.get("x-forwarded-host") ?? h.get("host")` prefers whatever the request carries. The absolute "UW action (audit)" and "Policy" URLs written into every CSV/XLSX/JSON line, the `servers[0].url` of the OpenAPI document, every `url` in the API index, the MCP server's advertised `endpoint` and the sign-in report's "Generated … from <origin>" line are built from it, so a request with `X-Forwarded-Host: evil.example` yields a GL file whose audit links lead off-site. `sameOrigin()` compares `Origin` against the same header, which is safe only because a browser cannot set it on a cross-site form post. Whether Fly's edge overwrites a client-sent `X-Forwarded-Host` was not verified, so treat the header as untrusted.
+- **Evidence:** `const host = (h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000").split(",")[0].trim();` (re-read this run)
+- **Fix:** Add `PUBLIC_ORIGIN` (set in `web/fly.toml` to `https://uwdesk-web.fly.dev`) and use it when present; otherwise use `host`, and consult `x-forwarded-*` only behind an explicit `TRUST_PROXY=1`. Use the same resolution in `sameOrigin()`.
+- **Verify:** `curl -u u:p -H 'X-Forwarded-Host: evil.example' <web>/api/gl/openapi.json | jq .servers` names the real host; the exported CSV's "Policy" column starts with the real origin.
+
+### CR-071 — The CSV export neutralizes `=`, `+` and `@` but not `-`, tab or CR, which spreadsheets also treat as formula starters
+- **Status:** Open (first seen 2026-10-30)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/csv.ts:11-13`; data sources are broker-supplied text (`insured_name`, `description`, `producer`) in `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/ledger.ts:178-183` and, since step 24, the raw `user_agent`/`accept_language`/`ip` of unauthenticated sign-in attempts in `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/login-meta.ts:181-184` (served by `/api/reports/logins?format=csv` and `scripts/login-report.sh --csv`)
+- **Problem:** The export is explicitly "pushed to the GL as CSV" and opened in Excel. The guard `/^[=+@]/` leaves a cell beginning with `-` (e.g. a description `-2+3+cmd|' /C calc'!A0` or `-HYPERLINK(...)`) unquoted, which Excel and LibreOffice evaluate as a formula on import; leading tab/CR are the other documented starters. Insured names and operation descriptions come from broker documents via Claude, and the sign-in CSV now carries header values anyone can send to `/signin`, so the prefix is attacker-reachable on two files.
+- **Evidence:** `const s = /^[=+@]/.test(v) ? \`'${v}\` : v;`; `/^[=+@]/.test("-2+3")` → `false` (re-run this run).
+- **Fix:** `const s = /^[=+\-@\t\r]/.test(v) ? \`'${v}\` : v;` (numbers are typed `number` and are unaffected). The `.xlsx` writer is safe already (`t="inlineStr"`).
+- **Verify:** `export-formats.test.ts`: `toCsv(["a"], [["-2+3"]])` contains `'-2+3`; a negative numeric cell `-5` stays `-5`; a sign-in attempt with `User-Agent: -cmd` appears quoted in `format=csv`.
+
+### CR-072 — A "Working as" name outside Latin-1 makes every `/admin` page a 500 through the proxy (local dev only)
+- **Status:** Open (first seen 2026-10-30)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/admin/[[...path]]/route.ts:25`; name source `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/submissions/actions.ts:53-56` and `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/user.ts:15-17`; reader `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/admin.py:100-104`
+- **Problem:** The proxy sets `"x-uw-user": await currentUser()`. Locally that is the free-text cookie (any 60 characters). `fetch` header values must be ByteStrings, so a name such as `Łukasz` or `李雷` throws `TypeError: Cannot convert argument to a ByteString …` before the request is sent, and every Rate-tables page returns the error boundary until the cookie is changed. This is the web-side twin of CR-057. With the gate on (Fly) the value is the signed-in login (ASCII from `fly-users.sh`), so the deployed app is unaffected.
+- **Evidence:** `"x-uw-user": await currentUser()` inside the `fetch` headers object; `setUserAction` applies only `.trim().slice(0, 60)` (re-read this run).
+- **Fix:** Send `encodeURIComponent(user)` in the header and `urllib.parse.unquote` it in `signed_in_user()` (do the same for CR-057's cookie), or restrict `setUserAction` to `^[\x20-\x7E]{1,60}$`.
+- **Verify:** Set "Working as" to `Łukasz`, open `/admin`: 200 and "Signed in as Łukasz"; the rating audit row for a saved edit shows `Łukasz`.
+
+### CR-083 — A session cookie stays valid for up to 7 days after its user is removed from `BASIC_AUTH_USERS` when `SESSION_SECRET` is set, because the middleware never checks the session's user against the configured logins
+- **Status:** Open (first seen 2026-10-30)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/middleware.ts:17-25`; key derivation `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/session.ts:13-15`; session issue `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/signin/actions.ts:28-32`
+- **Problem:** `middleware` accepts `verifySession(cookie, sessionKey(env))` as the identity without testing `users.has(name)`. The build log's stated safety net ("changing the passwords signs everyone out") only holds for the *derived* key: `sessionKey` returns `SESSION_SECRET` unchanged when it is set, so with that documented option in use, deleting a login from `BASIC_AUTH_USERS` (or rotating one password) leaves that person's 7-day `uw_session` fully valid and every page, API and MCP call still runs and audits as them. `fly-users.sh` only adds users, so removal is a hand edit that an operator would reasonably expect to take effect on restart.
 - **Evidence:**
   ```ts
-  const path = referer ? new URL(referer).pathname : "/submissions";
-  redirect(path.startsWith("/") ? path : "/submissions");
+  const name = verifySession(req.cookies.get(SESSION_COOKIE)?.value, sessionKey(process.env))
+    ?? authenticate(req.headers.get("authorization"), users);
+  if (name) { headers.set(AUTH_USER_HEADER, name); return NextResponse.next({ request: { headers } }); }
   ```
-- **Fix:** Wrap in try/catch and require `path.startsWith("/") && !path.startsWith("//")`; optionally compare `URL.origin` with the request host.
-- **Verify:** `curl -X POST` the action with `Referer: http://localhost:3000//evil.example` and with `Referer: junk`; both must redirect to `/submissions`.
+  `return env.SESSION_SECRET || createHash("sha256")…`; `grep -c 'users.has' web/src/middleware.ts` → 0 (re-run this run).
+- **Fix:** After `verifySession`, require `users.has(name)` (`const fromSession = verifySession(…); const name = (fromSession && users.has(fromSession) ? fromSession : null) ?? authenticate(…)`). Optionally mix a per-user password hash into the signed payload so a password change also invalidates that user's sessions under `SESSION_SECRET`.
+- **Verify:** With `SESSION_SECRET` set, sign in as `underwriter2`, remove `underwriter2` from `BASIC_AUTH_USERS`, restart: the next navigation redirects to `/signin`. Add a `session.test.ts`/middleware-level test for a valid cookie naming an unknown user.
 
-### CR-008 — Document route validates `docId` but not the submission `id`, so a bad `id` is a 500
-- **Status:** New
-- **Where:** `web/src/app/submissions/[id]/documents/[docId]/route.ts:8`, `web/src/lib/submissions.ts:45-51`
-- **Problem:** `getDocument` casts `$1` to uuid; a non-uuid `id` segment makes Postgres raise `invalid input syntax for type uuid`, which is an unhandled 500 rather than 404.
-- **Evidence:** `const doc = /^[0-9a-f-]{36}$/i.test(docId) ? await getDocument(id, docId) : null;` only guards `docId`.
-- **Fix:** Apply the same regex to `id` (or move the check into `getDocument`, mirroring `getSubmission`).
-- **Verify:** `curl -i localhost:3000/submissions/nope/documents/00000000-0000-0000-0000-000000000000` → 404.
+### CR-082 — The `/admin` proxy forwards the browser's whole `Cookie` header, including the signed `uw_session` bearer token, to the rating service, which has no use for it
+- **Status:** Open (first seen 2026-10-30)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/admin/[[...path]]/route.ts:9,19-27`; the only cookie the rating service reads is `rating_admin_user` at `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/admin.py:34,147,192`, and only when `x-uw-user` is absent (`:125`), which through the proxy it never is
+- **Problem:** `FORWARD_REQUEST = ["content-type", "cookie", "accept"]` copies the user's `Cookie` header verbatim onto every proxied request. Since step 22 that header carries `uw_session`, an HMAC-signed, 7-day bearer credential for the whole desktop (pages, `/api/gl/*`, `/api/mcp`), and the rating service never consults any cookie while `x-uw-user` is set (the proxy always sets it). The token therefore leaves the service that issued it for no benefit; anything in the rating service's path (request logging turned on later, a Fly proxy trace, a debugging `print(request.headers)`) would capture a replayable session. The `Authorization` header is correctly not forwarded; the cookie should get the same treatment.
+- **Evidence:** `const FORWARD_REQUEST = ["content-type", "cookie", "accept"];` … `...Object.fromEntries(FORWARD_REQUEST.flatMap((h) => (req.headers.get(h) ? [[h, req.headers.get(h)!]] : [])))`; `admin.py:124-127` sets/reads `ACTOR_COOKIE` only `if not signed_in_user(request)` (re-read this run).
+- **Fix:** Drop `cookie` from `FORWARD_REQUEST` (and `set-cookie` from `FORWARD_RESPONSE`); if the standalone actor cookie must survive the proxy, forward only that one name: `cookie: req.headers.get("cookie")?.split(";").map(s => s.trim()).filter(s => s.startsWith("rating_admin_user=")).join("; ")`.
+- **Verify:** Run the rating service with a one-off `print(request.headers.get("cookie"))` in `versions_page` and open `/admin` through the web app signed in: the printed value contains no `uw_session`; the Rate-tables pages still render and save with the signed-in actor.
 
-### CR-009 — Rating admin form handlers do blocking DB work inside `async def`
-- **Status:** New
-- **Where:** `services/rating/app/admin.py:127`, `:169`, `:191`
-- **Problem:** `create_version`, `save_section` and `activate_version` are `async def` (to `await request.form()`) but then call `repository.*`, which does synchronous psycopg I/O on the event loop. Low impact today (admin is single-user), same class of defect as CR-003.
-- **Evidence:** `changed = repository.apply_edits(version_id, list(edits.values()), actor, str(form.get("reason", "")))` inside an `async def`.
-- **Fix:** `from starlette.concurrency import run_in_threadpool` and `await run_in_threadpool(repository.apply_edits, …)` (same for `create_draft`, `activate`).
-- **Verify:** `test_admin_ui_edits_a_variable` and `test_activate_retires_previous` still pass.
+### CR-074 — Audit timestamps are caller-supplied with no record of insertion time, so back-dated rows are indistinguishable from real ones
+- **Status:** Open (first seen 2026-10-30)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/audit.ts:12,20-25` (`occurredAt` → `occurred_at`), `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/main.py:41,57-60` and `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/repository.py:40-47` (`rated_at` → `rating_log.created_at`); callers `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/seed-history.ts:149-171`; schemas `/Users/djsiry/GitHub/underwriting-desktop/web/migrations/policy/001_audit_events.sql:4`, `/Users/djsiry/GitHub/underwriting-desktop/services/rating/migrations/001_schema.sql:54`
+- **Problem:** Step 19 made every pipeline function take an `at` that is written straight into `audit_events.occurred_at` and, over the unauthenticated `POST /rate`, into `rating_log.created_at` (the table the schema calls "for audit and replay"). Neither table keeps the real insertion time any more: a row dated March that was inserted in October looks exactly like one written in March, the Audit page and the GL API's `underwriting_action.events` order and filter on the supplied value, and anyone who can reach the rating service can log a rating at any date. The seeding use case is legitimate; the gap is that the trail cannot tell the two apart.
+- **Evidence:** `VALUES ($1, …, $8, coalesce($9, now()))`; `" VALUES (%s, %s, %s, %s, %s, coalesce(%s, now())) RETURNING id"`; `grep -rn recorded_at web/migrations services/rating/migrations` → nothing (re-run this run).
+- **Fix:** Add `recorded_at timestamptz NOT NULL DEFAULT now()` to `audit_events` and `rating_log` (new migrations), never settable by callers, and show it in the audit viewer when it differs from `occurred_at` ("seeded"/"back-dated"). Optionally accept `occurredAt`/`rated_at` only when `SEED_HISTORY` is set.
+- **Verify:** After migrating, `SELECT count(*) FROM audit_events WHERE recorded_at - occurred_at > interval '1 day'` equals the number of seeded events; a `POST /rate` with `rated_at` outside seeding is refused or recorded with `recorded_at = now()`.
 
-### CR-010 — `save_section` trusts the form field-name shape; a wrong arity is a 500
-- **Status:** New
-- **Where:** `services/rating/app/admin.py:175-181`, `services/rating/app/repository.py:165-169`
-- **Problem:** `kind, *ident, column = name.split("|")` accepts any number of ident parts. A posted name like `class|a|b|base_rate` yields a 2-part ident for a 1-column key, so the parameterised `SELECT … WHERE version_id = %s AND class_code = %s` receives three parameters and psycopg raises a `ProgrammingError` that escapes as a 500 instead of the friendly redirect.
-- **Evidence:** No check that `len(ident) == len(repository.EDITABLE[kind][1])`.
-- **Fix:** In `save_section`, `if kind not in repository.EDITABLE or len(ident) != len(repository.EDITABLE[kind][1]): continue` (or redirect with an error).
-- **Verify:** `client.post("/admin/versions/<draft>/sections/classes", data={"class|a|b|base_rate": "1"})` returns 303 with an error message, not 500.
+### CR-075 — Seeded submissions carry `method: "form_fields"` and `doc_type: "acord_125"`, values outside the extraction contract, so their review page says the application was read by Claude
+- **Status:** Open (first seen 2026-10-30)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/seed-history.ts:95-101`; consumers `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/submissions/[id]/page.tsx:122-127` (`d.method === "form_field" ? "form fields" : "Claude"`), `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/documents.py:35-39` and `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/pipeline.py:7-11` (the real vocabulary)
+- **Problem:** The ingestion service emits `method` as `"form_field" | "claude"` and `doc_type` from `DOC_TYPE_LABELS` (`acord_application`, `loss_run`, …). The seeded `Extraction` invents `"form_fields"` and `"acord_125"`, so for all 50 seeded files the Documents panel reads "acord 125: …-acord-125.pdf · Claude" under a header that says `claude: null`, and any future rule keyed on `doc_type === "acord_application"` will skip them. `documents[].method` and `doc_type` are typed `string`, so the compiler cannot catch it.
+- **Evidence:** `documents: [{ filename: application, doc_type: "acord_125", parent: null, method: "form_fields" },` (re-confirmed this run).
+- **Fix:** Use `doc_type: "acord_application"` and `method: "form_field"`; narrow `Extraction.documents[].method` to `"form_field" | "claude"` and `doc_type` to the union of `DOC_TYPE_LABELS` keys in `submission.ts`.
+- **Verify:** Open a seeded submission's review page: the Documents panel says "ACORD application: … · form fields"; `tsc` fails if a literal outside the union is used.
 
-### CR-011 — `create_draft` copies rows with positional `INSERT … SELECT` and no column list
-- **Status:** New
-- **Where:** `services/rating/app/repository.py:143-151`
-- **Problem:** The three copy statements rely on the physical column order of `class_rates`, `factors` and `parameters`. The schema already evolves by `ALTER TABLE … ADD COLUMN` (migration 003 did it to `rate_versions`); the first added column on any of these tables silently misaligns the copy (or fails on type mismatch) for every new draft.
-- **Evidence:** `"INSERT INTO class_rates SELECT %s, class_code, description, base_rate, min_premium FROM class_rates WHERE version_id = %s"`.
-- **Fix:** Name the target columns: `INSERT INTO class_rates (version_id, class_code, description, base_rate, min_premium) SELECT …`, and likewise for `factors` and `parameters`.
-- **Verify:** `test_draft_copies_active_version` passes; optionally add a migration-free test that drafts still copy after `ALTER TABLE factors ADD COLUMN note text` in a throwaway DB.
+### CR-076 — A seeded file that fails after intake acceptance is skipped forever on the next run, leaving a dangling accepted-but-unquoted submission on that underwriter's desk
+- **Status:** Open (first seen 2026-10-30)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/seed-history.ts:149-171` (`seedOne`), `:186-196`; insured created at `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/submissions.ts:214-219`
+- **Problem:** `seedOne` treats "an insured with this FEIN exists" as "this file is done", but the insured is created in step 2 of 6 (`acceptSubmission`); steps 3–6 call the rating service twice and render three PDFs. When any of them throws, `seedHistory` logs `FAILED`, the half-finished submission stays `accepted` with no quote, and every later run with `SEED_HISTORY` set reports it as "already present". The desk then shows a months-old "Rate <insured>" task, the book is short one policy, and nothing explains why.
+- **Evidence:** `if ((await customerDb.query("SELECT 1 FROM insureds WHERE fein = $1", [risk.fein])).rowCount) return null;` … `await acceptSubmission(id, uw, t.accepted); await saveAndRate(sub, risk.form, uw, t.rated);` (re-read this run)
+- **Fix:** Decide completeness by the end state: look up the submission by insured FEIN and, if it has no bound policy, resume from its current state (rate if no `last_rating`, clear referrals, issue if no quote, bind if no policy) instead of returning `null`; or retry each rating call once during seeding. Log the reference of anything left incomplete.
+- **Verify:** Stop the rating container mid-seed, restart it and re-run with `SEED_HISTORY=50`: the summary ends with `50 bound, 0 failed` and no seeded submission is left in the "Rate …" task list.
 
-### CR-012 — `dedupe_losses` collapses distinct claims that share a date and incurred amount
-- **Status:** New
-- **Where:** `services/ingestion/app/pipeline.py:77-83`
-- **Problem:** The dedupe key is `(date, incurred)`. Two genuinely different claims from one loss run with the same date and amount (two $0 open reserves from a single incident, two claimants at $5,000) are reduced to one, which undercounts `LOSS_FREQUENCY` and understates total incurred downstream.
-- **Evidence:** `unique.setdefault((loss.date, loss.incurred), loss)` regardless of source document.
-- **Fix:** Only collapse a row when a loss-run row with the same `(date, incurred)` comes from a *different* document; never collapse rows that came from the same document (key on `(date, incurred, source_document)` first, then drop non-loss-run duplicates of loss-run rows).
-- **Verify:** Extend `test_loss_from_application_and_loss_run_counted_once` with two same-day, same-amount rows from the loss run alone; both must survive.
+### CR-018 — `/audit?submission=<non-uuid>` is a 500, not "Submission not found"
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/timeline.ts:40-43`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/audit/page.tsx:33`; also reachable through the assistant's `audit_search` tool (`/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/assistant-tools.ts:328-329`)
+- **Problem:** The `submission` query parameter goes straight into `WHERE id = $1` on a `uuid` column; a non-uuid value makes Postgres raise before the not-found branch runs, rendering the error boundary. The accounting page, the GL exports, the GL API and the MCP `gl_journal` tool all emit `/audit?submission=…&correlation=…` links, so a hand-edited link is common.
+- **Evidence:** `"SELECT id, reference, applicant_name, insured_id FROM submissions WHERE id = $1", [submissionId]` with no guard (re-read this run).
+- **Fix:** Export the strict `UUID` regex from `submissions.ts` and test `submissionId` (and `correlation`) at the top of `loadTimeline`; on failure return the existing `warnings: ["Submission not found"]` result.
+- **Verify:** `curl -i localhost:3000/audit?submission=junk` → 200 with "Submission not found".
 
-### CR-013 — Compose/env drift: ingestion does not depend on rating, and `.env.example` omits optional variables
+### CR-031 — Loose uuid regex still lets malformed ids reach the Postgres cast (500 instead of 404), at ten sites
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/submissions.ts:44`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/quotes.ts:47,54,199`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/policies.ts:32,51`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/insureds.ts:25`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/renewals.ts:27,70`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/assistant-tools.ts:32`
+- **Problem:** Only `getDocument` uses the strict `UUID` regex (`submissions.ts:57`); ten lookups use `/^[0-9a-f-]{36}$/i`, which accepts 36 hyphens or 36 `a`s, so `/quotes/aaaa…/pdf`, `/policies/book/aaaa…` etc. crash on the cast instead of `notFound()`, and the assistant's tools report "Tool failed: invalid input syntax for type uuid".
+- **Evidence:** `/^[0-9a-f-]{36}$/i.test("a".repeat(36))` → `true`; ten sites by `grep -rn '\[0-9a-f-\]{36}' web/src/lib | wc -l` → 10 (re-run this run).
+- **Fix:** Export `UUID` from `submissions.ts` (or `http.ts`) and use it in all ten lookups; delete the loose regex.
+- **Verify:** `curl -i localhost:3000/policies/book/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` → 404; a `node --test` on `UUID`.
+
+### CR-033 — `lpad(…, 4)` truncates reference and quote numbers past 9,999, producing collisions
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/submissions.ts:99`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/renewals.ts:192`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/quotes.ts:87`; the assistant's `get_quote` parser `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/assistant-tools.ts:204` hard-codes the same four digits (`/^(Q-\d{4}-\d{4})(?:\s*V(\d+))?$/`) while `search-terms.ts:11` accepts `Q-\d{4}-\d+`
+- **Problem:** Postgres `lpad` truncates longer strings, so sequence value 10000 becomes `SUB-1000` / `Q-2026-1000`, colliding with 1000 under the unique constraints. Seeding (50 per run) and the self-refilling inbox (10 per top-up) make the sequence grow faster than before. Once the padding is widened, the assistant's `get_quote` regex must follow or it will answer "No quote Q-2026-10001" for a quote the search box finds.
+- **Evidence:** `SELECT lpad('10000', 4, '0')` → `1000` (documented Postgres behaviour); three `lpad(nextval…, 4` sites by grep this run; `/^(Q-\d{4}-\d{4})(?:\s*V(\d+))?$/.test("Q-2026-10001")` → `false` (re-run this run).
+- **Fix:** `lpad(n::text, GREATEST(4, length(n::text)), '0')` or format in TypeScript with `padStart`; change the `get_quote` regex to `Q-\d{4}-\d+`. Fix CR-045 at the same time.
+- **Verify:** `setval('submission_reference_seq', 9999)` on a scratch DB, upload twice: `SUB-10000`, `SUB-10001`; `get_quote` with `Q-2026-10001` resolves.
+
+### CR-045 — `GET /ratings?reference_prefix=` is an unanchored, unescaped prefix match, so the case view will mix reference families
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/repository.py:56-66`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/timeline.ts:57-59`
+- **Problem:** `r.reference LIKE %(p)s || '%'` has no delimiter and no escaping; `SUB-1000` pulls `SUB-10000`…`SUB-10009` once references exceed four digits (reachable after CR-033), and `%`/`_` act as wildcards. Renewal bridge ratings use `"<SUB> on <version>"` as reference, which this does match correctly.
+- **Evidence:** `" WHERE %(p)s::text IS NULL OR r.reference LIKE %(p)s || '%%'"` (line 63, re-read this run).
+- **Fix:** `r.reference = %(p)s OR r.reference LIKE %(p)s || ' %%'` with `\`, `%`, `_` escaped in the parameter.
+- **Verify:** Rate `SUB-1000`, `SUB-10000`, `Q-2026-1000 v1`, `Q-2026-10001 v1`; `reference_prefix=SUB-1000` returns exactly one row.
+
+### CR-056 — A repeated query parameter (`?q=a&q=b`, `?underwriter=…&underwriter=…`) crashes `/search`, `/audit`, `/quotes`, `/policies` and `/assistant` with a 500
+- **Status:** Open (first seen 2026-10-26)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/search/page.tsx:9-13`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/search-terms.ts:19`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/audit/page.tsx:16,31-34`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/timeline-merge.ts:128-137`; `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/quotes/page.tsx:22` and `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/policies/page.tsx:13` (`p.underwriter?.trim()`); `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/assistant/page.tsx:25` (`q?.trim()`)
+- **Problem:** The pages type `searchParams` values as `string`, but Next.js delivers a repeated key as `string[]`; `parseQuery(q)` calls `input.trim()`, `applyFilters` calls `f.q?.trim()`/`f.actor.toLowerCase()`, the quotes/policies pages call `p.underwriter?.trim()`, and `/assistant?q=a&q=b` calls `q?.trim()`, all throwing `TypeError` during render (caught by `error.tsx`, but still a broken page). A repeated `submission` reaches the uuid cast as an array literal. (The new `/audit/logins?hours=` is safe: `Number([..]) || 24` falls back.)
+- **Evidence:** `type Props = { searchParams: Promise<{ q?: string; all?: string }> }`; `["a","b"].trim` is `undefined` (re-read this run).
+- **Fix:** Add `first(v: string | string[] | undefined)` in `http.ts`, type `searchParams` as `Record<string, string | string[] | undefined>`, and apply `first()` to every key used.
+- **Verify:** `curl -i 'localhost:3000/search?q=a&q=b'`, `'localhost:3000/audit?actor=a&actor=b'`, `'localhost:3000/quotes?underwriter=a&underwriter=b'` and `'localhost:3000/assistant?q=a&q=b'` return 200.
+
+### CR-053 — `referral.cleared` stores the flag as `before` and the clearance as `after`, so the audit viewer renders a six-row "deleted/added" diff for a single clearance
+- **Status:** Open (first seen 2026-10-25)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/worksheets.ts:163-166`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/timeline-merge.ts:73-84`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/audit/page.tsx:115,131-143`
+- **Problem:** Every other event uses before/after as two snapshots of one thing; `clearReferral` writes the `Flag` as before and the `Clearance` as after, so `changes()` shows `code: ROOFING → —`, `severity: refer → —`, `title → —`, `by: — → manager`, `at`, `note`, as if the referral was deleted and unrelated fields appeared. This is the only audit record of a manager override, and the seeded history writes ten of them.
+- **Evidence:** `summary: \`${sub.reference}: referral "${flag.title}" cleared\`, before: flag, after: clearance,` (line 165); `changes(<flag>, <clearance>)` → six rows (`code`, `severity`, `title`, `by`, `at`, `note`) by reading `changes()`.
+- **Fix:** `before: { [code]: { status: "open", detail } }`, `after: { [code]: { status: "cleared", by, note, detail } }`, plus a `display()` branch for `{ status, by?, note? }`.
+- **Verify:** `timeline-merge.test.ts` asserts one row whose field is the rule code; clear the roofing referral and check the case history card.
+
+### CR-048 — A required field that was corrected and then blanked is "missing" to the accept gate but invisible to the attention flags
+- **Status:** Open (first seen 2026-10-24)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/submissions/page.tsx:47-50`, `:61-66`; `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/submissions/[id]/page.tsx:182`; `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/submissions.ts:161-197`
+- **Problem:** The inbox skips corrected paths before `attention()` while `missing` counts empty required fields regardless; `corrected_fields` only grows, so a corrected-then-cleared required field shows `1 missing` and `looks complete` at once and `flags - missing` goes negative. `FieldRow` sets `reason = corrected ? null : attention(...)`, so the blank required field gets the indigo "Corrected" treatment with no red marker.
+- **Evidence:** `const flags = FIELD_DEFS.filter((d) => !s.corrected_fields.includes(d.path) && attention(…)).length; … {flags === 0 && <span …>looks complete</span>}` (re-read this run).
+- **Fix:** Treat "empty and required" as an attention reason regardless of correction; render `looks complete` only when both counts are zero; optionally drop a path from `corrected_fields` when its value returns to the extracted one.
+- **Verify:** Correct the class code, save, clear it, save: the inbox shows only `1 missing` and the review row carries the red label.
+
+### CR-024 — Quote prints a products-completed-ops aggregate the underwriter never saw
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/quotes.ts:105`; renewals carry it forward at `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/renewals.ts:41-45,107`
+- **Problem:** The products aggregate comes from the broker's reviewed submission while occurrence and general aggregate come from the worksheet; the workbench has no products-aggregate input, so changing the general aggregate to $4M prints a $2M products aggregate beside it with no screen showing it, and a renewal copies the stale figure into the next year's terms.
+- **Evidence:** `amount: Number(sub.data.policy?.products_aggregate_limit ?? inputs.aggregate_limit)` (re-read this run).
+- **Fix:** Default the products aggregate to `inputs.aggregate_limit` with a read-only line on the Quote card, or add `products_aggregate_limit` to `INPUT_DEFS`.
+- **Verify:** Rate with general aggregate $4M, issue, open the PDF: all three limits consistent with the Quote card.
+
+### CR-040 — Insureds are matched on the FEIN string byte-for-byte, so formatting variants create duplicate customers
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/submissions.ts:211-219`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/submission.ts:15`, `:109-114`, `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/schema.py:19`, `/Users/djsiry/GitHub/underwriting-desktop/web/migrations/customer/001_submissions.sql:10`; renewals of prior-system policies add FEIN-less insureds matched by name only at `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/renewals.ts:124-129`; the seeder's idempotency (CR-076) keys on the raw string at `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/seed-history.ts:150`
+- **Problem:** Nothing normalizes the FEIN (`str` in ingestion, trimmed text in `fromInput`), so `743810922`, `74 3810922` or `FEIN 74-3810922` create a second customer with its own policies and written premium.
+- **Evidence:** `const fein = String(a.fein ?? "").trim(); … "SELECT id FROM insureds WHERE fein = $1"`; `FIELDS["applicant.fein"] == "str"` (re-read this run).
+- **Fix:** Add a `fein` type on both sides that reduces to digits and re-formats `NN-NNNNNNN` when nine digits are present; compare on the normalised value; optionally index on `regexp_replace(fein, '\D', '', 'g')`.
+- **Verify:** Accept `74-3810922` then `743810922`: `/insureds` shows one customer with two submissions.
+
+### CR-032 — Out-of-range rate values are a 500 from the admin UI and API, not a validation message
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/repository.py:195-199`, `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/admin.py:212-218`, `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/main.py:91-99`, `/Users/djsiry/GitHub/underwriting-desktop/services/rating/migrations/001_schema.sql:32,41`
+- **Problem:** `apply_edits` rejects only `<= 0`. `factors.value` is `numeric(8,4)`, so `100000` (or any value with more than four integer digits) reaches the UPDATE and Postgres raises `numeric field overflow`, a `psycopg.DataError` that neither `admin_errors` nor `save_section` catches; the admin returns a bare 500 and the typed edits are lost, and the JSON API returns 500 instead of 422.
+- **Evidence:** The only guard is `if any(Decimal(v) <= 0 for v in updates.values())` (line 198, re-read this run); `value numeric(8,4)` in `001_schema.sql:32`.
+- **Fix:** Validate before the UPDATE: `if not v.is_finite() or v <= 0 or v >= Decimal("10000"): raise ValueError(...)`; catch `psycopg.DataError` in `admin_errors` and `save_section` as a backstop.
+- **Verify:** `edit(client, draft["id"], value=100000).status_code == 422`; a form post with `100000` redirects with a readable error instead of a 500.
+
+### CR-039 — The rate admin's `num` filter mangles version labels in the audit "Change" column ("2026.10" shows as "2026.1")
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/templates/_audit.html:12`, `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/admin.py:22-29`, `:130-136`
+- **Problem:** `_audit.html` applies `num` to every before/after value including `activate` rows whose values are labels; `Decimal("2026.10").normalize()` → `2026.1`, and `next_label` produces exactly these labels.
+- **Evidence:** `{{ a.before[k] | num }} → <strong>{{ v | num }}</strong>`; `format(Decimal("2026.10").normalize(), "f")` → `2026.1` (re-read this run).
+- **Fix:** Apply `num` only when `a.action.startswith("update_")`, or make `num` return `str` inputs unchanged.
+- **Verify:** Activate a draft labelled `2026.10`; the row reads `2026.1 → 2026.10`; unit test `num("2026.10") == "2026.10"`.
+
+### CR-057 — A "Your name" outside Latin-1 makes every successful standalone rate-admin save, draft creation and activation answer with a 500 after the change has already been committed
+- **Status:** Open (first seen 2026-10-26)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/admin.py:124-127` (`remember_actor`), called from `:163`, `:220`, `:231`
+- **Problem:** When no `x-uw-user` header is present (standalone `:8001`, local dev), the handlers commit the repository call, then `response.set_cookie(ACTOR_COOKIE, actor, …)`; Starlette serialises via `SimpleCookie` and `encode("latin-1")`, which raises `UnicodeEncodeError` for code points above U+00FF (`Łukasz`, `李雷`). The change is in the database and audited, but the user sees "Internal Server Error" and a resubmit says "Nothing changed". Through the Desktop proxy the cookie is not set, so this is local-only (see CR-072).
+- **Evidence:** `response.set_cookie(ACTOR_COOKIE, actor, max_age=60 * 60 * 24 * 365, samesite="lax")` (re-read this run); `'Łukasz'.encode('latin-1')` → `UnicodeEncodeError`.
+- **Fix:** Store the cookie with `urllib.parse.quote(actor, safe="")` and read it back with `unquote`.
+- **Verify:** Post the territory section standalone with `actor: "Łukasz"`: 303, and the next GET shows `value="Łukasz"`; `"Zoë"` still round-trips.
+
+### CR-020 — Claude call can retry for ~15 minutes and non-API failures escape as 500s
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/claude.py:159`, `:204-205`
+- **Problem:** `anthropic.Anthropic(api_key=…, timeout=300.0)` keeps the SDK default `max_retries=2`, so a failing request can hold a threadpool worker for three 300 s attempts while the web tier abandons at 300 s and the underwriter retries. Only `APIStatusError`/`APIConnectionError` become warnings; `next(b.text for b in response.content if b.type == "text")` (StopIteration with no text block) and `json.loads(text)` sit outside the `try` and surface as HTTP 500 on `/extract` (and as an in-band `error` on `/extract/stream`).
+- **Evidence:** `grep -n "max_retries\|timeout=" services/ingestion/app/claude.py` → only `timeout=300.0` at line 159 (re-run this run); lines 204-205 are outside the `try`.
+- **Fix:** `anthropic.Anthropic(api_key=api_key(), timeout=240.0, max_retries=1)`; wrap the text lookup and `json.loads` in `try/except (StopIteration, ValueError)` raising `ExtractionError("Claude returned no parseable JSON")`.
+- **Verify:** Monkeypatch the stream's `get_final_message` to return a response with only a thinking block; `pipeline.run` must return a warning, not raise.
+
+### CR-087 — Cancelling a streamed extraction does not stop the Claude call already running, and `/extract/stream` runs each request on its own uncancellable, unbounded daemon thread
+- **Status:** Open (first seen 2026-10-31)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/main.py:95-120` (`extract_stream`: the `work()` thread, the `lines()` generator), `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/claude.py:161-194` (the streaming loop has no cancellation check); the cancelling side `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/submissions/inbox/[folder]/extract/route.ts:37-40` (`AbortSignal.any([req.signal, …])`) and `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/submissions/inbox-list.tsx:63-67` (`close()` aborts the fetch); the claim in `docs/BUILD_LOG.md` step 14 ("Cancel aborts the request, which aborts the ingestion call")
+- **Problem:** Cancel reaches exactly as far as the ingestion socket. The web route aborts its `fetch`, and Starlette stops iterating `lines()` when the client disconnects, but nothing signals `work()`: it keeps consuming the Claude stream to the end (20–40 s, the full token spend), keeps `emit`ting into a `queue.Queue` nobody drains any more, then exits. So Cancel saves nothing, and the natural next click ("Extract" again, or a different folder while the first is still running server-side) runs two Claude extractions at once. Unlike `/extract`, which goes through `run_in_threadpool` (bounded by anyio's default 40-token pool), every `/extract/stream` request spawns a fresh `threading.Thread(daemon=True)` holding the uploads and the base64 PDFs, with no cap and no way to stop it. For the demo the cost is one wasted Claude call per cancel; the robustness gap is that the service has no back-pressure on its most expensive path.
+- **Evidence:**
+  ```python
+  threading.Thread(target=work, daemon=True).start()
+  def lines():  # Starlette iterates a sync generator in its threadpool, so blocking get() is fine
+      while (event := events.get()) is not None:
+          yield json.dumps(event, default=str) + "\n"
+  ```
+  `work()` and `claude.extract()` take no cancellation token; `for event in stream:` in `claude.py:176` runs to completion regardless of the client; `/extract` at `main.py:84-85` is the only path that uses `run_in_threadpool` (re-read this run).
+- **Fix:** Create a `threading.Event()` per request and pass it through `pipeline.run(..., cancelled=ev)` into `claude.extract`; in the stream loop `if cancelled.is_set(): stream.close(); raise ExtractionError("extraction cancelled")`. Set the event from a `finally:` in `lines()` (the generator is closed when the client disconnects) and/or from a `BackgroundTask`. Bound concurrency with a module-level `threading.Semaphore(4)` acquired in `work()` (answer 503 "busy" when it cannot be acquired within a few seconds), or run the worker via `run_in_threadpool` and hand events to the loop with `anyio.from_thread`.
+- **Verify:** Add an ingestion test that monkeypatches `claude.extract` with a fake that loops on `cancelled.wait(0.1)` and raises when set; open `/extract/stream` with `client.stream(...)`, read two events, close the stream, and assert the fake observed the cancel within a second. Manually: start case 06 from the inbox, press Cancel within 5 s, and confirm the ingestion log shows no later "Claude returned N fields" step.
+
+### CR-088 — The assistant's `rate_versions` tool is the only web call to the rating service still on an 8 s timeout, shorter than the Fly cold start every other call was raised to outlast
+- **Status:** Open (first seen 2026-10-31)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/assistant-tools.ts:343`; the shared constant at `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/rating-api.ts:9` (`RATING_TIMEOUT_MS = 15_000`) and the same `/rate-versions` fetch done with it at `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/rating-api.ts:58-63` (`rateVersionId`); surfaced through `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/assistant.ts:127-137` (`runTool` turns the rejection into `Tool failed: …`)
+- **Problem:** Step 23 (CR-041) raised every web call to rating to `RATING_TIMEOUT_MS` because 3–5 s is shorter than a Fly cold start (4–6 s, and about 65 s during the host-capacity event the build log records). The `rate_versions` tool was added in step 21 with its own `AbortSignal.timeout(8000)` and does not go through `rating-api.ts`, so it is the one remaining call that can time out while the machine is starting. When it does, the tool rejects with `This operation was aborted`, `runTool` returns `Tool failed: …` with `is_error`, and the assistant tells the user the rate tables are unavailable ("Which rate version is active?", "Who changed the rate tables?" when it pairs with `audit_search`) at the same moment the Rate-tables page and the workbench, on 15 s, would have answered. The same list is already fetched correctly by `rateVersionId()` one module away.
+- **Evidence:** `grep -rn "AbortSignal.timeout(8000)" web/src` → only `assistant-tools.ts:343` (re-run this run): `const res = await fetch(\`${RATING_SERVICE_URL}/rate-versions\`, { cache: "no-store", signal: AbortSignal.timeout(8000) });`.
+- **Fix:** Add `export async function listRateVersions(): Promise<RateVersion[]>` to `rating-api.ts` using `RATING_TIMEOUT_MS` (and `errorDetail` for a non-OK reply), make `rateVersionId` call it, and have the `rate_versions` tool use it instead of its own `fetch`; return `{ error: "Rating service unreachable (…)" }` on `RatingServiceError` so the model gets the same structured error as other tools.
+- **Verify:** `grep -rn "AbortSignal.timeout(8000)" web/src` → nothing; with rating stopped and a stub that answers `/rate-versions` after 10 s, ask the assistant "Which rate version is active?": the `rate_versions` tool result is `ok` and the answer names the version instead of "Tool failed".
+
+### CR-089 — The assistant's team-wide `book_summary`, `renewals_due` and `underwriters` tools attribute UW Desktop policies to `bound_by`, while the desk, `/book`, `/policies?underwriter=` and the per-underwriter `book_summary` attribute them to the submission's `received_by`, so the two views disagree as soon as one underwriter binds another's file
+- **Status:** Open (first seen 2026-10-31)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/assistant-tools.ts:274-275` (`book_summary`, everyone), `:305-306,310` (`renewals_due`: `bound_by = $2` filter and `underwriter: p.bound_by`), `:70,390` (`underwriterNames`, `underwriters`); contrast `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/dashboard.ts:7,51-53,68` (`received_by` → `submission_id = ANY(mine)`), `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/submissions.ts:33-36` (`submissionIdsReceivedBy`), `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/policies/page.tsx:15` and `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/quotes/page.tsx:23`
+- **Problem:** Step 15 defined ownership as "the underwriter who picked up a submission (`received_by`) owns it, and through it its quotes and policies", and every desk-facing number follows that rule, including `book_summary` when asked for one underwriter (it calls `loadDashboard`). The team-wide branch of `book_summary`, the `renewals_due` tool and the `underwriters` tool instead group Desktop policies by `policies.bound_by`. Nothing prevents underwriter2 from opening underwriter1's workbench and binding (`bindAction` takes any quote id; there is no ownership check anywhere), and the sign-in page explicitly supports several people on one instance. Once that happens the `by_underwriter` breakdown the assistant gives a manager no longer sums to the individual desks, "renewals_due underwriter=underwriter1" omits a policy that underwriter1's own desk and `/book?due=` list, and the same question asked for one person versus the team returns different ownership. The seeded history always binds with the receiving user, so the demo data hides it.
+- **Evidence:** `SELECT bound_by AS underwriter, count(*)::int AS policies, sum(premium)::float8 AS premium … FROM policies WHERE expiration_date >= CURRENT_DATE GROUP BY bound_by` (`assistant-tools.ts:274-275`) and `… AND ($2::text IS NULL OR bound_by = $2)` (`:306`) versus `const mine = subs.map((s) => s.id); … FROM policies p JOIN quotes q ON q.id = p.quote_id WHERE p.submission_id = ANY($1)` (`dashboard.ts:54,68`); `grep -n bound_by web/src/lib/dashboard.ts` → nothing; `grep -n bound_by web/src/lib/assistant-tools.ts` → lines 47, 70, 274-275, 304-306, 310, 390 (re-run this run).
+- **Fix:** Use one definition of ownership. Simplest and consistent with step 15: in the three team queries, resolve the owner through the submission (`SELECT id, received_by FROM submissions` once from the customer DB and group in app code, as `loadDashboard` already does), or denormalise it at bind (`policies.underwriter` set from the submission's `received_by` in `bindQuote`) and read that column everywhere, keeping `bound_by` as "who clicked Bind". Apply the same to `renewals_due` and `underwriters`, and document the rule in the tool descriptions.
+- **Verify:** Sign in as underwriter2 and bind an issued quote on a submission underwriter1 received. Then `book_summary` with no underwriter: `by_underwriter[].uw_desktop_premium` must sum to each desk's "New business" tile; `renewals_due` with `underwriter=underwriter1` and `days=400` must list that policy exactly as underwriter1's `/book?due=400` does; `underwriters` must credit it to underwriter1. Add a unit test for the ownership helper if one is introduced.
+
+### CR-091 — The sign-in report re-runs permanently failed geo lookups on every render, up to ten outbound 2.5 s calls inside the page and API request path
 - **Status:** New
-- **Where:** `docker-compose.yml:25-32`, `.env.example`, `services/ingestion/app/main.py:27-33`
-- **Problem:** `ingestion` has no `depends_on: rating`, so an extraction right after `docker compose up` can hit `/classes` before rating has migrated; `rateable_classes()` swallows the error and Claude is told "(class list unavailable)", losing the guard that class codes must be rateable. `.env.example` lists only `ANTHROPIC_API_KEY`, while code also reads `EXTRACTION_MODEL`, `RATING_ADMIN_URL` and `SAMPLES_DIR`.
-- **Evidence:** `except (OSError, ValueError): return []` with no warning surfaced to the caller; compose `ingestion` block has no `depends_on`.
-- **Fix:** Add `depends_on: rating: { condition: service_started }` to `ingestion` (ideally a `/health` healthcheck on rating and `service_healthy`), append a warning to the extraction result when the class list is empty, and document the three optional variables in `.env.example` as commented defaults.
-- **Verify:** `docker compose config` shows the dependency; `pipeline.run(..., classes=[])` output contains a "class list unavailable" warning.
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/login-events.ts:85-88` (`loginReport`: the `missing` query and `Promise.all(... fillGeo ...)` before the report is built), `:51-66` (`lookupGeo` writes `geo_source = "ipwho.is: <message>"` on `success:false` and `"ipwho.is unreachable (…)"` on a timeout, both with `geo = null`), `:10` (`GEO_TIMEOUT_MS = 2_500`); callers `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/audit/logins/page.tsx:78` and `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/api/reports/logins/route.ts:29`
+- **Problem:** The retry query selects `geo IS NULL AND ip IS NOT NULL AND (geo_source IS NULL OR geo_source LIKE 'ipwho.is%')`, and every failure path writes a `geo_source` that starts with `ipwho.is`, so a row ipwho.is can never place (a `success:false` answer such as a reserved or bogon range) or any row that failed while the service was down is re-queried on every render of `/audit/logins` and every daily report, forever, ten rows at a time. The lookups run *before* the report is built, so when ipwho.is is slow or down the page and the API answer about 2.5 s late, and the step's own design note ("the report should be instant … the sign-in should never wait on a third-party service") is undone for the report side. There is no attempt counter and no backoff.
+- **Evidence:**
+  ```ts
+  "SELECT id, ip FROM login_events WHERE geo IS NULL AND ip IS NOT NULL AND (geo_source IS NULL OR geo_source LIKE 'ipwho.is%') ORDER BY id DESC LIMIT 10"
+  await Promise.all(missing.filter((r) => isPublicIp(r.ip)).map((r) => fillGeo(Number(r.id), r.ip)));
+  …
+  if (!j.success) return { geo: null, source: `ipwho.is: ${j.message ?? "no result"}` };
+  ```
+  (re-read this run)
+- **Fix:** Make terminal failures non-retryable: on `success:false` write `geo_source = 'no location: <message>'`; add `geo_attempts int NOT NULL DEFAULT 0` (or `geo_tried_at`) in a migration, bump it in `fillGeo`, and retry only `geo_attempts < 3 AND (geo_tried_at IS NULL OR geo_tried_at < now() - interval '1 hour')`. Run the retries after the response (`after(() => …)`) or from `scripts/login-report.sh`'s call only, so the page never waits on them.
+- **Verify:** With the gate on locally, attempt a sign-in with `-H 'X-Forwarded-For: 192.0.2.1'` (TEST-NET, public to `isPublicIp`, unknown to ipwho.is); reload `/audit/logins` twice with outbound logging on: the second render makes no request to ipwho.is and the row shows a terminal reason; with ipwho.is unreachable the page still renders in well under a second.
+
+### CR-092 — The assistant's `audit_search` tool falls back to the global timeline when the submission reference it was given does not exist, so the model gets everyone's events as that file's "case history"
+- **Status:** New
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/assistant-tools.ts:328-329` (`submissionIdFor` → `null`, then `loadTimeline(subId ?? undefined)`), `:334` (`audit_url` falls back to `/audit`); contrast the page at `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/timeline.ts:40-43`, which answers "Submission not found" for the same input
+- **Problem:** `submissionIdFor("SUB-9999")` returns `null` when no such reference exists; `null ?? undefined` is `undefined`, so `loadTimeline()` runs in global mode and returns the newest 500 events across every submission, with `scope: null`. The tool result carries no error (`isError` stays false), so a question like "what happened to SUB-9999?" is answered from unrelated events, and the model may narrate another file's quote, bind or referral clearance as that one's history. The UI path for the same reference says "Submission not found".
+- **Evidence:** `const subId = str(a.submission_id) ? await submissionIdFor(str(a.submission_id)) : undefined; const t = await loadTimeline(subId ?? undefined);` (re-read this run); `submissionIdFor` ends `return rows[0]?.id ?? null;`.
+- **Fix:** `if (str(a.submission_id) && !subId) return { error: \`No submission ${str(a.submission_id)}\` };` before calling `loadTimeline`, matching `get_submission`'s behaviour.
+- **Verify:** Ask the assistant "What happened to SUB-9999?": the `audit_search` call shows as failed with "No submission SUB-9999" and the answer says it does not exist; `audit_search` with a real reference still returns `scope.reference`.
+
+### CR-093 — API logins are recorded only on the GL document routes and the MCP endpoint, so the daily report script's own call and the other gated API routes never appear in the sign-in report
+- **Status:** New
+- **Where:** `noteApiLogin` callers are only `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/gl-http.ts:15` (`glContext`, used by seven `/api/gl/*` routes) and `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/api/mcp/route.ts:17`; not called from `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/api/reports/logins/route.ts`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/api/gl/accounts/route.ts`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/api/gl/openapi.json/route.ts` or `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/api/health/route.ts`, all of which the middleware gates with the same Basic login (`/Users/djsiry/GitHub/underwriting-desktop/web/src/middleware.ts:9,28-33`)
+- **Problem:** The report and its footer promise "one row per login, address and hour for HTTP Basic callers of the GL API and the MCP endpoint", but the recording is a per-route call. `scripts/login-report.sh` authenticates with Basic to `GET /api/reports/logins` every day and is never recorded, so the one scheduled machine identity that pulls the report is invisible in it; a monitor polling `/api/health` with a login, or a client that only fetches the OpenAPI document and the chart of accounts, is reported as "never signed in".
+- **Evidence:** `grep -rn noteApiLogin web/src | grep -v login-events.ts` → `api/mcp/route.ts:17` and `lib/gl-http.ts:15` only (re-run this run); `api/reports/logins/route.ts` imports neither `glContext` nor `noteApiLogin`.
+- **Fix:** Record it once in one place: in `middleware.ts`, when `authenticate()` (the Basic branch) produced the name on an `/api/` path, set a request header such as `x-uw-api-login: 1`, and have a single helper (`apiLogin(req)`, or `signedInUser()` itself) call `noteApiLogin` when that header is present; or at minimum add `noteApiLogin(await signedInUser(), req.headers)` to the four routes above.
+- **Verify:** `curl -u underwriter1:… '<web>/api/reports/logins?format=json'` and `'<web>/api/health'`, then open `/audit/logins`: one `api` row for `underwriter1` from that address within the hour; a second call in the same hour adds no row.
+
+### CR-025 — Claude candidates are collapsed by confidence only, bypassing the documented merge order
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/claude.py:218-221`, `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/pipeline.py:94-109`
+- **Problem:** `_parse` keeps one `FieldValue` per path by highest confidence regardless of `basis`, before `merge` applies "form > stated > inferred > confidence". An inferred 0.85 beats a stated 0.7, and the loser never reaches `conflicts`, so questionnaire-vs-email disagreements are invisible.
+- **Evidence:** `if item["path"] not in best or fv.confidence > best[item["path"]].confidence: best[item["path"]] = fv` (line 220, re-read this run).
+- **Fix:** Return all parsed candidates (dedupe identical path+source+value) and let `merge` choose, or sort with `merge`'s key.
+- **Verify:** Extend `test_parse_claude_reply_normalizes_and_drops_bad_values` with two entries for one path from different documents; both survive and `merge` lists the loser in `conflicts`.
+
+### CR-058 — The "Claude can only pick rateable class codes" guard exists only in the prompt; nothing checks the returned code
+- **Status:** Open (first seen 2026-10-26)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/claude.py:45-46`, `:55-70`, `:208-221`; `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/pipeline.py:55-56`
+- **Problem:** The class list is only interpolated into `INSTRUCTIONS`; `response_schema` leaves `value` a free string, `_parse` normalises `operations.class_code` as plain `str`, and `pipeline.run` never compares with `classes`. An off-list code satisfies the accept gate and fails two screens later at Save & rate. The CR-013 warning ("unchecked against rateable classes") implies a check that is never made.
+- **Evidence:** `classes` is used only at `claude.py:158/172` and `pipeline.py:55-58` (re-confirmed by reading this run); no `in classes`, no enum on `value`.
+- **Fix:** After `claude.extract`, for `operations.class_code` candidates with `classes` non-empty: drop inferred off-list values with a warning, keep stated ones with a "not rateable" warning; reword the `pipeline.py:56` text.
+- **Verify:** Monkeypatch `claude.extract` to return `99999` inferred with `classes=[{"class_code": "92215", …}]`: `class_code == ""`, path in `missing_for_rating`, warning mentions `99999`; stated → kept with warning; `classes=[]` → neither.
+
+### CR-060 — The ingestion merge reports "Documents disagree" for `operations.states` when two sources list the same states in a different order
+- **Status:** Open (first seen 2026-10-28)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/pipeline.py:103`, `:112-113`; `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/schema.py:115-119`
+- **Problem:** `_same_value` compares lists with `==`, and `normalize()` keeps document order, so `FL, GA` vs `GA and FL` is a conflict: the review page marks States "Documents disagree", the inbox counts it "to check". `score.py` already treats state lists as sets.
+- **Evidence:** `return a.casefold() == b.casefold() if isinstance(a, str) and isinstance(b, str) else a == b`; `["FL","GA"] == ["GA","FL"]` → `False` (re-run this run in Node for the JS twin; Python semantics identical).
+- **Fix:** Order-insensitive list comparison in `_same_value` (`sorted(a) == sorted(b)`), or sort state lists in `normalize()` and mirror in `fromInput`.
+- **Verify:** `pipeline.merge` of `["FL","GA"]` (form) and `["GA","FL"]` (claude) → `conflicts == []`; `["FL","TX"]` still conflicts.
+
+### CR-042 — Documents Claude never read are reported (and audited) as `method: "claude"`
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/documents.py:35-39`, `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/pipeline.py:52-54,87`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/submissions/[id]/page.tsx:122-127`
+- **Problem:** `Document.summary()` sets `method` from form-field presence before extraction runs, so with Claude disabled or failed the review page says "loss run: … · Claude" under a warning that the same file was not read, and the `submission.received` audit event stores it permanently.
+- **Evidence:** `"method": "form_field" if self.has_form_fields else "claude",` (line 38) is the only place `method` is set (re-read this run).
+- **Fix:** In `pipeline.run`, set `"claude"` only when `claude_info` is set, otherwise `"not_read"`; map it on the review page (and narrow the TypeScript type, see CR-075).
+- **Verify:** `pipeline.run(case_files("01"), classes=[])["documents"][1]["method"] == "not_read"`.
+
+### CR-059 — The audit page applies its filters after a 500-row-per-source cap, so "From/To", "Who", search and correlation links silently miss older events
+- **Status:** Open (first seen 2026-10-27)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/timeline.ts:9,55,59,62-64`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/audit/page.tsx:33-35,101`; the assistant's `audit_search` tool (`/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/assistant-tools.ts:329-330`) has the same cap behind its date filters
+- **Problem:** `loadTimeline` fetches the newest 500 per source and the page filters in memory; none of the filters reach the database or the rating API. The seeded history alone adds roughly 600 desktop events and 100 rating-log rows dated January–October, so on a seeded instance the global audit page already drops events, and a date range, search or a `?correlation=` link from the Accounting page over older activity returns "No events match" while the events exist. "Showing N of 500" gives no truncation signal, and the assistant answers "who did X in March" from the same truncated window.
+- **Evidence:** `const LIMIT = 500;` on all three queries; `applyFilters` is purely in-memory; `GET /ratings` and `GET /rate-table-audit` accept only `limit`/`version_id`/`reference_prefix` (re-read this run).
+- **Fix:** Minimum: return `truncated` when any source hits `LIMIT` and render a banner (and include it in the tool result); push `correlation` into the `audit_events` query. Better: push `from`/`to`/`actor` into the query and add `since`/`until`/`actor` parameters to the two rating endpoints.
+- **Verify:** On an instance seeded with `SEED_HISTORY=50`, `/audit?from=2026-01-01&to=2026-02-28` must list the January and February events or show the banner.
+
+### CR-035 — Timestamps are rendered in the server's time zone (UTC in containers) with no zone shown, except on the Accounting and Sign-ins pages
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/components/ui.tsx:45`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/submissions/page.tsx:70`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/submissions/[id]/page.tsx:38,152`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/submissions/[id]/workbench/page.tsx:288`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/audit/page.tsx:119`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/quotes/page.tsx:73`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/policies/page.tsx:50`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/page.tsx:160`, `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/templates/_audit.html:5`; `today` in `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/dashboard.ts:50` and the bind/quote `today` values are UTC dates
+- **Problem:** Every time outside `/accounting` (New York) and `/audit/logins` (labelled UTC) is formatted server-side with `toLocaleString("en-US", …)` or `strftime` and no `timeZone`; the images have no `TZ`, so the demo shows UTC with nothing saying which zone, while the Accounting page shows the same bind in New York time. The desk's "today", quote `valid_until`, bind `today` and the audit From/To filters use UTC dates, so a bind at 9 pm Eastern lands in tomorrow's book and in today's accounting period.
+- **Evidence:** `grep -rln timeZone web/src services/rating/app` matches only `page.tsx` (two date-only labels), `book/page.tsx`, `accounting/page.tsx`, `gl-journal.ts`, `gl-export-json.ts`, `gl-service.ts` and `ledger.ts` (re-run this run).
+- **Fix:** Promote `GL_TIME_ZONE` to a shared `DISPLAY_TIMEZONE` (default `America/New_York`) with one `when()`/`todayIso()` helper passing `{ timeZone, timeZoneName: "short" }`; use `todayIso()` for the dashboard, bind and quote dates; set `TZ` for the rating admin.
+- **Verify:** Upload a submission and compare the inbox "Received" time with the wall clock and with the Accounting page's posted time for a bind.
+
+### CR-026 — Web DB pools have no connection timeout, so health, pages and (since step 24) sign-in itself hang when Postgres is unreachable
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/db.ts:14-17`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/health.ts:6-13`; newly on the sign-in path at `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/signin/actions.ts:26` (`await recordLogin(…)` before the redirect)
+- **Problem:** `new Pool({ connectionString })` uses defaults (no `connectionTimeoutMillis`, no `statement_timeout`); `checkDb` has no abort signal unlike `checkService` (15 s), so `/api/health` waits on the TCP stack when the database is unreachable. `signInAction` now awaits an INSERT into the policy DB before issuing the cookie (the failure is caught, but the wait is not bounded), so a policy-DB outage turns every sign-in into a hang rather than a sign-in with a logging error.
+- **Evidence:** `customer: new Pool({ connectionString: urls.customer })`; `await pools[name].query("SELECT 1")`; `await recordLogin(…).catch((err) => console.error(…))` (re-read this run).
+- **Fix:** `new Pool({ connectionString, connectionTimeoutMillis: 5000, statement_timeout: 30000 })` for both pools; optionally race `checkDb` with `AbortSignal.timeout(3000)`, and in `signInAction` race `recordLogin` with a short timeout (or fire it via `after()`).
+- **Verify:** Point `POLICY_DATABASE_URL` at a non-routable address; `/api/health` returns 503 within ~5 s and a sign-in completes (with a logged error) within the same bound.
+
+### CR-046 — `pdfSafe` turns line breaks and tabs into "?" in the frozen quote, binder, policy and renewal-memo PDFs
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/pdf-writer.ts:19-24`, `:58`; reached from `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/quote-pdf.ts:59`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/policy-pdf.ts:127`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/renewal-memo-pdf.ts:41`; text entered at `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/submissions/[id]/page.tsx:196`
+- **Problem:** The catch-all class `[^\x20-\x7E -ÿ–—‘’“”•…€]` replaces `\r`, `\n`, `\t` with `?`, and `para` calls `pdfSafe` before `split(/\s+/)`. Any Enter typed in the operations `<textarea>` prints as `??` in every issued document, which are never regenerated.
+- **Evidence:** `"a\r\nb\tc"` → `"a??b?c"` through the exact replace chain (re-run this run).
+- **Fix:** `text.replace(/\s+/g, " ")` first in `pdfSafe`; move it to a pure module for `node --test`.
+- **Verify:** `pdfSafe("a\r\nb\tc") === "a b c"`; a two-line description produces a quote PDF with no `?`.
+
+### CR-063 — `contentDisposition` emits `'`, `(`, `)` and `*` unencoded inside `filename*=UTF-8''…`, which RFC 8187 requires to be percent-encoded
+- **Status:** Open (first seen 2026-10-29)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/http.ts:7-10`; used by the document, quote PDF, memo, policy PDF, accounting export, sign-in CSV and `gl-http.ts:32-36` responses
+- **Problem:** The extended parameter is built with `encodeURIComponent(filename)`, which leaves `-_.!~*'()` unescaped; RFC 8187 §3.2.1 restricts `attr-char` and `'` is the `ext-value` delimiter. A broker file named `O'Brien (final).pdf` therefore produces a non-conformant header whose value contains the `'` delimiter; parser behaviour on it is client-dependent.
+- **Evidence:** `encodeURIComponent("O'Brien (final)*.pdf")` → `O'Brien%20(final)*.pdf` (re-run this run); `http.test.ts` exercises only an en dash and double quotes.
+- **Fix:** `const ext = encodeURIComponent(filename).replace(/[!'()*]/g, (c) => \`%${c.charCodeAt(0).toString(16).toUpperCase()}\`);` and use `ext` in the template.
+- **Verify:** Add to `http.test.ts`: `contentDisposition("O'Brien (final)*.pdf", "inline")` ends with `filename*=UTF-8''O%27Brien%20%28final%29%2A.pdf`.
+
+### CR-080 — `book_summary` for "everyone" counts UW Desktop policies in `renewals_due_90_days` but sums only prior-system premium in `renewal_premium_90_days`
+- **Status:** Open (first seen 2026-10-30)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/assistant-tools.ts:268-275,285`; the per-underwriter branch (`:264-266`) and the desk (`/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/dashboard.ts:185-186`) include both sources in both numbers
+- **Problem:** The team-wide branch queries `due_90` from both `book_policies` and `policies` but `due_90_premium` only from `book_policies`, then reports `renewals_due_90_days = Σ(b.due_90 + w.due_90)` beside `renewal_premium_90_days = Σ b.due_90_premium`. With the seeded history the count includes Desktop renewals whose premium is missing from the total, so the assistant tells a manager "N renewals due, $X expiring" where $X excludes every policy bound here; `renewals_due` and the desk give a different total for the same question.
+- **Evidence:** The `policies` query ends `count(*) FILTER (WHERE expiration_date <= CURRENT_DATE + 90)::int AS due_90` with no premium sum; `renewal_premium_90_days: sum((n) => b(n)?.due_90_premium ?? 0)` (re-read this run).
+- **Fix:** Add `coalesce(sum(premium) FILTER (WHERE expiration_date <= CURRENT_DATE + 90), 0)::float8 AS due_90_premium` to the `policies` query and sum `(b(n)?.due_90_premium ?? 0) + (w(n)?.due_90_premium ?? 0)`; once CR-066 is fixed, apply the same `renewal_status <> 'renewed'` filter here. Fix together with CR-089 (same query).
+- **Verify:** Ask the assistant "how much premium is up for renewal in 90 days across the team?" and compare with `renewals_due` (`days: 90`) and the sum of each underwriter's desk tile; the three agree.
+
+### CR-023 — Duplicate React keys on lists keyed by content
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/submissions/[id]/page.tsx:76` (also `:52`, `:123`, `:133`), `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/policies/[id]/page.tsx:78`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/quotes/[id]/page.tsx:100`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/submissions/[id]/workbench/page.tsx:163`
+- **Problem:** Loss rows are keyed `${l.date}-${l.incurred}`; after CR-012 two same-day same-amount claims are deliberately kept, so the key collides exactly in the protected case. Subjectivities and warnings are keyed by text; the Documents panel keys on `d.filename`, which two unnamed attachments (`attachment`) share.
+- **Evidence:** `<tr key={\`${l.date}-${l.incurred}\`} …>` vs `test_same_day_same_amount_claims_on_one_loss_run_both_survive`; `key={s.text}` / `key={s}` / `key={w}` at the other sites re-confirmed this run.
+- **Fix:** Key by index or a composite including index for these server-rendered lists.
+- **Verify:** Upload a loss run with two same-day same-amount claims; no duplicate-key warning in the console.
+
+### CR-021 — `.env.example` has drifted from the code
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/.env.example:6-10`; readers `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/layout.tsx:11`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/basic-auth.ts:37-46`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/session.ts:14`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/assistant.ts:8,13`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/keep-warm.ts:11-16`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/inbox-files.ts:39-43`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/inbox.ts:58`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/seed-history.ts:202-206`, `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/main.py:14-17`, `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/claude.py:106-109`
+- **Problem:** The file says "defaults shown" but `RATING_ADMIN_URL`'s real default is `/admin` (the proxy), not `http://localhost:8001/admin`; copying the example bypasses the proxy. `UW_ANTHROPIC_API_KEY`, `MAX_UPLOAD_FILES`, `MAX_UPLOAD_MB`, `BASIC_AUTH_USERS`/`BASIC_AUTH_USER`/`BASIC_AUTH_PASSWORD`, `SUBMISSION_INBOX_DIR`, `KEEP_WARM_INTERVAL_MS`, `SEED_HISTORY`, `INBOX_AUTO_TOP_UP` and `SESSION_SECRET` are read by code but documented nowhere (`ASSISTANT_MODEL` and the shared `ANTHROPIC_API_KEY` were added this run).
+- **Evidence:** `# RATING_ADMIN_URL=http://localhost:8001/admin` vs `process.env.RATING_ADMIN_URL ?? "/admin"`; a grep of `process.env.X`/`env.X`/`os.environ.get` this run lists 20 configuration names versus 5 documented.
+- **Fix:** Correct the default and add commented lines for the missing variables (with `SEED_HISTORY=50`, `INBOX_AUTO_TOP_UP=0` and `SESSION_SECRET` explained).
+- **Verify:** `grep -ho 'process.env.[A-Z_]*\|os.environ.get("[A-Z_]*"' -r web/src services/*/app | sort -u` lists nothing absent from `.env.example` or compose.
 
 ## Suggestions
 
 ### CR-014 — Add web tests for input parsing and the persistence paths
-- **Status:** New
-- **Where:** `web/src/lib/referrals.test.ts` (only test file), `web/src/lib/submission.ts:109-139`, `web/src/lib/worksheet.ts:74-112`
-- **Problem:** `fromInput`, `parseInputs`, `attention` and `sameValue` carry the intake validation logic but have no tests; `saveReview`/`acceptSubmission` are untested entirely. The rating suite is order-dependent (`test_rate_admin.py` must run after `test_api.py` because it activates 2026.2).
-- **Fix:** Add `submission.test.ts`/`worksheet.test.ts` covering the throw paths (bad state codes, pct > 100, invalid dates, negative money) and a canonical-schedule test (CR-001). In rating, pin `rate_version_id` in `test_rating_can_pin_the_draft` and move activation into a final, clearly ordered test or a separate module run last via `pytest -p no:randomly`-safe fixture.
+- **Status:** Open (first seen 2026-10-22)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/submission.ts:109-153`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/worksheet.ts:75-129`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/seed-history.ts:50-132`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/renewals.ts:136-227`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/login-events.ts:15-48`, `/Users/djsiry/GitHub/underwriting-desktop/services/rating/tests/test_rate_admin.py:1-5`
+- **Problem:** 83 tests in 20 files, all for pure modules; `fromInput`, `parseInputs`, `attention`, `sameValue`, `renewalSubmissionData`, `seedTimes`/`effectiveDates`, `noteApiLogin`'s hourly dedupe and the persistence paths (`saveReview`, `acceptSubmission`, `saveAndRate`, `startRenewal`, `bindQuote` + `postPolicyBound`, `recordLogin`) are untested; the rating suite is order-dependent (`test_rate_admin.py` must run after `test_api.py`).
+- **Fix:** Add `submission.test.ts`, `worksheet.test.ts`, `seed-history.test.ts` and `renewals.test.ts` for the throw paths (including CR-084's dangling-claim branch and CR-086's page/API range parity); pin `rate_version_id` in `test_rate_admin.py` and run activation last or reset in teardown.
 
 ### CR-015 — Pin the duplicated schema with a contract test
-- **Status:** New
-- **Where:** `services/ingestion/app/schema.py:12-53`, `web/src/lib/submission.ts:7-60`, `web/src/lib/referrals.ts:17`, `web/src/lib/worksheets.ts:143`
-- **Problem:** `FIELDS`/`REQUIRED_FOR_RATING` are hand-mirrored between Python and TypeScript, and `money()` is implemented twice in the web tier. Drift here breaks `missing_for_rating` agreement between services silently.
-- **Fix:** Commit `samples/schema.json` (paths, types, required list) generated from `schema.py`, and have both `test_ingestion.py` and a web test assert their lists equal it. Export one `money` helper from `worksheet.ts`.
+- **Status:** Open (first seen 2026-10-22)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/schema.py:12-53` vs `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/submission.ts:7-60`; the ACORD field names in `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/acord.py:9-44`, `/Users/djsiry/GitHub/underwriting-desktop/samples/generate.py:62-131`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/inbox-generate.ts:36-103`; the closed-status word list in `schema.py:72` and `referrals.ts:37` (identical, but hand-mirrored); `money` in ten web modules; `UW_AUTHORITY_PCT` (`worksheet.ts:36`) vs `LIMITS.scheduleAuthorityPct` (`referrals.ts:27`); `BASE_RATE` in `synthetic-risk.ts:48` duplicating `002_seed_rates_2026_1.sql`
+- **Problem:** `FIELDS`/`REQUIRED_FOR_RATING` are hand-mirrored across Python and TypeScript; the generator re-types every ACORD field name `acord.py` reads, so a typo on either side silently turns a "100 % from form fields" demo into a Claude read; `money()` has ten copies with three rounding behaviours; the 15 % authority threshold, the status word list and the base rates exist twice.
+- **Fix:** Commit `samples/schema.json` and `samples/acord-fields.json` generated from `schema.py`/`acord.py` and assert both generators and both schemas against them; one `money`/`usDate`/`when` in a pure `format.ts`; re-export `LIMITS.scheduleAuthorityPct` from `worksheet.ts`; share one status word-list (a JSON file both sides load, with a test on each side).
 
-### CR-016 — Harden small service endpoints against bad input and empty state
-- **Status:** New
-- **Where:** `services/rating/app/main.py:57-62`, `:24-28`, `services/rating/app/engine.py:132`, `services/ingestion/app/main.py:43`
-- **Problem:** `GET /ratings/{rating_id}` with a non-UUID string is a Postgres cast error (500); `/health` raises `LookupError` (500) when no version is active; `rate()` KeyErrors (500) if a version lacks `experience_mod_min`/`schedule_mod_max`; `/extract` has no upload size cap when called directly (the web tier caps at 25 MB).
-- **Fix:** Type the path as `rating_id: uuid.UUID`; return `active_rate_version: null` from `/health` instead of raising; use `p.get(lo)` with a `RatingError` when missing; reject multipart bodies over a configured limit in `extract`.
+### CR-085 — The desk page awaits live `/health` probes of both services (15 s timeout each) on every render, so one stopped service holds the home page for up to 15 s
+- **Status:** Open (first seen 2026-10-30)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/app/page.tsx:35` (`Promise.all([loadDashboard(user), systemHealth()])`), `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/health.ts:15-28` (`AbortSignal.timeout(15_000)`), `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/dashboard.ts:76` (`activeRateVersion()`, also 15 s via `RATING_TIMEOUT_MS`)
+- **Problem:** CR-041 correctly raised the service timeouts to outlast a Fly cold start, but the landing page's "System status" panel and `loadDashboard`'s `activeRateVersion()` both block the render on those probes. When rating or ingestion is down or refusing to start (the host-capacity event logged in the build log), the first thing the audience sees is a 15 s blank desk, with no loading boundary, rather than a desk with a red status dot. The same `loadDashboard` runs for `/book` and for every underwriter in the assistant's `work_queue`.
+- **Fix:** Render the status panel from a `<Suspense>` boundary with a skeleton (or stream it via a child async component), cap the home-page probe at ~3 s and let keep-warm/`/api/health` keep the longer timeout; have `loadDashboard` reuse a short-lived cached `activeRateVersion()` (keep-warm already pings `/health` every 60 s and could store the label).
+
+### CR-028 — `npm test` relies on the shell expanding `**` as a single directory level
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/package.json:10`
+- **Problem:** `node --test … src/**/*.test.ts` is expanded by `/bin/sh`, where `**` behaves like `*`; it works only because all 20 test files live in `src/lib/`. A test under `src/app/…` or `src/lib/sub/` would be silently skipped.
+- **Fix:** Quote the pattern so Node's glob handles it: `'src/**/*.test.ts'`.
+
+### CR-038 — Serialize startup migrations across instances with an advisory lock
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/migrate.ts:6-32`, `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/db.py:17-29`
+- **Problem:** Both services apply `migrations/*.sql` on every start with nothing serialising two processes (`grep -n advisory` on both files returns nothing, re-run this run); `--scale web=2` or a default `--ha` deploy would fail the second starter on `CREATE TABLE … already exists` (now including `policy/007_login_events.sql`), and two web instances would both start the `SEED_HISTORY` run. Latent today (`--ha=false`, one of each in compose).
+- **Fix:** `SELECT pg_advisory_lock(<constant>)` on the migration connection before reading `schema_migrations`, including the `CREATE TABLE IF NOT EXISTS schema_migrations`; take a second advisory lock around `seedHistory`.
+
+### CR-043 — Make the compose Postgres healthcheck use TCP so it cannot pass during the init phase
+- **Status:** Open (first seen 2026-10-23)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/docker-compose.yml:12-15` (also `:58-61`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/migrate.ts:10`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/instrumentation.ts:8-9`)
+- **Problem:** `pg_isready -U uw` with no `-h` probes the Unix socket, which the official image's init-phase server also answers, so `rating` and `web` can start before the three databases exist or before TCP is listening; masked for rating by psycopg's `pool.open(wait=True)` retry, but web's `migrate()` is awaited from `instrumentation.register()` with no retry. No `restart:` policy on the three services.
+- **Fix:** `test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U uw -d rating"]` and `restart: unless-stopped` on the three services.
+
+### CR-061 — The roofing class code `98677` is a literal in two web-tier rules while the rating database owns the class table
+- **Status:** Open (first seen 2026-10-28)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/referrals.ts:79-81`, `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/quote-terms.ts:58`; also `/Users/djsiry/GitHub/underwriting-desktop/web/src/lib/synthetic-risk.ts:97-99`; class table `/Users/djsiry/GitHub/underwriting-desktop/services/rating/migrations/002_seed_rates_2026_1.sql:6-14`
+- **Problem:** "Which classes are roofing" is the string `"98677"` in two unrelated web modules (and the test, and the synthetic-risk generator); a new roofing class in a later rate version leaves the manager-approval referral and the roofing endorsement silently not firing.
+- **Fix:** Smallest: one shared `ROOFING_CLASSES` set in `web/src/lib/classes.ts`. Better: a `hazard_group` column on `class_rates` returned by `GET /classes` and cached alongside `activeRateVersion()`.
+
+### CR-064 — Declare response models on the FastAPI read endpoints the web tier consumes
+- **Status:** Open (first seen 2026-10-29)
+- **Where:** `/Users/djsiry/GitHub/underwriting-desktop/services/rating/app/main.py:64-69`, `:84-86` (consumed by `rateVersionId()` and the assistant's `rate_versions` tool), `:102-107`, `:177-179`, `:182-185`, `:26-34`; `/Users/djsiry/GitHub/underwriting-desktop/services/ingestion/app/main.py:74-85`
+- **Problem:** Only `POST /rate` and `GET /classes` declare a `response_model` (two sites, re-confirmed by reading this run); the other endpoints return raw `dict`/`list[dict]` rows. The web tier hand-types their shapes (`RatingRow`, `RateAdminRow`, `Extraction`, the `{ id, label }` list in `rating-api.ts:61`, the version list in `assistant-tools.ts:345`), so a renamed column is invisible until a page renders `undefined`.
+- **Fix:** Add small Pydantic models (`RatingLogEntry`, `RatingSummary`, `RateVersion`, `RateVersionDetail`, `RateTableAuditEntry`, `HealthStatus`; `ExtractResponse` in ingestion) and pass them as `response_model=`.
 
 ## Resolved since last run
-First run; nothing to compare against.
+- **CR-078 — The AI assistant is disabled under `docker compose up` and after `fly-deploy.sh`** — resolved in `e4cff3c`: `docker-compose.yml:50-52` now passes `ANTHROPIC_API_KEY` (with the `UW_ANTHROPIC_API_KEY` fallback) and `ASSISTANT_MODEL` to `web`; `scripts/fly-deploy.sh:96-99` sets the same secret on `$WEB`; `web/src/lib/assistant.ts:13,47` resolves `UW_ANTHROPIC_API_KEY || ANTHROPIC_API_KEY` and passes it as `new Anthropic({ apiKey })`; `.env.example` documents the shared key.
+- **CR-081 — `/signout` is a GET outside the gate (logout CSRF)** — resolved in `e4cff3c`: `web/src/app/signout/route.ts` now handles `POST` behind `sameOrigin()` (403 otherwise) and answers `GET` with a confirmation page that changes nothing; both headers (`web/src/app/layout.tsx:64`, `services/rating/app/templates/base.html:86`) post a one-button form; the redirect `Location` is relative.
 
 ## Coverage notes
-- Web (`web/`, node_modules present): `npx tsc --noEmit` passed (0 errors); `npm run lint` passed; `npm test` passed 7/7 (`node --test`, referral rules, schedule parsing, inputs hash). Run at 23:00 against the `e46c8c1` tree.
-- Python: `pytest` skipped for both `services/rating` and `services/ingestion` because neither has a `.venv` (nothing was installed). Rating API tests also require a reachable Postgres.
-- Two empirical checks were run read-only: a Node one-liner reproducing the `Content-Disposition` ByteString error (CR-002), and a `SELECT $1::jsonb` of a literal against the local compose `customer` DB confirming jsonb key reordering (CR-001).
-- **HEAD moved during this run.** The review started at `e46c8c1` (step-07). While files were being read, another session committed `e00eb04` (step-08: issue versioned quotes with a stored quote PDF). Everything reported here is against `e46c8c1`; the step-08 additions were NOT reviewed: `web/src/lib/{quotes,quote-pdf,quote-terms,quote-terms.test}.ts`, `web/src/app/quotes/**`, `web/migrations/policy/002_quotes.sql`, `scripts/security-review-fingerprint.sh`, the `pdf-lib` dependency, and the step-08 edits to `web/src/app/layout.tsx` and `web/src/app/submissions/[id]/workbench/{page,actions}.tsx|ts`. The next run should start with those.
-- Read in full: all of `services/rating/{app,migrations,tests}`, `services/ingestion/{app,tests}`, `web/src/**` (as of `e46c8c1`), `web/migrations/**`, `web/next.config.ts`, all three Dockerfiles and `.dockerignore`s, `docker-compose.yml`, `db/init`, `scripts/cloud-sandbox-build.sh`, `samples/{cases,generate}.py`, `.env.example`, `docs/PLAN.md`, `docs/BUILD_LOG.md`.
-- Not reviewed: `.env` (by rule), lock files, binary sample documents under `samples/submissions`, `samples/ground_truth/*.json`, `.next/`.
-- Limitations: no container was started and no Claude extraction was exercised; the ingestion pipeline was reviewed statically plus its offline tests by reading. Concurrency findings (CR-003, CR-006) are from code reading, not load testing.
+- Web (`/Users/djsiry/GitHub/underwriting-desktop/web`, `node_modules` present, Node v26.12.1, Next 15.5.28, React 19.1.0): `npx tsc --noEmit --incremental false` exit 0 with no output; `npx eslint .` exit 0 with no output; `npm test` passed 83/83 (`node --test`, 20 files, 983 ms, 0 `not ok`). Nothing was installed and no file inside the repository was written (the three check logs went to the session scratchpad; `web/tsconfig.tsbuildinfo` was not touched because `--incremental false` was used).
+- Python: both `services/rating/.venv` and `services/ingestion/.venv` exist but were built inside the Docker images (`pyvenv.cfg` `home = /usr/local/bin`, `uv = 0.13.6`, `bin/python` → `/usr/local/bin/python3`, which does not exist on this host; the host has only Python 3.9.6 and neither `uv` nor `pytest`), so `pytest` could not run and nothing was installed. Both suites (`test_api.py`, `test_engine.py`, `test_rate_admin.py`, `conftest.py`; `test_ingestion.py`, `conftest.py`) were reviewed by reading; the premium arithmetic asserted there (`49738`, `54260`, `7150`/`362`/`7762`) matches the engine and the 2026.1 seed by hand calculation.
+- Read in full this run: everything under `services/rating/{app,migrations,tests}` (five modules, four Jinja templates, three migrations, three test files, `conftest.py`), `services/ingestion/{app,tests}` (seven modules, `conftest.py`, `test_ingestion.py`), `web/src/**` (every page, server action, route handler, lib module, all 20 test files, `middleware.ts`, `instrumentation.ts`, all four components), `web/migrations/**` (`policy/004` and `policy/005` head and tail plus their generator `scripts/generate-book.py`; the remainder of each is 103 generated rows/updates; `policy/007_login_events.sql` new this run), `web/next.config.ts`, `web/package.json`, `web/tsconfig.json`, `web/eslint.config.mjs`, all three `Dockerfile`s and `.dockerignore`s, all three `fly.toml`s, both `pyproject.toml`s, `docker-compose.yml`, `db/init/01-create-databases.sql`, all six `scripts/*.sh` (including the new `login-report.sh`), `.gitignore`, `.env.example`, `samples/generate.py`, `samples/cases.py` (header and case 01; the 18 case dictionaries are data), `docs/PLAN.md`, `docs/BUILD_LOG.md` (all 747 lines, including the step-24 and both fix entries) and the previous `docs/CODE_REVIEW.md` (working-tree version). Several batched `cat` outputs exceeded the tool's inline cap and were persisted by the tool under `~/.claude/`; per rule 3 those copies were not opened, and every file in them (the rating tests and templates, the 20 web test files, `docs/BUILD_LOG.md`) was re-read directly with the file reader. `web/src/app/globals.css` was listed but not reviewed (styling only).
+- Empirical checks this run were read-only Node one-liners and greps: `Date.parse("2026-02-30T00:00:00Z")` → a number (CR-019/CR-068); `addYears("2026-13-01", 1)` → `RangeError` (CR-019); `/^(Q-\d{4}-\d{4})…/` rejects `Q-2026-10001` (CR-033); `/^[0-9a-f-]{36}$/i` accepts 36 `a`s and ten such sites (CR-031); `/^[=+@]/.test("-2+3")` → false (CR-071); `encodeURIComponent("O'Brien (final)*.pdf")` (CR-063); the `pdfSafe` replace chain on `"a\r\nb\tc"` → `"a??b?c"` (CR-046); greps for `FOR UPDATE` (CR-017), `|was` (CR-052), `users.has` (CR-083), `recorded_at` (CR-074), `advisory` (CR-038), `lpad(nextval…, 4` (CR-033), `AbortSignal.timeout(8000)` (CR-088), `max_retries` (CR-020), `bound_by` across `assistant-tools.ts`/`dashboard.ts` (CR-089), `form_fields`/`acord_125` in `seed-history.ts` (CR-075), `timeZone` sites (CR-035), `noteApiLogin` callers (CR-093), the full list of `process.env`/`os.environ` names versus `.env.example` (CR-021), and `git show --stat` of the three commits since the previous run to confirm which files changed. No database, container or HTTP endpoint was touched.
+- Not reviewed: `.env` and `.fly-credentials` (by rule), lock files, binary sample documents under `samples/submissions` (listed, not opened), `samples/ground_truth/*.json`, `web/src/app/favicon.ico`, `web/public/*.svg`, `web/next-env.d.ts`, `web/postcss.config.mjs`, `web/inbox/` (only `.gitkeep`), `reports/logins/` (git-ignored output, holds addresses), `.next/`, `node_modules`, `.claude/**`, `README.md`, `samples/README.md`, `docs/SECURITY_REVIEW.md`, `docs/UX_REVIEW.md`, `docs/DEMO_PLAYBOOK.md`, `docs/BUILD_TIMELINE.md` and mockups.
+- Limitations: concurrency and partial-write findings (CR-017, CR-019, CR-034, CR-036, CR-049, CR-050, CR-052, CR-069, CR-084) come from code reading under READ COMMITTED semantics, not load or fault-injection testing. CR-087, CR-088, CR-089, CR-090, CR-091, CR-092 and CR-093 rest on reading the thread/queue code, the timeout sites, the SQL and the report rendering; none was exercised against a running service, and whether ipwho.is answers `success:false` for a given range (CR-091) was not called. CR-082 and CR-083 follow from the header/cookie code paths and were not exercised against the deployed app. CR-070 notes that whether Fly's edge overwrites a client-sent `X-Forwarded-Host` was not verified; the same applies to `Fly-Client-IP` in `clientInfo()`, which the code comment asserts is proxy-set. The Anthropic SDK call shapes in `claude.py:161-174` and `assistant.ts:71-81` (`betas`, `fallbacks`, `thinking.display`, `output_config`) could not be checked against the installed SDKs beyond `tsc` passing, nor whether the Messages API accepts two consecutive `user` turns (possible when an errored assistant turn is dropped from `history` in `chat.tsx:40`). Considered this run and not reported because the evidence bar was not met or the behaviour is a documented demo trade-off: `after()` being called from `noteApiLogin` possibly after the response (guarded by the `try/catch` fallback in `login-events.ts:24`); `scripts/login-report.sh --hours` with no value tripping `set -u`; sending client addresses to ipwho.is as a design choice the page discloses; the sign-in failure redirect carrying the attempted username in the query string; `addYears("2024-02-29", 1)` → `2025-03-01`; `startRenewal` on a book policy logging an "… expiring" rating before the claim; the `extract` route's enqueue-after-cancel throw; `javascript:` hrefs in assistant Markdown (blocked by React 19); `health.ts` reporting a JSON-parse message rather than the HTTP status when a service answers with HTML; non-PDF uploads served with their client-supplied content type; `normalize()` rejecting an upper-case `AND` between state codes; `POST /rate-versions` and `GET /classes` returning 500 when no version is active; a renewal submission's empty `extraction.documents` making "No loss runs" warn on every renewal; the rating `/health` loading all four rate tables on every ping; seeded `book_policies` rows marked `in_progress` with no `renewal_submission_id`; the workbench treating a re-ordered `states` list as a changed input; `rateable_classes` running up to two 10 s attempts before every extraction when the rating service is down; `Starlette FormData.items()` keeping only the last duplicate field; `safeNext` exported from a `"use server"` module; `sameOrigin()` passing requests with no `Origin`/`Referer`/`Sec-Fetch-Site`; protocol-relative links in the assistant's Markdown; client-supplied `history` turns; `get_insured`'s unescaped `ILIKE`; `403 forbidden` outside the OpenAPI `Error` enum; the writable compose bind mount with `USER node`; `work_queue` calling `loadDashboard()` per underwriter (and its inbox top-up side effect from a read-only tool); the middleware's session check before the Basic check; inbox top-up inside page renders; `folderTitle()` de-duplication; `insuredByName`; `rateReasons` wording; future-effective policies counted in force; empty-filter export batches; `revalidatePath` inside a streaming body; `xlsx.ts` control characters; `listBatches` on `audit_events`; the `policy/006` backfill correlation ids; `_FIELD_RE` rescans; duplicate attachment names in the structured-output `enum`; the MCP console's handshake on page load.
