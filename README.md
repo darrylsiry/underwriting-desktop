@@ -24,7 +24,7 @@ docker compose up --build
 
 Who signed in, from where: **Admin → Sign-ins** (`/audit/logins`), `GET /api/reports/logins?format=md|csv|json`,
 or daily from the terminal with `scripts/login-report.sh` (reads the login from `.fly-credentials`, files the
-report under `reports/logins/`). Sign-ins are recorded from the sign-in page and once an hour per API login.
+report under `reports/logins/`; on a Mac, double-click `Login Report.command` in Finder for the same thing). Sign-ins are recorded from the sign-in page and once an hour per API login.
 
 Inside a Claude Code cloud sandbox, use `./scripts/cloud-sandbox-build.sh`
 instead (see the script for why).
