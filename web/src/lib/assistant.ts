@@ -9,7 +9,9 @@ export const ASSISTANT_MODEL = process.env.ASSISTANT_MODEL ?? "claude-opus-5-5";
 const MAX_STEPS = 12;
 const MAX_TOKENS = 16_000;
 
-export const assistantEnabled = () => Boolean(process.env.ANTHROPIC_API_KEY);
+// The Claude Code cloud sandbox reserves ANTHROPIC_API_KEY; there the key is UW_ANTHROPIC_API_KEY (as in ingestion).
+const apiKey = () => process.env.UW_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
+export const assistantEnabled = () => Boolean(apiKey());
 
 export type Turn = { role: "user" | "assistant"; text: string };
 
@@ -42,7 +44,7 @@ type CreateParams = Anthropic.Beta.Messages.MessageCreateParamsNonStreaming;
 export type Create = (params: CreateParams) => Promise<Anthropic.Beta.Messages.BetaMessage>;
 
 let client: Anthropic | null = null;
-const defaultCreate: Create = (params) => (client ??= new Anthropic()).beta.messages.create(params);
+const defaultCreate: Create = (params) => (client ??= new Anthropic({ apiKey: apiKey() })).beta.messages.create(params);
 
 /**
  * Answer one question, yielding what happens on the way (each tool call and its result) and the

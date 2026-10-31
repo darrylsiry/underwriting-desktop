@@ -59,7 +59,8 @@ export default async function RootLayout({
           {signedIn ? (
             <span className="flex flex-col items-end whitespace-nowrap leading-tight text-slate-500">
               <span>Signed in as <span className="font-medium text-slate-900">{signedIn}</span></span>
-              <a href="/signout" className="text-xs text-indigo-600 hover:underline">Sign out</a>
+              {/* A POST, so a cross-site image or link can't end the session (CR-081). */}
+              <form method="post" action="/signout"><button className="text-xs text-indigo-600 hover:underline">Sign out</button></form>
             </span>
           ) : (
             <form action={setUserAction} className="flex items-center gap-2 text-slate-500">

@@ -14,7 +14,7 @@
 #   <prefix>-ingestion  private, http://<prefix>-ingestion.flycast
 #   <prefix>-db         Managed Postgres with databases customer, policy, rating
 #
-# Secrets: ANTHROPIC_API_KEY comes from .env if set there. The first user login (underwriter1) is
+# Secrets: ANTHROPIC_API_KEY comes from .env if set there (set on ingestion and on web, for the assistant). The first user login (underwriter1) is
 # generated on first run and saved to .fly-credentials (git-ignored, mode 600), never printed.
 # More users: scripts/fly-users.sh.
 set -euo pipefail
@@ -93,6 +93,10 @@ esac
 if has_secret "$INGESTION" ANTHROPIC_API_KEY; then echo "$INGESTION already has ANTHROPIC_API_KEY"
 elif [ -n "$key" ]; then printf 'ANTHROPIC_API_KEY=%s\n' "$key" | fly secrets import --stage -a "$INGESTION"
 else echo "No ANTHROPIC_API_KEY in .env: ingestion will read fillable PDFs only"; fi
+# The web app needs the same key for the desk's AI assistant (CR-078).
+if has_secret "$WEB" ANTHROPIC_API_KEY; then echo "$WEB already has ANTHROPIC_API_KEY"
+elif [ -n "$key" ]; then printf 'ANTHROPIC_API_KEY=%s\n' "$key" | fly secrets import --stage -a "$WEB"
+else echo "No ANTHROPIC_API_KEY in .env: the web app's AI assistant will be off"; fi
 if has_secret "$WEB" BASIC_AUTH_USERS || has_secret "$WEB" BASIC_AUTH_PASSWORD; then
   echo "$WEB already has user logins (see .fly-credentials; add users with scripts/fly-users.sh)"
 elif [ -n "${CI:-}" ]; then

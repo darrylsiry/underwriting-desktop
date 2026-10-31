@@ -711,3 +711,16 @@ read this to replay the build quickly.
 - **Commit:** `fix: CR-077 …, CR-079 …`
 - **Dead ends / gotchas:** `re.match(r"^(c|closed)")` is a prefix match, not a word match; the TypeScript twin had `\b` from the start, which is why the web tests never caught it. Re-verification after a fix batch is worth the run: the auditor caught this within the hour.
 - **How to show it:** upload a loss run whose status column says `Claim open` for a $150K claim: the workbench refers it. `curl -X POST -H 'Origin: https://evil.example' -H 'Content-Type: application/json' -d '{"question":"hi"}' <web>/assistant/ask` → 403.
+
+## Fix: the assistant's key reaches the web app (CR-078) and sign-out is a same-origin POST (CR-081)
+- **Prompt used:** "Yes, fix both" (CR-078 and CR-081 from the re-audit, before deciding on a push).
+- **What was built:**
+  - **CR-078:** under `docker compose up` and after `fly-deploy.sh` the web app never had `ANTHROPIC_API_KEY`, so the desk's "Ask Me Anything" box answered "The assistant needs ANTHROPIC_API_KEY" while ingestion extracted with the same key. Compose now passes the key (and `ASSISTANT_MODEL`) to `web` exactly as it does to `ingestion`; the deploy script sets the same secret on `<prefix>-web`; `assistant.ts` reads `UW_ANTHROPIC_API_KEY || ANTHROPIC_API_KEY` (the cloud-sandbox name ingestion already honours) and hands it to the SDK explicitly. `.env.example` and the README say the one key serves both.
+  - **CR-081:** `/signout` was a GET outside the gate, so a cross-site `<img src>` or a link in a broker email could end an underwriter's session. It is now `POST` (refused with 403 unless `sameOrigin()`), the "Sign out" in both headers (the web app's and the rate admin's mirrored one) is a one-button form styled as the old link, and a GET shows a small confirmation page with that button instead of signing anyone out.
+- **Files:** `docker-compose.yml`, `scripts/fly-deploy.sh`, `.env.example`, `README.md`, `web/src/lib/assistant.ts`, `web/src/app/signout/route.ts`, `web/src/app/layout.tsx`, `services/rating/app/templates/base.html`
+- **Commit:** `fix: CR-078 …, CR-081 …`
+- **Decisions:** a plain `<form method="post">` rather than a Server Action for sign-out, so the rating admin's server-rendered header (which has no React) can post the same thing; the route keeps the `sameOrigin()` header check the other route handlers use.
+- **Dead ends / gotchas:**
+  - Clicking the new button in a container built from the image sent the browser to `http://0.0.0.0:3000/signin`: in the standalone image `req.url` is the server's own `HOSTNAME:PORT`, not the address the browser used, and the route had built its redirect from it since step 22 (the GET had the same bug; the middleware's own redirects were already relative). The route now sends a relative `Location`.
+  - `header.desktop form { margin-left: auto }` in the admin template also matched the new sign-out form and pushed it to the far right; a `.who form { margin: 0 }` rule (more specific) keeps it under the name.
+- **How to show it:** with the key in `.env`, `docker compose up --build` and ask the desk a question: an answer, not the configuration message. `curl -X POST -H 'Origin: https://evil.example' <web>/signout` → 403; `curl <web>/signout` → the confirmation page, cookie untouched; the header button still signs out.
