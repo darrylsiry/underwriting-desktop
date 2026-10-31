@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>UX-035 · Long snippet expander: "more" inside vs outside the clamp</title>
+<style>
+  body { margin: 0; padding: 24px; font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; color: #0f172a; background: #f8fafc; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.lead { margin: 0 0 20px; color: #64748b; font-size: 13px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 1100px; }
+  .panel h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #64748b; margin: 0 0 8px; }
+  .panel h2 span { margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-weight: 500; text-transform: none; letter-spacing: 0; }
+  .before h2 span { background: #fef3c7; color: #b45309; }
+  .after h2 span { background: #d1fae5; color: #059669; }
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 2px rgba(15,23,42,.05); overflow: hidden; }
+  .card h3 { margin: 0; padding: 8px 16px; border-bottom: 1px solid #f1f5f9; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #64748b; font-weight: 500; }
+  .row { display: grid; grid-template-columns: 110px minmax(0, 1fr) 90px; gap: 12px; padding: 10px 16px; border-left: 4px solid transparent; border-bottom: 1px solid #f1f5f9; align-items: start; }
+  .row label { font-size: 13px; color: #475569; padding-top: 4px; }
+  .row .value { max-width: 320px; }   /* narrowed so a real snippet overflows two lines */
+  textarea { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 8px; font: 13px/1.4 inherit; color: #0f172a; resize: none; }
+  .pill { display: inline-block; border-radius: 4px; padding: 2px 6px; font-size: 12px; background: #ecfdf5; color: #047857; margin-top: 4px; }
+  details { margin-top: 4px; font-size: 12px; color: #475569; }
+  summary { cursor: pointer; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  .src { color: #64748b; }
+  .more { color: #4f46e5; }
+  /* BEFORE: the whole summary is the clamp box; "more" is the last inline item inside it */
+  .before summary { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .before details p { margin: 4px 0 0; white-space: pre-wrap; }
+  /* AFTER: the clamp is on an inner span; the cue sits outside it and the span un-clamps on open */
+  .after .clamp { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .after details[open] .clamp { display: block; overflow: visible; -webkit-line-clamp: none; }
+  .after .show-more { display: inline; } .after .show-less { display: none; }
+  .after details[open] .show-more { display: none; } .after details[open] .show-less { display: inline; }
+  .note { margin-top: 10px; font-size: 12px; color: #64748b; }
+  .note b { color: #b45309; font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>UX-035 · Intake review: the long-snippet expander</h1>
+<p class="lead">Field row from SUB-0001 Desert Bloom Painting, rendered at a narrower column so the real snippet runs past two lines. Click each quote to open it.</p>
+<div class="pair">
+  <section class="panel before">
+    <h2>Before <span>"more" is clipped with line 3</span></h2>
+    <div class="card">
+      <h3>Operations</h3>
+      <div class="row">
+        <label>Description</label>
+        <div class="value">
+          <textarea rows="2" readonly>Exterior and interior residential painting, mostly repaints of single family homes and some HOA townhome communities</textarea>
+          <details>
+            <summary>“Exterior and interior residential painting, mostly repaints of single family homes and some HOA townhome communities.” <span class="src">— desert-bloom-painting-submission-email.eml (broker email)</span> <span class="more">more</span></summary>
+            <p>“Exterior and interior residential painting, mostly repaints of single family homes and some HOA townhome communities.”</p>
+          </details>
+        </div>
+        <div><span class="pill">95% Claude</span></div>
+      </div>
+    </div>
+    <p class="note"><b>Closed:</b> two lines of the quote, no source, no "more": nothing says it opens. <b>Open:</b> the clamped two lines stay and the full quote repeats under them.</p>
+  </section>
+  <section class="panel after">
+    <h2>After <span>cue outside the clamp; un-clamps on open</span></h2>
+    <div class="card">
+      <h3>Operations</h3>
+      <div class="row">
+        <label>Description</label>
+        <div class="value">
+          <textarea rows="2" readonly>Exterior and interior residential painting, mostly repaints of single family homes and some HOA townhome communities</textarea>
+          <details>
+            <summary>
+              <span class="clamp">“Exterior and interior residential painting, mostly repaints of single family homes and some HOA townhome communities.” <span class="src">— desert-bloom-painting-submission-email.eml (broker email)</span></span>
+              <span class="more show-more">Show more</span><span class="more show-less">Show less</span>
+            </summary>
+          </details>
+        </div>
+        <div><span class="pill">95% Claude</span></div>
+      </div>
+    </div>
+    <p class="note"><b>Closed:</b> two lines of the quote and a visible "Show more" on its own line. <b>Open:</b> the same block grows to the whole quote with its source, once, and the cue reads "Show less".</p>
+  </section>
+</div>
+</body>
+</html>
