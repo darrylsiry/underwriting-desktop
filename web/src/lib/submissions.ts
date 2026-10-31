@@ -4,6 +4,7 @@ import { audit } from "./audit";
 import { customerDb } from "./db";
 import type { ExpiringPolicy } from "./renewal-compare";
 import { INGESTION_SERVICE_URL } from "./services";
+import { ServiceError, describeServiceError, errorDetailOf } from "./service-errors";
 import {
   FIELD_DEFS, REQUIRED_FOR_RATING, fromInput, getPath, isEmpty, sameValue, setPath,
   type Extraction, type SubmissionData, type Value,
@@ -71,10 +72,16 @@ export async function getDocument(submissionId: string, documentId: string) {
  * `inboxFolder` is set when the files came from the broker drop folder rather than an upload.
  */
 export async function receiveSubmission(files: File[], actor: string, inboxFolder: string | null = null): Promise<string> {
-  const res = await fetch(`${INGESTION_SERVICE_URL}/extract`, {
-    method: "POST", body: filesForm(files), signal: AbortSignal.timeout(300_000),
-  });
-  if (!res.ok) throw new Error(`Ingestion service returned ${res.status}: ${await res.text()}`);
+  // UX-008: the underwriter needs to know whether anything was saved and what to do, not the socket error or the raw body.
+  let res: Response;
+  try {
+    res = await fetch(`${INGESTION_SERVICE_URL}/extract`, {
+      method: "POST", body: filesForm(files), signal: AbortSignal.timeout(300_000),
+    });
+  } catch (err) {
+    throw new Error(describeServiceError(err, "document reader"));
+  }
+  if (!res.ok) throw new Error(describeServiceError(new ServiceError(res.status, errorDetailOf(await res.text())), "document reader"));
   return (await storeSubmission(files, await res.json(), actor, inboxFolder)).id;
 }
 

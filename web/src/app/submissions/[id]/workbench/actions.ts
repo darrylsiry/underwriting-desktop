@@ -6,7 +6,9 @@ import { getSubmission } from "@/lib/submissions";
 import { currentUser } from "@/lib/user";
 import { bindQuote } from "@/lib/policies";
 import { issueQuote, issuedQuoteHref, type QuoteRow } from "@/lib/quotes";
+import { FieldError } from "@/lib/worksheet";
 import { clearReferral, money, saveAndRate } from "@/lib/worksheets";
+import type { FormState } from "../action-form";
 
 function back(id: string, params: Record<string, string>): never {
   redirect(`/submissions/${id}/workbench?${new URLSearchParams(params)}`);
@@ -16,14 +18,21 @@ function formFields(form: FormData): Record<string, string> {
   return Object.fromEntries([...form.entries()].filter(([, v]) => typeof v === "string") as [string, string][]);
 }
 
-export async function saveAndRateAction(id: string, form: FormData) {
+/**
+ * Save & rate (UX-001). A value the worksheet refuses comes back as state, with the field and what
+ * was typed, so the form is shown as typed. Anything after the save (the rating service down,
+ * say) still reloads the page: the inputs are saved, the message says what happened.
+ */
+export async function saveAndRateAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
   const sub = await getSubmission(id);
   if (!sub) back(id, { error: "Submission not found" });
+  const values = formFields(form);
   let msg: string;
   try {
-    const rating = await saveAndRate(sub, formFields(form), await currentUser());
+    const rating = await saveAndRate(sub, values, await currentUser());
     msg = `Rated: ${money(rating.premium)} premium, ${money(rating.total)} total`;
   } catch (err) {
+    if (err instanceof FieldError) return { error: err.message, field: err.field, values };
     back(id, { error: (err as Error).message });
   }
   revalidatePath(`/submissions/${id}/workbench`);
@@ -42,15 +51,16 @@ export async function clearReferralAction(id: string, code: string, form: FormDa
   back(id, { msg: "Referral cleared" });
 }
 
-export async function issueQuoteAction(id: string, form: FormData) {
+/** Issue a quote (UX-001): a refused submit returns state so the dates and subjectivities stay as typed. */
+export async function issueQuoteAction(id: string, _prev: FormState, form: FormData): Promise<FormState> {
   const sub = await getSubmission(id);
-  if (!sub) back(id, { error: "Submission not found" });
+  if (!sub) return { error: "Submission not found" };
+  const f = formFields(form);
   let q: QuoteRow;
   try {
-    const f = formFields(form);
     q = await issueQuote(sub, { effective_date: f.effective_date ?? "", expiration_date: f.expiration_date ?? "", subjectivities: f.subjectivities ?? "" }, await currentUser());
   } catch (err) {
-    back(id, { error: (err as Error).message });
+    return { error: (err as Error).message, field: quoteField((err as Error).message), values: f };
   }
   revalidatePath(`/submissions/${id}/workbench`);
   revalidatePath(`/submissions/${id}/renewal`);
@@ -61,6 +71,11 @@ export async function issueQuoteAction(id: string, form: FormData) {
     redirect(issuedQuoteHref(q.id));
   }
   back(id, { msg: `Quote ${q.quote_number} v${q.version} issued: ${money(q.total)} total` });
+}
+
+/** Which date input a quote-issuing message is about, if any (not exported: a "use server" export would be an endpoint). */
+function quoteField(message: string): string | undefined {
+  return /^Effective date/.test(message) ? "effective_date" : /^Expiration/.test(message) ? "expiration_date" : undefined;
 }
 
 export async function bindAction(id: string, quoteId: string, form: FormData) {

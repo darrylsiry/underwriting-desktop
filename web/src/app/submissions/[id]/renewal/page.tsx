@@ -1,16 +1,20 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Fragment } from "react";
-import { Pill, RowLink, Section, money, when } from "@/components/ui";
+import { SubmitButton } from "@/components/submit-button";
+import { Pill, RowLink, Section, money, when, whenDate } from "@/components/ui";
 import { policiesForSubmission } from "@/lib/policies";
 import { addYears, suggestedSubjectivities } from "@/lib/quote-terms";
-import { quotesForSubmission } from "@/lib/quotes";
-import { changeSummary, compareRenewal, pctText, signed, type Comparison, type Side } from "@/lib/renewal-compare";
+import { getQuote, quotesForSubmission } from "@/lib/quotes";
+import { changeSummary, compareRenewal, inputText, pctText, signed, type Comparison, type Side } from "@/lib/renewal-compare";
 import { expiringOf } from "@/lib/renewals";
 import { getSubmission } from "@/lib/submissions";
 import { currentUser } from "@/lib/user";
+import { inputChanges, inputsHash, worksheetChips, type RatingInputs } from "@/lib/worksheet";
 import { activeRateVersion, openWorksheet, readiness } from "@/lib/worksheets";
 import { IssueQuoteForm } from "../issue-quote-form";
+import { QuoteDriftNotice, StatusChips } from "../status-chips";
 import { issueRenewalQuoteAction, reRateAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +26,12 @@ const CAUSE: Record<string, { label: string; style: string }> = {
   rates: { label: "rates", style: "bg-amber-50 text-amber-800" },
   both: { label: "terms + rates", style: "bg-violet-50 text-violet-700" },
 };
+
+// UX-010: the tab names the file.
+export async function generateMetadata({ params }: Pick<Props, "params">): Promise<Metadata> {
+  const sub = await getSubmission((await params).id);
+  return { title: sub ? `${sub.reference} · Renewal comparison` : "Renewal comparison" };
+}
 
 /** Side-by-side: the expiring policy and the renewing terms, with the rate comparison and the premium bridge. */
 export default async function RenewalPage({ params, searchParams }: Props) {
@@ -54,8 +64,18 @@ export default async function RenewalPage({ params, searchParams }: Props) {
     ? compareRenewal(expiringSide, { inputs: ws.rating_inputs, schedule: ws.schedule, rating: ws.last_rating, effective_date: effective, expiration_date: expiration }, ws.bridge_rating)
     : null;
   const b = comparison?.bridge;
-  const status = policy ? `Renewed · ${policy.policy_number}` : latest ? `Quoted · ${latest.quote_number} v${latest.version}` : ready ? "Ready to quote"
-    : !rated ? (ws.last_rating ? "Rating out of date" : "Not rated") : `${openReferrals.length} referral${openReferrals.length === 1 ? "" : "s"} open`;
+
+  // UX-003: the same chip pair and drift notice as the workbench, so the two pages agree about one file.
+  const quoted = latest && !policy ? await getQuote(latest.id) : null;
+  const quoteCurrent = !!quoted && inputsHash(quoted.rating_inputs, quoted.schedule) === inputsHash(ws.rating_inputs, ws.schedule);
+  const drift = quoted && !quoteCurrent
+    ? inputChanges({ inputs: quoted.rating_inputs, schedule: quoted.schedule }, { inputs: ws.rating_inputs, schedule: ws.schedule })
+        .map((c) => ({ label: c.label, from: changeText(c.key, c.from), to: changeText(c.key, c.to) }))
+    : [];
+  const chips = worksheetChips({
+    policyNumber: policy?.policy_number, quote: latest ? { number: latest.quote_number, version: latest.version } : null, quoteCurrent,
+    hasRating: !!ws.last_rating, rated, ready, openReferrals: openReferrals.length,
+  });
 
   return (
     <main className="mx-auto max-w-7xl p-8">
@@ -63,10 +83,10 @@ export default async function RenewalPage({ params, searchParams }: Props) {
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold">Renewal · {sub.applicant_name}</h1>
         <span className="font-mono text-sm text-slate-500">{sub.reference}</span>
-        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${policy || ready || latest ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600"}`}>{status}</span>
+        <StatusChips chips={chips} />
       </div>
       <p className="mt-1 text-sm text-slate-500">
-        Expiring {exp.policy_number} ({exp.effective_date} → {exp.expiration_date}, {money(exp.premium)} on rates {exp.rate_version})
+        Expiring {exp.policy_number} ({whenDate(exp.effective_date)} → {whenDate(exp.expiration_date)}, {money(exp.premium)} on rates {exp.rate_version})
         {" · "}<RowLink href={`/submissions/${id}/workbench`}>Adjust &amp; re-rate on the workbench →</RowLink>
         {" · "}<RowLink href={`/audit?submission=${id}`}>case history</RowLink>
       </p>
@@ -86,7 +106,7 @@ export default async function RenewalPage({ params, searchParams }: Props) {
             <Section title="Rate comparison">
               <table className="w-full text-sm">
                 <thead className="text-left text-xs text-slate-500">
-                  <tr><th className="px-4 py-2 font-medium" /><th className="px-4 py-2 text-right font-medium">Expiring</th><th className="px-4 py-2 text-right font-medium">Renewing</th><th className="px-4 py-2 text-right font-medium">Change</th></tr>
+                  <tr><th scope="col" className="px-4 py-2 font-medium"><span className="sr-only">Line</span></th><th scope="col" className="px-4 py-2 text-right font-medium">Expiring</th><th scope="col" className="px-4 py-2 text-right font-medium">Renewing</th><th scope="col" className="px-4 py-2 text-right font-medium">Change</th></tr>
                 </thead>
                 <tbody>
                   {comparison.money.map((r) => (
@@ -94,7 +114,7 @@ export default async function RenewalPage({ params, searchParams }: Props) {
                       <td className="px-4 py-1.5">{r.label}</td>
                       <td className="px-4 py-1.5 text-right tabular-nums">{money(r.expiring)}</td>
                       <td className="px-4 py-1.5 text-right tabular-nums">{money(r.renewing)}</td>
-                      <td className={`px-4 py-1.5 text-right tabular-nums ${r.change > 0 ? "text-rose-700" : r.change < 0 ? "text-emerald-700" : "text-slate-400"}`}>{signed(r.change)} {r.pct !== null && <span className="text-xs">({pctText(r.pct)})</span>}</td>
+                      <td className={`px-4 py-1.5 text-right tabular-nums ${r.change > 0 ? "text-rose-700" : r.change < 0 ? "text-emerald-700" : "text-slate-500"}`}>{signed(r.change)} {r.pct !== null && <span className="text-xs">({pctText(r.pct)})</span>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -118,7 +138,7 @@ export default async function RenewalPage({ params, searchParams }: Props) {
           <Section title="Terms · expiring vs renewing">
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-slate-500">
-                <tr><th className="px-4 py-2 font-medium">Variable</th><th className="px-4 py-2 text-right font-medium">Expiring</th><th className="px-4 py-2 text-right font-medium">Renewing</th></tr>
+                <tr><th scope="col" className="px-4 py-2 font-medium">Variable</th><th scope="col" className="px-4 py-2 text-right font-medium">Expiring</th><th scope="col" className="px-4 py-2 text-right font-medium">Renewing</th></tr>
               </thead>
               <tbody>
                 {(comparison?.terms ?? []).map((t) => (
@@ -128,7 +148,7 @@ export default async function RenewalPage({ params, searchParams }: Props) {
                     <td className={`px-4 py-1.5 text-right tabular-nums ${t.changed ? "font-medium" : ""}`}>{t.renewing}</td>
                   </tr>
                 ))}
-                {!comparison && <tr><td colSpan={3} className="px-4 py-6 text-center text-slate-400">Rate the renewing terms to compare them.</td></tr>}
+                {!comparison && <tr><td colSpan={3} className="px-4 py-6 text-center text-slate-500">Rate the renewing terms to compare them.</td></tr>}
               </tbody>
             </table>
           </Section>
@@ -137,7 +157,7 @@ export default async function RenewalPage({ params, searchParams }: Props) {
             <Section title={`Rating factors · ${exp.rate_version} vs ${ws.last_rating!.rate_version}`}>
               <table className="w-full text-xs">
                 <thead className="text-left text-slate-500">
-                  <tr><th className="px-4 py-2 font-medium">Step</th><th className="px-4 py-2 font-medium">Expiring</th><th className="px-4 py-2 font-medium">Renewing</th><th className="px-4 py-2 font-medium">Moved by</th></tr>
+                  <tr><th scope="col" className="px-4 py-2 font-medium">Step</th><th scope="col" className="px-4 py-2 font-medium">Expiring</th><th scope="col" className="px-4 py-2 font-medium">Renewing</th><th scope="col" className="px-4 py-2 font-medium">Moved by</th></tr>
                 </thead>
                 <tbody>
                   {comparison.factors.map((f) => (
@@ -150,7 +170,7 @@ export default async function RenewalPage({ params, searchParams }: Props) {
                               <span className="text-slate-600">{l.detail}</span>
                               <span className="ml-2 whitespace-nowrap tabular-nums">{l.factor !== null ? `× ${l.factor}` : ""} → {money(l.premium)}</span>
                             </>
-                          ) : <span className="text-slate-400">—</span>}
+                          ) : <span className="text-slate-500">—</span>}
                         </td>
                       ))}
                       <td className="px-4 py-1.5">{f.cause && <span className={`rounded px-1.5 py-0.5 ${CAUSE[f.cause].style}`}>{CAUSE[f.cause].label}</span>}</td>
@@ -166,8 +186,9 @@ export default async function RenewalPage({ params, searchParams }: Props) {
           <Section title="Rate">
             <div className="space-y-3 p-4 text-sm">
               <form action={reRateAction.bind(null, id)}>
-                <button className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Re-rate</button>
-                <p className="mt-1 text-xs text-slate-500">Rates the renewing terms as saved on current rates, then returns to the rating page.</p>
+                {/* UX-009 "Re-rating…"; UX-024 it comes back to this comparison. */}
+                <SubmitButton pending="Re-rating…" className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Re-rate</SubmitButton>
+                <p className="mt-1 text-xs text-slate-500">Rates the renewing terms as saved on current rates and refreshes this comparison.</p>
               </form>
               <Link href={`/submissions/${id}/workbench`} className="block rounded-md border border-slate-300 px-4 py-2 text-center text-sm hover:bg-slate-50">Adjust terms on the workbench →</Link>
             </div>
@@ -184,20 +205,22 @@ export default async function RenewalPage({ params, searchParams }: Props) {
                 <ul className="space-y-1">
                   {quotes.map((q) => (
                     <Fragment key={q.id}>
-                      <li className={`flex items-center gap-2 ${q.status === "superseded" ? "text-slate-400" : ""}`}>
-                        <Link href={`/quotes/${q.id}`} className="font-mono text-xs hover:underline">{q.quote_number} v{q.version}</Link>
+                      {/* UX-013: quote numbers look like the links they are; superseded rows are quiet, not faint. */}
+                      <li className={`flex items-center gap-2 ${q.status === "superseded" ? "text-slate-500" : ""}`}>
+                        <Link href={`/quotes/${q.id}`} className="font-mono text-xs text-indigo-600 hover:underline">{q.quote_number} v{q.version}</Link>
                         <Pill status={q.status} />
                         <span className="ml-auto tabular-nums">{money(q.total)}</span>
                       </li>
                       <li className="flex gap-3 pl-1 text-xs">
                         <a href={`/quotes/${q.id}/pdf`} target="_blank" className="text-indigo-600 hover:underline">Quote PDF</a>
                         {q.has_memo && <a href={`/quotes/${q.id}/memo`} target="_blank" className="text-indigo-600 hover:underline">Renewal memo PDF</a>}
-                        <span className="text-slate-400">issued {when(q.issued_at)}</span>
+                        <span className="text-slate-500">issued {when(q.issued_at)}</span>
                       </li>
                     </Fragment>
                   ))}
                 </ul>
               )}
+              {drift.length > 0 && latest && <QuoteDriftNotice quote={latest} changes={drift} newTotal={rated && ws.last_rating ? ws.last_rating.total : null} />}
               {!policy && (ready ? (
                 <IssueQuoteForm action={issueRenewalQuoteAction.bind(null, id)} effective={effective} expiration={expiration} subjectivities={subjectivities}
                   label={latest ? `Issue revised renewal quote (v${latest.version + 1})` : `Issue renewal quote · ${money(ws.last_rating!.total)}`} />
@@ -222,4 +245,9 @@ export default async function RenewalPage({ params, searchParams }: Props) {
       </div>
     </main>
   );
+}
+
+/** A changed value in the drift notice: inputs through `inputText`, schedule percents as given. */
+function changeText(key: string, v: unknown): string {
+  return key.startsWith("schedule.") ? String(v) : inputText(key as keyof RatingInputs, v as RatingInputs[keyof RatingInputs]);
 }

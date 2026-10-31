@@ -25,7 +25,7 @@ export function Pill({ status }: { status: string }) {
 }
 
 export function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="px-4 py-3 text-sm text-slate-400">{children}</p>;
+  return <p className="px-4 py-3 text-sm text-slate-500">{children}</p>;
 }
 
 export function RowLink({ href, children }: { href: string; children: React.ReactNode }) {
@@ -42,4 +42,4 @@ export function DaysChip({ days }: { days: number }) {
     {days < 0 ? `${-days}d overdue` : days === 0 ? "today" : `${days}d`}
   </span>;
 }
-export const when = (d: Date) => d.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+export { when, whenDate } from "@/lib/time";
