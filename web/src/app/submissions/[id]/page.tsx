@@ -260,12 +260,15 @@ function FieldRow({ def, value, original, meta, corrected, conflicted, editable,
             Form field <code>{meta.snippet.split(" = ")[0]}</code>{docType && ` · ${docType.replaceAll("_", " ")}`}
           </p>
         ) : meta.snippet.length > 140 ? (
-          <details className="mt-1 text-xs text-slate-600">
-            <summary className="line-clamp-2 cursor-pointer list-none">
-              “{meta.snippet}” <span className="text-slate-500">— {meta.source_document}{docType && ` (${docType.replaceAll("_", " ")})`}</span>
-              <span className="ml-1 text-indigo-600">more</span>
+          // UX-035: the clamp sits on an inner span, the cue outside it, and the span un-clamps on open.
+          <details className="group mt-1 text-xs text-slate-600">
+            <summary className="cursor-pointer list-none">
+              <span className="line-clamp-2 whitespace-pre-wrap group-open:line-clamp-none">
+                “{meta.snippet}” <span className="text-slate-500">— {meta.source_document}{docType && ` (${docType.replaceAll("_", " ")})`}</span>
+              </span>
+              <span className="text-indigo-600 group-open:hidden">Show more</span>
+              <span className="hidden text-indigo-600 group-open:inline">Show less</span>
             </summary>
-            <p className="mt-1 whitespace-pre-wrap">“{meta.snippet}”</p>
           </details>
         ) : (
           <p className="mt-1 text-xs text-slate-600">
