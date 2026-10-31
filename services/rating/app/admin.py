@@ -94,7 +94,7 @@ def when(dt) -> str:
         return ""
     if dt.tzinfo is None:   # timestamptz columns come back aware; be safe with anything else
         dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(display_tz()).strftime("%Y-%m-%d %H:%M %Z")
+    return dt.astimezone(display_tz()).strftime("%b %-d, %Y, %-I:%M %p %Z")  # UX-025: same shape as the desktop
 
 
 templates.env.filters["num"] = num

@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { StageChip } from "@/components/stage-chip";
 import { Empty, Pill, RowLink, Section, money, whenDate } from "@/components/ui";
+import { submissionStagesById } from "@/lib/dashboard";
 import { directHit, search } from "@/lib/search";
 import { parseQuery } from "@/lib/search-terms";
 
@@ -19,6 +21,7 @@ export default async function SearchPage({ searchParams }: Props) {
   const { q = "", all } = await searchParams;
   const query = parseQuery(q);
   const results = query ? await search(query) : null;
+  const stages = results ? await submissionStagesById(results.submissions.map((x) => x.id)) : new Map();   // UX-034
   // A full reference (SUB-0003, Q-2026-0001 v2, GL-26-00001) goes straight to the record.
   const hit = query && results && !all ? directHit(query, results) : null;
   if (hit) redirect(hit);
@@ -52,7 +55,7 @@ export default async function SearchPage({ searchParams }: Props) {
                   <span className="font-mono text-xs">{s.reference}</span>
                   <span className="font-medium">{s.applicant_name || "unnamed"}</span>
                   <span className="text-xs text-slate-500">{[s.class_code, s.agency].filter(Boolean).join(" · ")}</span>
-                  <span className="ml-auto"><Pill status={s.status} /></span>
+                  <span className="ml-auto">{stages.get(s.id) ? <StageChip stage={stages.get(s.id)!} /> : <Pill status={s.status} />}</span>   {/* UX-034 */}
                 </Link>
               ))}
               {!results.submissions.length && <Empty>No submissions</Empty>}

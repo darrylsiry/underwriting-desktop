@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SubmitButton } from "@/components/submit-button";
-import { when, whenDate } from "@/components/ui";
+import { Pill, when, whenDate } from "@/components/ui";
 import { auditTrail } from "@/lib/audit";
 import { addYears, suggestedSubjectivities } from "@/lib/quote-terms";
 import { bindBlockers } from "@/lib/bind-rules";
@@ -21,7 +21,6 @@ import { expiringOf } from "@/lib/renewals";
 import { ActionDirtyHint, ActionError, ActionForm, ActionFormProvider, ActionInput, ActionSelect, ActionSubmit, FieldMessage, WaitForSave } from "../action-form";
 import { IssueQuoteForm } from "../issue-quote-form";
 import { QuoteDriftNotice, StatusChips } from "../status-chips";
-import { StatusBadge } from "../../status-badge";
 import { bindAction, clearReferralAction, issueQuoteAction, saveAndRateAction } from "./actions";
 import { WorksheetInput } from "./worksheet-input";
 
@@ -87,6 +86,11 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
       label={latest ? `Issue revised ${exp ? "renewal " : ""}quote (v${latest.version + 1})` : `Issue ${exp ? "renewal " : ""}quote · ${rating ? money(rating.total) : ""}`} />
   );
 
+  const refers = flags.filter((f) => f.severity === "refer");
+  const openRefers = refers.filter((f) => clearanceStatus(f, ws.referral_clearances[f.code]) !== "cleared").length;
+  const warns = flags.length - refers.length;
+  const referralsTitle = `Referrals · ${openRefers} open${refers.length - openRefers ? ` · ${refers.length - openRefers} cleared` : ""}${warns ? ` · ${warns} warn` : ""}`;
+
   return (
     <main className="mx-auto max-w-7xl p-8">
       <ActionFormProvider formId="worksheet-form" action={saveAndRateAction.bind(null, id)}>
@@ -99,7 +103,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
         <div className="sticky top-0 z-10 -mx-8 mt-2 flex flex-wrap items-center gap-3 bg-slate-50/95 px-8 py-2 backdrop-blur">
           <h1 className="text-2xl font-semibold">{sub.applicant_name}</h1>
           <span className="font-mono text-sm text-slate-500">{sub.reference}</span>
-          <StatusBadge status={sub.status} />
+          {/* UX-033: the workbench only exists for accepted files, so the chip pair is the whole status. */}
           <StatusChips chips={chips} />
           <span className="ml-auto flex items-center gap-3">
             <ActionDirtyHint />
@@ -212,7 +216,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                       // UX-013: quote numbers look like the links they are; superseded rows are quiet, not faint.
                       <li key={q.id} className={`flex items-center gap-2 ${q.status === "superseded" ? "text-slate-500" : ""}`}>
                         <Link href={`/quotes/${q.id}`} className="font-mono text-xs text-indigo-600 hover:underline">{q.quote_number} v{q.version}</Link>
-                        <span className="text-xs">{q.status}</span>
+                        <Pill status={q.status} />
                         <span className="ml-auto tabular-nums">{money(q.total)}</span>
                         <a href={`/quotes/${q.id}/pdf`} target="_blank" className="text-xs text-indigo-600 hover:underline">PDF</a>
                       </li>
@@ -291,7 +295,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                       {rating.worksheet.map((w, i) => (
                         <tr key={i} className="border-t border-slate-100">
                           <td className="py-1.5 pr-2"><span className="font-medium">{w.step}</span><br /><span className="text-slate-500">{w.detail}</span></td>
-                          <td className="whitespace-nowrap py-1.5 pr-2 text-right tabular-nums text-slate-500">{w.factor ? `× ${Number(w.factor)}` : ""}</td>
+                          <td className="whitespace-nowrap py-1.5 pr-2 text-right tabular-nums text-slate-500">{w.factor ? `× ${Number(w.factor).toFixed(2)}` : ""}</td>
                           <td className="py-1.5 text-right tabular-nums">{money(w.premium)}</td>
                         </tr>
                       ))}
@@ -303,7 +307,8 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
               )}
             </Card>
 
-            <Card title={`Referrals · ${flags.filter((f) => f.severity === "refer").length} refer, ${flags.filter((f) => f.severity === "warn").length} warn`}>
+            {/* UX-036: the same numbers as the header chip: what is still open, what was cleared, what only warns. */}
+            <Card title={referralsTitle}>
               <ul className="divide-y divide-slate-100">
                 {flags.map((f) => {
                   const clearance = ws.referral_clearances[f.code];

@@ -176,7 +176,7 @@ async function bridgeRating(sub: SubmissionRow, inputs: RatingInputs, schedule: 
   if (current.rate_version === exp.rate_version) return current;
   try {
     const versionId = await rateVersionId(exp.rate_version);
-    return versionId ? await rateOn(inputs, schedule, versionId, `${sub.reference} on ${exp.rate_version}`, actor) : null;
+    return versionId ? await rateOn(inputs, schedule, versionId, `${sub.reference} (expiring rates)`   /* UX-031: the summary adds "on <version>" itself */, actor) : null;
   } catch {
     return null;
   }

@@ -40,11 +40,11 @@ def test_audit_kind_reads_the_audit_row():
 def test_when_renders_in_display_tz(monkeypatch):
     t = datetime(2026, 10, 23, 1, 55, tzinfo=timezone.utc)   # 21:55 the evening before in New York
     monkeypatch.delenv("DISPLAY_TZ", raising=False)
-    assert when(t) == "2026-10-22 21:55 EDT"
+    assert when(t) == "Oct 22, 2026, 9:55 PM EDT"
     monkeypatch.setenv("DISPLAY_TZ", "Europe/London")
-    assert when(t) == "2026-10-23 02:55 BST"
+    assert when(t) == "Oct 23, 2026, 2:55 AM BST"
     monkeypatch.setenv("DISPLAY_TZ", "Not/AZone")
-    assert when(t) == "2026-10-23 01:55 UTC"   # a bad setting still labels the zone rather than failing
+    assert when(t) == "Oct 23, 2026, 1:55 AM UTC"   # a bad setting still labels the zone rather than failing
     assert when(None) == ""
     assert when(datetime(2026, 10, 23, 1, 55)) == when(t)   # a naive value is taken as UTC
 

@@ -105,7 +105,7 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     if (s.status === "needs_review") {
       const missing = missingForRating(s.data).length;
       tasks.push({ kind: "review", title: `Review intake: ${name}`, href: `/submissions/${s.id}`, due: null, urgency: 20,
-        detail: `${s.reference} · received ${whenDate(s.received_at)}${missing ? ` · ${missing} rating field(s) missing` : ""}` });   // UX-025
+        detail: `${s.reference} · received ${whenDate(s.received_at)}${missing ? ` · ${plural(missing, "rating field")} missing` : ""}` });   // UX-025
       continue;
     }
     if (quotedSubs.has(s.id)) continue;
@@ -116,7 +116,7 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     }
     const r = readiness(s, s.ws, activeVersion);
     if (r.openReferrals.length) {
-      tasks.push({ kind: "referral", title: `Clear ${r.openReferrals.length} referral(s): ${name}`,
+      tasks.push({ kind: "referral", title: `Clear ${plural(r.openReferrals.length, "referral")}: ${name}`,
         detail: r.openReferrals.map((f) => f.title).join(" · "), href: `/submissions/${s.id}/workbench`, due: null, urgency: 25 });
     } else if (!r.rated) {
       const never = !s.ws.last_rating;
@@ -133,7 +133,7 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     if (q.status !== "issued") continue;
     const left = daysUntil(q.valid_until, today);
     tasks.push({ kind: "bind", title: `${left < 0 ? "Expired quote" : "Chase bind order"}: ${q.insured_name}`,
-      detail: `${q.quote_number} v${q.version} · $${Math.round(q.total).toLocaleString("en-US")} · ${left < 0 ? `expired ${-left} day(s) ago` : `valid ${left} more day(s)`}`,
+      detail: `${q.quote_number} v${q.version} · $${Math.round(q.total).toLocaleString("en-US")} · ${left < 0 ? `expired ${plural(-left, "day")} ago` : `valid ${plural(left, "day")} more`}`,
       href: `/quotes/${q.id}`, due: q.valid_until, urgency: left });
   }
   for (const p of policies.rows) {
@@ -142,21 +142,21 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     const next = open.map((x) => x.due_date).sort()[0];
     const left = daysUntil(next, today);
     tasks.push({ kind: "subjectivity", title: `Chase ${open.length} open subjectivit${open.length === 1 ? "y" : "ies"}: ${p.insured_name}`,
-      detail: `${p.policy_number} · ${left < 0 ? `overdue by ${-left} day(s)` : `next due in ${left} day(s)`}`,
+      detail: `${p.policy_number} · ${left < 0 ? `overdue by ${plural(-left, "day")}` : `next due in ${plural(left, "day")}`}`,
       href: `/policies/${p.id}`, due: next, urgency: left });
   }
   for (const p of renewals) {
     const left = daysUntil(p.expiration_date, today);
     if (p.renewal_status === "in_progress" && left <= 30) {
       tasks.push({ kind: "renewal", title: `Finish renewal: ${p.insured_name}`,
-        detail: `${p.policy_number} · in progress · expires in ${left} day(s) · $${Math.round(p.premium).toLocaleString("en-US")} expiring`,
+        detail: `${p.policy_number} · in progress · expires in ${plural(left, "day")} · $${Math.round(p.premium).toLocaleString("en-US")} expiring`,
         href: p.renewal_submission_id ? `/submissions/${p.renewal_submission_id}/renewal` : p.href ?? "#renewals",
         due: p.expiration_date, urgency: left - 30 });
       continue;
     }
     if (left > 60 || p.renewal_status !== "not_started") continue;
     tasks.push({ kind: "renewal", title: `Start renewal: ${p.insured_name}`,
-      detail: `${p.policy_number} · expires in ${left} day(s) · $${Math.round(p.premium).toLocaleString("en-US")} expiring`,
+      detail: `${p.policy_number} · expires in ${plural(left, "day")} · $${Math.round(p.premium).toLocaleString("en-US")} expiring`,
       href: p.href ?? "#renewals", due: p.expiration_date, urgency: left - 30 });
   }
   if (inbox.length) {
@@ -224,4 +224,14 @@ export async function submissionStages(subs: SubmissionRow[]): Promise<Map<strin
       quote: quote.get(s.id) ?? null, policy: policy.get(s.id) ?? null,
     })];
   }));
+}
+
+/** UX-031: `1 referral`, `2 referrals`, never `referral(s)`. */
+export const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** UX-034: stages for rows that are not full SubmissionRows (search hits, a customer's files). */
+export async function submissionStagesById(ids: string[]): Promise<Map<string, Stage>> {
+  if (!ids.length) return new Map();
+  const { rows } = await customerDb.query<SubmissionRow>("SELECT * FROM submissions WHERE id = ANY($1)", [ids]);
+  return submissionStages(rows);
 }

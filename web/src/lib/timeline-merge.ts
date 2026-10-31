@@ -1,6 +1,6 @@
 // One audit timeline from three sources: UW Desktop events (policy.audit_events), rate-table
 // changes (rating service) and rating calls (rating service). Pure module for node:test.
-import { DISPLAY_TIME_ZONE } from "./time.ts";
+import { DISPLAY_TIME_ZONE, when } from "./time.ts";
 
 export type Source = "desktop" | "rate_admin" | "rating";
 
@@ -111,7 +111,7 @@ export function groupByCorrelation(events: TimelineEvent[]): Group[] {
 /** Short display of an audit value: schedules as "safety -5%", subjectivities as "text: open (due …)", else compact JSON. */
 export function display(v: unknown, max = 140): string {
   if (v === null || v === undefined || v === "") return "—";
-  if (typeof v === "string") return v;
+  if (typeof v === "string") return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(v) ? when(v) : v;   // UX-025
   if (Array.isArray(v) && v.length && v.every((i) => i && typeof i === "object" && "category" in i && "pct" in i)) {
     return (v as { category: string; pct: number }[]).map((i) => `${i.category} ${i.pct > 0 ? "+" : ""}${i.pct}%`).join(", ");
   }

@@ -168,7 +168,7 @@ export default async function RenewalPage({ params, searchParams }: Props) {
                           {l ? (
                             <>
                               <span className="text-slate-600">{l.detail}</span>
-                              <span className="ml-2 whitespace-nowrap tabular-nums">{l.factor !== null ? `× ${l.factor}` : ""} → {money(l.premium)}</span>
+                              <span className="ml-2 whitespace-nowrap tabular-nums">{l.factor !== null ? `× ${Number(l.factor).toFixed(2)}` : ""} → {money(l.premium)}</span>
                             </>
                           ) : <span className="text-slate-500">—</span>}
                         </td>

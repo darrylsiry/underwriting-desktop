@@ -3,7 +3,8 @@ import Link from "next/link";
 import { when } from "@/components/ui";
 import { submissionStages } from "@/lib/dashboard";
 import { inboxWarning, listInbox } from "@/lib/inbox";
-import { STAGE_FILTERS, isStageKey, stageSummary, type Stage } from "@/lib/stage";
+import { StageChip } from "@/components/stage-chip";
+import { STAGE_FILTERS, isStageKey, stageSummary } from "@/lib/stage";
 import { listSubmissions, missingForRating } from "@/lib/submissions";
 import { FIELD_DEFS, attention, getPath } from "@/lib/submission";
 import { iso } from "@/lib/time";
@@ -15,10 +16,6 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Submissions" };   // UX-010
 
 // UX-005: the stage chip, in the colours the rest of the app uses (amber: needs attention, emerald: done, indigo: out the door).
-const STAGE_STYLE: Record<Stage["tone"], string> = {
-  amber: "bg-amber-50 text-amber-800", emerald: "bg-emerald-50 text-emerald-700", indigo: "bg-indigo-50 text-indigo-700", slate: "bg-slate-100 text-slate-600",
-};
-
 /** `?stage=` keeps one stage (UX-005). */
 export default async function SubmissionsPage({ searchParams }: { searchParams: Promise<{ stage?: string }> }) {
   const [all, inbox, { stage }] = await Promise.all([listSubmissions(), listInbox(), searchParams]);
@@ -94,7 +91,7 @@ export default async function SubmissionsPage({ searchParams }: { searchParams: 
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-2"><span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${STAGE_STYLE[st.tone]}`}>{st.label}</span></td>
+                <td className="px-4 py-2"><StageChip stage={st} /></td>
                 <td className="whitespace-nowrap px-4 py-2 text-xs text-slate-500"><time dateTime={iso(s.received_at)}>{when(s.received_at)}</time></td>
               </tr>
             );

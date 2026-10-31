@@ -210,9 +210,9 @@ def test_timestamps_are_in_the_display_zone(client, monkeypatch):
     import re
     monkeypatch.delenv("DISPLAY_TZ", raising=False)
     page = client.get("/admin").text
-    assert re.search(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2} E[DS]T", page), "activation/audit times should show EDT/EST"
+    assert re.search(r"[A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2} [AP]M E[DS]T", page), "activation/audit times should show EDT/EST"
     monkeypatch.setenv("DISPLAY_TZ", "UTC")
-    assert re.search(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC", client.get("/admin").text)
+    assert re.search(r"[A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2} [AP]M UTC", client.get("/admin").text)
 
 
 def test_submit_buttons_show_a_pending_state(client):

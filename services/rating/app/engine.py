@@ -88,7 +88,7 @@ def rate(tables: RateTables, inp: RatingInput) -> RatingResult:
     premium = cls["base_rate"] * inp.gross_receipts / 1000
     lines.append(WorksheetLine(
         step="Base premium",
-        detail=f"{cls['description']}: ${cls['base_rate']} per $1,000 × ${inp.gross_receipts:,.0f} receipts",
+        detail=f"{cls['description']}: ${Decimal(cls['base_rate']):.2f} per $1,000 × ${inp.gross_receipts:,.0f} receipts",  # UX-030
         premium=_money(premium),
     ))
 

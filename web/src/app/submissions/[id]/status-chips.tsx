@@ -3,7 +3,7 @@ import type { Chip } from "@/lib/worksheet";
 // UX-003: one look for the commercial / worksheet chip pair on the workbench and the renewal comparison.
 // Emerald is done, indigo is a live commercial state, amber needs attention, slate is nothing yet.
 const TONE: Record<Chip["tone"], string> = {
-  done: "bg-emerald-600 text-white", action: "bg-indigo-50 text-indigo-700", attention: "bg-amber-50 text-amber-800", quiet: "bg-slate-100 text-slate-600",
+  done: "bg-emerald-50 text-emerald-700",   /* UX-033: tinted like every other pill */ action: "bg-indigo-50 text-indigo-700", attention: "bg-amber-50 text-amber-800", quiet: "bg-slate-100 text-slate-600",
 };
 
 export function StatusChips({ chips }: { chips: { commercial: Chip | null; worksheet: Chip | null } }) {

@@ -1,3 +1,4 @@
+import { whenDate } from "./time.ts";
 // Comparing an expiring policy with its renewing terms: which rating variables changed, which rate
 // factors changed, and how the premium change splits between the two. Pure module (type-only
 // imports) so node:test can load it; the memo PDF and the comparison page both render from this.
@@ -70,7 +71,7 @@ export function inputText(key: keyof RatingInputs, v: RatingInputs[keyof RatingI
 const sameInput = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const categoryLabel = (key: string) => SCHEDULE_CATEGORIES.find((c) => c.key === key)?.label ?? key;
 const schedText = (pct: number) => `${pct > 0 ? "+" : ""}${pct}%`;
-const usDate = (iso: string) => { const [y, m, d] = iso.split("-"); return `${m}/${d}/${y}`; };
+const usDate = (iso: string) => whenDate(iso);   // UX-025: one on-screen date format
 
 function termChanges(a: Side, b: Side): TermChange[] {
   const out: TermChange[] = [{

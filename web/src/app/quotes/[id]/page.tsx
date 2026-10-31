@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { inputText } from "@/lib/renewal-compare";
 import { notFound } from "next/navigation";
 import { Fragment, cache } from "react";
 import { Pill, RowLink, Section, money, when, whenDate } from "@/components/ui";
@@ -68,7 +69,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
               {r.worksheet.map((w, i) => (
                 <tr key={i} className="border-t border-slate-100">
                   <td className="px-4 py-1.5"><span className="font-medium">{w.step}</span> <span className="text-xs text-slate-500">{w.detail}</span></td>
-                  <td className="whitespace-nowrap px-4 py-1.5 text-right text-xs text-slate-500">{w.factor ? `× ${Number(w.factor)}` : ""}</td>
+                  <td className="whitespace-nowrap px-4 py-1.5 text-right text-xs text-slate-500">{w.factor ? `× ${Number(w.factor).toFixed(2)}` : ""}</td>
                   <td className="px-4 py-1.5 text-right tabular-nums">{money(w.premium)}</td>
                 </tr>
               ))}
@@ -82,8 +83,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
             <div className="grid gap-x-6 gap-y-1 p-4 text-sm sm:grid-cols-2">
               {INPUT_DEFS.map((d) => {
                 const v = q.rating_inputs[d.key];
-                const shown = Array.isArray(v) ? v.join(", ") : typeof v === "boolean" ? (v ? "yes" : "no")
-                  : d.kind === "money" ? money(v) : d.kind === "pct" ? `${v}%` : String(v);
+                const shown = inputText(d.key, v);   // UX-030: the same text the workbench and renewal table show
                 return <p key={d.key}><span className="text-slate-500">{d.label}:</span> {shown}</p>;
               })}
             </div>

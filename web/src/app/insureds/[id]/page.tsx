@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cache } from "react";
+import { StageChip } from "@/components/stage-chip";
 import { Empty, Pill, RowLink, Section, money, when, whenDate } from "@/components/ui";
+import { submissionStagesById } from "@/lib/dashboard";
 import { getInsured, policiesForInsured, quotesForInsured, submissionsForInsured } from "@/lib/insureds";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +29,7 @@ export default async function InsuredPage({ params }: { params: Promise<{ id: st
   const insured = await load(id);
   if (!insured) notFound();
   const [submissions, quotes, policies] = await Promise.all([submissionsForInsured(id), quotesForInsured(id), policiesForInsured(id)]);
+  const stages = await submissionStagesById(submissions.map((x) => x.id));   // UX-034
   const written = policies.reduce((s, p) => s + Number(p.premium), 0);
 
   return (
@@ -76,15 +79,21 @@ export default async function InsuredPage({ params }: { params: Promise<{ id: st
           {!quotes.length && <Empty>No quotes yet</Empty>}
         </Section>
         <Section title="Submissions">
-          <table className="w-full text-sm"><Head cols={["Ref", "Class", "Receipts", "Status", "Received", ["Next step", "right"]]} /><tbody>
+          <table className="w-full text-sm"><Head cols={["Ref", "Class", "Receipts", "Stage", "Received", ["Next step", "right"]]} /><tbody>
             {submissions.map((s) => (
               <tr key={s.id} className="border-t border-slate-100">
                 <td className="px-4 py-2 font-mono text-xs"><RowLink href={`/submissions/${s.id}`}>{s.reference}</RowLink></td>
                 <td className="px-4 py-2 text-xs">class {s.class_code ?? "—"}</td>
                 <td className="px-4 py-2 text-xs">{s.receipts ? `${money(s.receipts)} receipts` : ""}</td>
-                <td className="px-4 py-2"><Pill status={s.status} /></td>
+                <td className="px-4 py-2">{stages.get(s.id) ? <StageChip stage={stages.get(s.id)!} /> : <Pill status={s.status} />}</td>
                 <td className="px-4 py-2 text-xs text-slate-500">{when(s.received_at)}</td>
-                <td className="px-4 py-2 text-right text-xs"><RowLink href={`/submissions/${s.id}/workbench`}>Workbench →</RowLink></td>
+                {/* UX-034: the next step follows the stage: review, work, or open the policy it became. */}
+                <td className="px-4 py-2 text-right text-xs">{(() => {
+                  const st = stages.get(s.id);
+                  if (st?.key === "bound") return <RowLink href={`/search?q=${encodeURIComponent(st.label.replace(/^Bound /, ""))}`}>Policy →</RowLink>;
+                  if (st?.key === "review" || s.status === "needs_review") return <RowLink href={`/submissions/${s.id}`}>Review →</RowLink>;
+                  return <RowLink href={`/submissions/${s.id}/workbench`}>Workbench →</RowLink>;
+                })()}</td>
               </tr>
             ))}
           </tbody></table>
