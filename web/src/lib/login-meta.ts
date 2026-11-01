@@ -84,6 +84,17 @@ export function place(geo: Geo | null | undefined): string {
   return [geo.city, geo.region, geo.country_code ?? geo.country].filter((s, i, a) => s && a.indexOf(s) === i).join(", ");
 }
 
+/**
+ * An address short enough for a table cell: IPv4 and short IPv6 addresses as they are, a long IPv6
+ * one as its first two groups and its last (`2600:1702:…:9d45`), which keeps the network and still
+ * tells devices apart. The tables show the full address on hover.
+ */
+export function shortIp(ip: string): string {
+  if (ip.includes(".") || ip.length <= 19) return ip;
+  const groups = ip.split(":");
+  return groups.length < 4 ? ip : `${groups[0]}:${groups[1]}:…:${groups[groups.length - 1]}`;
+}
+
 /** A short browser/OS label from a user-agent string, for the tables; the full string stays in the row. */
 export function browserLabel(ua: string | null): string {
   if (!ua) return "";

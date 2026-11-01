@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Empty, RowLink, Section, when as whenAt } from "@/components/ui";
 import { loginReport } from "@/lib/login-events";
-import { browserLabel, place, type LoginEvent, type UserSummary } from "@/lib/login-meta";
+import { browserLabel, place, shortIp, type LoginEvent, type UserSummary } from "@/lib/login-meta";
+import { iso, whenShort } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,20 @@ export const metadata: Metadata = { title: "Sign-ins" };   // UX-010
 // UX-006: the same display zone as every other screen (was UTC in its own format).
 const when = (d: Date | null) => (d ? whenAt(d) : "—");
 const num = (n: number) => n.toLocaleString("en-US");
+
+/** A table timestamp: `Oct 31, 10:13 PM`, with the full time and zone on hover. */
+function Stamp({ at }: { at: Date | null }) {
+  return at ? <time dateTime={iso(at)} title={whenAt(at)}>{whenShort(at)}</time> : <>—</>;
+}
+
+/** An address, shortened when it is a long IPv6 one, with the full address on hover. */
+function Address({ ip }: { ip: string | null }) {
+  if (!ip) return <span className="text-slate-500">—</span>;
+  const short = shortIp(ip);
+  return short === ip
+    ? <span className="font-mono text-xs">{ip}</span>
+    : <span className="cursor-help font-mono text-xs underline decoration-slate-300 decoration-dotted underline-offset-2" title={ip}>{short}</span>;
+}
 
 function Stat({ label, value, tone = "" }: { label: string; value: string; tone?: string }) {
   return (
@@ -23,9 +38,10 @@ function Stat({ label, value, tone = "" }: { label: string; value: string; tone?
 function UsersTable({ users }: { users: UserSummary[] }) {
   if (!users.length) return <Empty>No sign-ins.</Empty>;
   return (
+    <div className="overflow-x-auto">
     <table className="w-full text-sm">
       <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
-        <tr><th className="px-4 py-2">User</th><th className="px-2 py-2 text-right">Sign-ins</th><th className="px-2 py-2 text-right">Failed</th><th className="px-2 py-2">First</th><th className="px-2 py-2">Last</th><th className="px-2 py-2">Last from</th><th className="px-2 py-2">All addresses</th><th className="px-2 py-2">All locations</th><th className="px-2 py-2">Via</th></tr>
+        <tr><th className="px-4 py-2">User</th><th className="px-2 py-2 text-right">Sign-ins</th><th className="px-2 py-2 text-right">Failed</th><th className="px-2 py-2">First</th><th className="px-2 py-2">Last</th><th className="px-2 py-2">Last from</th><th className="px-2 py-2">All locations</th><th className="px-2 py-2">Via</th></tr>
       </thead>
       <tbody>
         {users.map((u) => (
@@ -33,22 +49,23 @@ function UsersTable({ users }: { users: UserSummary[] }) {
             <td className="px-4 py-2 font-medium text-slate-900">{u.username}</td>
             <td className="px-2 py-2 text-right tabular-nums">{num(u.logins)}</td>
             <td className={`px-2 py-2 text-right tabular-nums ${u.failures ? "text-rose-700" : "text-slate-500"}`}>{num(u.failures)}</td>
-            <td className="whitespace-nowrap px-2 py-2 text-slate-600">{when(u.first_seen)}</td>
-            <td className="whitespace-nowrap px-2 py-2 text-slate-600">{when(u.last_seen)}</td>
-            <td className="px-2 py-2 text-slate-600"><span className="font-mono text-xs">{u.last_ip ?? "—"}</span>{u.last_place && <span className="block text-xs text-slate-500">{u.last_place}</span>}</td>
-            <td className="px-2 py-2 font-mono text-xs text-slate-600">{u.ips.join(", ") || "—"}</td>
+            <td className="whitespace-nowrap px-2 py-2 text-slate-600"><Stamp at={u.first_seen} /></td>
+            <td className="whitespace-nowrap px-2 py-2 text-slate-600"><Stamp at={u.last_seen} /></td>
+            <td className="whitespace-nowrap px-2 py-2 text-slate-600"><Address ip={u.last_ip} />{u.last_place && <span className="block text-xs text-slate-500">{u.last_place}</span>}</td>
             <td className="px-2 py-2 text-xs text-slate-600">{u.places.join("; ") || "—"}</td>
             <td className="px-2 py-2 text-xs text-slate-600">{u.methods.join(", ")}</td>
           </tr>
         ))}
       </tbody>
     </table>
+    </div>
   );
 }
 
 function EventsTable({ events }: { events: LoginEvent[] }) {
   if (!events.length) return <Empty>No attempts.</Empty>;
   return (
+    <div className="overflow-x-auto">
     <table className="w-full text-sm">
       <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
         <tr><th className="px-4 py-2">When</th><th className="px-2 py-2">User</th><th className="px-2 py-2">Result</th><th className="px-2 py-2">Via</th><th className="px-2 py-2">Address</th><th className="px-2 py-2">Location</th><th className="px-2 py-2">Network</th><th className="px-2 py-2">Edge</th><th className="px-2 py-2">Browser</th><th className="px-2 py-2">Language</th></tr>
@@ -56,13 +73,13 @@ function EventsTable({ events }: { events: LoginEvent[] }) {
       <tbody>
         {events.map((e) => (
           <tr key={e.id} className="border-t border-slate-100">
-            <td className="whitespace-nowrap px-4 py-2 text-slate-600">{when(e.occurred_at)}</td>
+            <td className="whitespace-nowrap px-4 py-2 text-slate-600"><Stamp at={e.occurred_at} /></td>
             <td className="px-2 py-2 font-medium text-slate-900">{e.username}</td>
             <td className="px-2 py-2">{e.success
               ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">signed in</span>
               : <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700">failed</span>}</td>
             <td className="px-2 py-2 text-xs text-slate-600">{e.method === "signin" ? "sign-in page" : "API (Basic)"}</td>
-            <td className="px-2 py-2 font-mono text-xs text-slate-600">{e.ip ?? "—"}</td>
+            <td className="whitespace-nowrap px-2 py-2 text-slate-600"><Address ip={e.ip} /></td>
             <td className="px-2 py-2 text-slate-600" title={e.geo_source ?? ""}>{place(e.geo) || <span className="text-xs text-slate-500">{e.geo_source ?? "pending"}</span>}</td>
             <td className="px-2 py-2 text-xs text-slate-600">{e.geo?.isp ?? "—"}</td>
             <td className="px-2 py-2 text-xs text-slate-600">{e.edge_region ?? "—"}</td>
@@ -72,6 +89,7 @@ function EventsTable({ events }: { events: LoginEvent[] }) {
         ))}
       </tbody>
     </table>
+    </div>
   );
 }
 

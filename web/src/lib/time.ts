@@ -18,5 +18,19 @@ export const whenDate = (d: Date | string) => {
   return date.toLocaleDateString("en-US", { timeZone: typeof d === "string" ? "UTC" : DISPLAY_TIME_ZONE, dateStyle: "medium" });
 };
 
+/**
+ * `Oct 31, 10:13 PM`: a compact timestamp for dense tables, in the display zone, with the year
+ * only when it isn't this year (`Dec 31, 2025, 10:13 PM`). Give the cell `when()` as a title so
+ * the full time and its zone are a hover away.
+ */
+export const whenShort = (d: Date | string, now: Date = new Date()) => {
+  const date = new Date(d);
+  const year = (x: Date) => x.toLocaleString("en-US", { timeZone: DISPLAY_TIME_ZONE, year: "numeric" });
+  return date.toLocaleString("en-US", {
+    timeZone: DISPLAY_TIME_ZONE, month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+    ...(year(date) === year(now) ? {} : { year: "numeric" as const }),
+  });
+};
+
 /** ISO value for `<time dateTime>`. */
 export const iso = (d: Date | string) => new Date(d).toISOString();

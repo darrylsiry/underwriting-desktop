@@ -1,8 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { browserLabel, buildReport, clientInfo, isPublicIp, place, reportMarkdown, sanitizeGeo, summarize, type LoginEvent } from "./login-meta.ts";
+import { browserLabel, buildReport, clientInfo, isPublicIp, place, reportMarkdown, sanitizeGeo, shortIp, summarize, type LoginEvent } from "./login-meta.ts";
 
 const H = (o: Record<string, string>) => ({ get: (n: string) => o[n.toLowerCase()] ?? null });
+
+test("shortIp keeps IPv4 and short IPv6, and cuts a long IPv6 to network and device", () => {
+  assert.equal(shortIp("2600:1702:82d0:bcf:b50c:5cac:848d:9d45"), "2600:1702:…:9d45");
+  assert.equal(shortIp("2600:1702:82d0:bcf:2d3c:fd96:e3b8:a0a5"), "2600:1702:…:a0a5");   // same network, another device
+  assert.equal(shortIp("2600:1702:82d0:bcf::9d45"), "2600:1702:…:9d45");
+  assert.equal(shortIp("203.0.113.9"), "203.0.113.9");
+  assert.equal(shortIp("::ffff:198.51.100.7"), "::ffff:198.51.100.7");
+  assert.equal(shortIp("2001:db8::1"), "2001:db8::1");
+  assert.equal(shortIp("::1"), "::1");
+});
 
 test("clientInfo believes address headers only from a proxy that is in front (SEC-033)", () => {
   const fly = { FLY_APP_NAME: "uwdesk-web" }, proxied = { TRUSTED_PROXY: "1" }, bare = {};
