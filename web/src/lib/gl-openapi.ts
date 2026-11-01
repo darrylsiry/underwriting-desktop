@@ -48,6 +48,10 @@ const FORMAT_PARAM: Parameter = {
   name: "format", in: "query", description: "`json` (default) answers with journals and their lines; `csv` and `xlsx` answer with the same file the Accounting page's push produces, one row per journal line.",
   schema: { type: "string", enum: EXPORT_FORMATS, default: "json" },
 };
+const DOWNLOAD_PARAM: Parameter = {
+  name: "download", in: "query", description: "`1` returns `format=json` as a file to save (`Content-Disposition: attachment`, the same JSON the push produces) instead of the plain API answer. CSV and Excel are always files.",
+  schema: { type: "string", enum: ["1"] },
+};
 
 const money = { type: "number", description: "USD, two decimals" };
 const SCHEMAS: Record<string, unknown> = {
@@ -135,7 +139,7 @@ export function glOpenApi(origin: string): OpenApiDocument {
       "/api/gl": { get: { operationId: "index", tags: ["Meta"], summary: "Front door", description: "Links to every endpoint, the documentation, this spec and the MCP server, plus who you are authenticated as. A good first call to check credentials.",
         responses: { "200": { description: "OK", content: json(ref("ApiIndex")) }, "401": errorResponse("Missing or wrong credentials") }, "x-try": "" } },
       "/api/gl/postings": { get: { operationId: "listPostings", tags: ["Sub-ledger"], summary: "Journals for a period", description: "The sub-ledger for a posting-date range, transaction type or export batch: journals with their policy details, the audit link to the underwriting action, and their debit/credit lines. Totals reconcile against the lines. Reads only: nothing is stamped as pushed.",
-        parameters: [...FILTER_PARAMS, FORMAT_PARAM],
+        parameters: [...FILTER_PARAMS, FORMAT_PARAM, DOWNLOAD_PARAM],
         responses: {
           "200": { description: "OK", content: { ...json(ref("LedgerDocument")), "text/csv": { schema: { type: "string" } }, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { schema: { type: "string", format: "binary" } } } },
           "400": errorResponse("A parameter is invalid; `details` names each one"), "401": errorResponse("Missing or wrong credentials") },

@@ -838,4 +838,8 @@ read this to replay the build quickly.
 - **Found on its first run:** two Accounting defects, now failing tests, both live on the site.
   - **UAT-F1:** "Nothing new to push" on All periods downloads only this month's lines, because the download link drops `period`.
   - **UAT-F2:** Export JSON opens raw JSON instead of downloading it, because there is no `Content-Disposition`.
+- **Follow-up fix (same session, "Yes, fix both"):**
+  - **UAT-F1:** the Accounting page's download link now names `period=all` when the range has no dates.
+  - **UAT-F2:** the page asks for JSON with `download=1`. `GET /api/gl/postings` then answers with the push's JSON file as an attachment, and the plain API answer is unchanged. The OpenAPI document lists the new `download` parameter.
+  - After the fix, the sandbox passed 59 of 60 (the skip is audit paging) and the canary passed.
 - **How to show it:** `/uat` in Claude Code, or `scripts/uat.sh`. `UAT_KEEP=1 scripts/uat.sh sandbox` leaves the sandbox up at http://127.0.0.1:3900 (`uat` / `uat-sandbox-pass`). Then open `docs/UAT_REPORT.md`.

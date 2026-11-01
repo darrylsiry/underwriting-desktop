@@ -45,7 +45,8 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
   const justPushed = /^\d+$/.test(p.pushed ?? "") ? Number(p.pushed) : null;
   const format: ExportFormat = (EXPORT_FORMATS as readonly string[]).includes(p.format ?? "") ? (p.format as ExportFormat) : "xlsx";
   const last = rows.filter((r) => r.exported_at).sort((a, b) => b.exported_at!.getTime() - a.exported_at!.getTime())[0];
-  const fileQs = new URLSearchParams({ ...(filter.from ? { from: filter.from } : {}), ...(filter.to ? { to: filter.to } : {}), ...(filter.type ? { type: filter.type } : {}), ...(filter.batch ? { batch: filter.batch } : {}), format });
+  // All periods has no dates, so it must be named or the API falls back to this month (UAT-F1). JSON asks to be a file (UAT-F2).
+  const fileQs = new URLSearchParams({ ...(!filter.from && !filter.to ? { period: "all" } : {}), ...(filter.from ? { from: filter.from } : {}), ...(filter.to ? { to: filter.to } : {}), ...(filter.type ? { type: filter.type } : {}), ...(filter.batch ? { batch: filter.batch } : {}), format, ...(format === "json" ? { download: "1" } : {}) });
   const fileHref = `/api/gl/postings?${fileQs}`;   // a read: renders the same file without stamping
 
   return (
