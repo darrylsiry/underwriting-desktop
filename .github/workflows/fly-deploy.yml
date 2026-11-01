@@ -19,6 +19,13 @@ on:
       - "web/**"
       - "samples/submissions/**"
       - "scripts/fly-deploy.sh"
+      # App Tests (step 26) bakes the review agents' reports into the web image, so a report change redeploys.
+      - "docs/CODE_REVIEW.md"
+      - "docs/SECURITY_REVIEW.md"
+      - "docs/UX_REVIEW.md"
+      - "docs/UAT_REPORT.md"
+      - "docs/AGENT_LEDGER.json"
+      - "docs/ux-mockups/**"
       - ".github/workflows/fly-deploy.yml"
   workflow_dispatch: {}
 

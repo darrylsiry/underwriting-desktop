@@ -56,6 +56,8 @@ services:
       # Broker drop folder shown in the Submissions inbox. Writable: when fewer than five submissions
       # are waiting the app generates more into it (step 20); those folders are git-ignored.
       - ./samples/submissions:/inbox
+      # App Tests (step 26) reads the review agents' reports live from the checkout's docs/.
+      - ./docs:/app/agent-reports:ro
     ports: ["127.0.0.1:3000:3000"]
     depends_on:
       db: { condition: service_healthy }

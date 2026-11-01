@@ -54,6 +54,7 @@ export default async function RootLayout({
               { href: "/audit/logins", label: "Sign-ins" },
               { href: "/accounting", label: "Accounting" },
               { href: RATING_ADMIN_URL, label: "Rate tables", external: true },
+              { href: "/app-tests", label: "App Tests" },
             ]} />
           </nav>
           <form action="/search" className="ml-auto">
