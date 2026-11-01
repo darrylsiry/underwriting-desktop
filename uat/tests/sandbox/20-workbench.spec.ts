@@ -40,11 +40,31 @@ test.describe.serial("workbench, quote and bind", () => {
     await expect(page.getByText(/write a reason for the debit/).first()).toBeVisible();
   });
 
-  test("clear every referral with a note, then the file is ready to quote", async ({ page }) => {
+  test("a schedule beyond authority refers; clearing it with a note makes the file ready to quote", async ({ page }) => {
     const sub = need("inboxSub");
     await page.goto(`/submissions/${sub}/workbench`);
+    // A -20% schedule is beyond the ±15% authority, so this referral fires whatever the extraction found.
+    await page.locator('input[name="schedule.management.pct"]').fill("-10");
+    await page.locator('input[name="schedule.management.rationale"]').fill("Owner has 20 years in the trade (UAT)");
+    await page.locator('input[name="schedule.safety.pct"]').fill("-10");
+    await page.locator('input[name="schedule.safety.rationale"]').fill("Written safety program with monthly toolbox talks (UAT)");
+    await page.getByRole("button", { name: "Save & rate" }).click();
+    await expectMessage(page, /Rated:/);
+    const note = page.getByLabel('Why "Schedule mod above authority" is acceptable');
+    await expect(note).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Issue quote · \$/ })).toHaveCount(0);
+    await expect(page.getByText(/Clear \d+ open referrals? to quote/)).toBeVisible();
+    // A note under ten characters is refused by the server too, not only by the browser.
+    await note.evaluate((el) => el.removeAttribute("minlength"));
+    await note.fill("ok");
+    await note.locator("xpath=ancestor::form[1]").getByRole("button", { name: "Clear", exact: true }).click();
+    await expectMessage(page, "Write a note explaining why this is acceptable");
+    await expect(note).toBeVisible();
     const n = await clearReferrals(page);
     test.info().annotations.push({ type: "referrals cleared", description: String(n) });
+    expect(n, "referrals cleared").toBeGreaterThan(0);
+    await expect(note).toHaveCount(0);
+    await expect(page.getByText(/UAT: acceptable within delegated authority/).first()).toBeVisible();
     await expect(page.getByRole("button", { name: /^Issue quote · \$/ })).toBeVisible();
   });
 
