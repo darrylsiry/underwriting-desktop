@@ -141,7 +141,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
           <ActionForm className="space-y-6">
-            <fieldset disabled={!!policy} className={`space-y-6 ${policy ? "opacity-75" : ""}`}>{/* UX-037 */}
+            <fieldset disabled={!!policy} className="space-y-6 [&_input:disabled]:bg-slate-50 [&_input:disabled]:text-slate-700 [&_select:disabled]:bg-slate-50 [&_select:disabled]:text-slate-700">{/* UX-037; UX-047: quiet the controls, not the labels */}
             <Card title="Rating inputs">
               <div className="grid gap-x-6 gap-y-3 p-4 sm:grid-cols-2">
                 {INPUT_DEFS.map((d) => (
