@@ -1,0 +1,26 @@
+# UAT sandbox: a disposable copy of the whole stack, isolated from both production and the
+# everyday local stack. Used only by scripts/uat.sh, always with its own project name:
+#
+#   docker compose -p uwdesk-uat -f docker-compose.yml -f uat/docker-compose.uat.yml up -d --build
+#
+# Own project name  -> own containers, network and database volume (uwdesk-uat_pgdata), wiped
+#                      with `down -v` after every run.
+# Own port (3900)   -> never collides with the dev stack on 3000/3100/3101.
+# Own inbox copy    -> the app writes generated submissions into its drop folder; the sandbox
+#                      writes into uat/.work/inbox, never into samples/submissions.
+# Sign-in on        -> BASIC_AUTH_USERS turns the gate on so the sign-in page is tested too.
+services:
+  db:
+    ports: !reset []
+  rating:
+    ports: !reset []
+  ingestion:
+    ports: !reset []
+  web:
+    ports: !override ["127.0.0.1:${UAT_PORT:-3900}:3000"]
+    environment:
+      BASIC_AUTH_USERS: "uat:uat-sandbox-pass,uat2:uat-sandbox-pass-2,underwriter2:uat-sandbox-pass-uw2"   # underwriter2 owns prior-system book policies in the seed; sandbox-only password
+      SESSION_SECRET: "uat-sandbox-session-secret-not-for-production"
+      SEED_HISTORY: "${UAT_SEED_HISTORY:-20}"
+    volumes: !override
+      - ./uat/.work/inbox:/inbox

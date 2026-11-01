@@ -810,3 +810,32 @@ read this to replay the build quickly.
 - **Decisions:** one variable holding a list rather than a second "aliases" variable: `scripts/fly-deploy.sh` already overrides `PUBLIC_BASE_URL` for another `FLY_PREFIX`, and that single override still replaces every name. Accepting a post whose Origin is any of our own names (not only the request's own host) keeps SEC-024's rebinding guard: a hostile page's Origin is never on the list.
 - **Dead ends / gotchas:** the 403 can't be reproduced on fly.dev, and `scripts/uat.sh` tests fly.dev by default, so the tests stayed green. Probe the check without signing in through the sign-out route, which sits outside the gate and writes nothing: `curl -X POST -H 'Origin: https://<name>' -H 'Sec-Fetch-Site: same-origin' https://<name>/signout` gives 303 when accepted, 403 when refused. A new custom domain (`fly certs add`) must be added to the list.
 - **How to show it:** sign in at https://uwdesktop.siryous.app, click "What should I work on next?" under the desk's ask box: the answer streams instead of "Request failed (403)". `npm test` in `web/` covers both names, the canonical fallback and a refused third name.
+
+## step-25: UAT agent that tries every function as a user, without touching production data
+- **Prompt used:** "create a UAT agent that, when activated, tries every function in the app on the web as if it was a user and checks to see if it is operating as expected, without actually changing anything in production that would impact the actual database and business results"
+- **What was built:** a `uat-tester` agent and a `/uat` command that run `scripts/uat.sh` and write `docs/UAT_REPORT.md`. The runner has three passes:
+  - **Sandbox:** about 60 Playwright flows with writes (upload, extract, accept, rate, quote, bind, GL push, renewal, rate edits) on a disposable copy of the stack.
+  - **Canary:** the read-only suite against that sandbox, comparing every table's row count and checksum before and after.
+  - **Production:** the read-only suite against the live site: a crawl of every reachable page and file, the GL API and MCP reads, and dry runs that click the real write buttons while a guard stops the requests.
+- **Files:** `scripts/uat.sh`, `uat/{package.json,playwright.config.ts,docker-compose.uat.yml,db-fingerprint.sh,.gitignore}`, `uat/tests/guard.ts`, `uat/tests/readonly/*.spec.ts`, `uat/tests/sandbox/*.spec.ts`, `.claude/agents/uat-tester.md`, `.claude/commands/uat.md`, `docs/UAT_REPORT.md`
+- **Commit:** `step-25: UAT agent ...`
+- **Decisions:**
+  - **Writes are tested on a copy, not on production.** The sandbox is its own compose project (`uwdesk-uat`) with its own volume, inbox copy and port 3900, wiped with `down -v` after each run. The config refuses to run the writing suite against anything but localhost.
+  - **Three layers keep production read-only:**
+    - `context.route` aborts every non-GET request except read-only MCP methods and the assistant.
+    - The `request`, `page.request` and `context.request` clients throw on writes.
+    - `uat.sh` refuses to start if a read-only spec calls a write method.
+  - **The canary proves the read-only suite on data**, table by table, rather than only trusting the guard.
+  - **The production login is a dedicated `uat` user, never a client login.** With no `uat` line in `.fly-credentials`, only the signed-out checks run. Adding the user (`scripts/fly-users.sh uat`) restarts the web machines, so that stays Darryl's call.
+  - The sandbox adds an `underwriter2` login with a throwaway password, because the Book shows only the signed-in underwriter's prior-system policies.
+- **Dead ends / gotchas:**
+  - **Some page views write.** Opening the workbench or renewal page of an accepted submission that has no worksheet creates one. The crawler opens those pages only for submissions under Referrals open, Ready, Quoted, Bound, or renewals.
+  - **Viewing the desk or Submissions tops up the inbox folder** when fewer than five are waiting. The canary ignores the inbox count for that reason.
+  - **Read-only API calls add a sign-in row.** Every Basic-auth `/api` call notes an API sign-in, once per hour.
+  - A blocked plain form post leaves Chromium on `chrome-error://`; let it settle before the next `goto`.
+  - `locator.getAttribute` waits for the element until the test times out; use `$$eval` when it may be absent.
+  - Results go to `uat/.work/`; the final summary is `uat/.work/summary.md`.
+- **Found on its first run:** two Accounting defects, now failing tests, both live on the site.
+  - **UAT-F1:** "Nothing new to push" on All periods downloads only this month's lines, because the download link drops `period`.
+  - **UAT-F2:** Export JSON opens raw JSON instead of downloading it, because there is no `Content-Disposition`.
+- **How to show it:** `/uat` in Claude Code, or `scripts/uat.sh`. `UAT_KEEP=1 scripts/uat.sh sandbox` leaves the sandbox up at http://127.0.0.1:3900 (`uat` / `uat-sandbox-pass`). Then open `docs/UAT_REPORT.md`.
