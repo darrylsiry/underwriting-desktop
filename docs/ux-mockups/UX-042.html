@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>UX-042 · Renewal quote card: lead with Bind when the quote is current</title>
+<style>
+  body{margin:0;padding:24px;font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:#0f172a;background:#f8fafc}
+  h1{font-size:18px;margin:0 0 4px} .sub{color:#64748b;margin:0 0 20px;font-size:13px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:900px}
+  .label{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:#64748b;margin:0 0 8px}
+  .card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 1px 2px rgba(15,23,42,.05);width:380px}
+  .card h2{margin:0;padding:8px 16px;border-bottom:1px solid #f1f5f9;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:#64748b;font-weight:500}
+  .body{padding:16px;display:flex;flex-direction:column;gap:12px}
+  .q{display:flex;align-items:center;gap:8px;font-size:13px} .q.old{color:#64748b}
+  .mono{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#4f46e5}
+  .pill{border-radius:999px;padding:1px 8px;font-size:11px;font-weight:500}
+  .issued{background:#eef2ff;color:#4338ca} .sup{background:#f1f5f9;color:#64748b}
+  .amt{margin-left:auto;font-variant-numeric:tabular-nums}
+  .links{font-size:11px;color:#64748b;padding-left:4px} .links a{color:#4f46e5;margin-right:10px;text-decoration:none}
+  .f{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .f label,.ta label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:#64748b}
+  .f input,.ta textarea{border:1px solid #cbd5e1;border-radius:4px;padding:4px 8px;font:inherit;font-size:13px;color:#0f172a}
+  .ta textarea{font-size:11px;height:58px;resize:none}
+  .btn{display:block;width:100%;box-sizing:border-box;border:0;border-radius:6px;padding:8px 16px;font:inherit;font-size:13px;font-weight:500;text-align:center;text-decoration:none;cursor:pointer}
+  .green{background:#059669;color:#fff} .bind{background:#047857;color:#fff} .outline{background:#fff;color:#334155;border:1px solid #cbd5e1}
+  .note{font-size:11px;color:#64748b;margin:0}
+  summary{cursor:pointer;font-size:11px;color:#4f46e5}
+  .mark{outline:2px solid #f59e0b;outline-offset:3px;border-radius:6px}
+</style></head><body>
+<h1>UX-042 · Renewal comparison: the quote card when the issued quote is current</h1>
+<p class="sub">SUB-0008 Red Rock Electric Group LLC · Q-2026-0004 v2 issued, worksheet unchanged since. Left: today. Right: Bind leads, the revise form is one click away (the workbench's pattern).</p>
+<div class="cols">
+<div><p class="label">Before</p>
+<div class="card"><h2>Renewal quote</h2><div class="body">
+  <div class="q"><span class="mono">Q-2026-0004 v2</span><span class="pill issued">issued</span><span class="amt">$89,725</span></div>
+  <div class="links"><a href="#">Quote PDF</a><a href="#">Renewal memo PDF</a>issued Oct 30, 2026, 4:51 PM EDT</div>
+  <div class="q old"><span class="mono">Q-2026-0004 v1</span><span class="pill sup">superseded</span><span class="amt">$89,725</span></div>
+  <div class="links"><a href="#">Quote PDF</a><a href="#">Renewal memo PDF</a>issued Oct 30, 2026, 4:51 PM EDT</div>
+  <div class="f"><label>Effective<input value="2026-11-09"></label><label>Expiration<input value="2027-11-09"></label></div>
+  <div class="ta"><label>Subjectivities (one per line)<textarea>Signed renewal application or no-change confirmation
+Complete named insured details (street, zip, FEIN)</textarea></label></div>
+  <button class="btn green">Issue revised renewal quote (v3)</button>
+  <p class="note">Bind from the <a href="#" style="color:#4f46e5">workbench</a> once the broker confirms.</p>
+</div></div></div>
+<div><p class="label">After</p>
+<div class="card"><h2>Renewal quote</h2><div class="body">
+  <div class="q"><span class="mono">Q-2026-0004 v2</span><span class="pill issued">issued</span><span class="amt">$89,725</span></div>
+  <div class="links"><a href="#">Quote PDF</a><a href="#">Renewal memo PDF</a>issued Oct 30, 2026, 4:51 PM EDT</div>
+  <div class="q old"><span class="mono">Q-2026-0004 v1</span><span class="pill sup">superseded</span><span class="amt">$89,725</span></div>
+  <div class="links"><a href="#">Quote PDF</a><a href="#">Renewal memo PDF</a>issued Oct 30, 2026, 4:51 PM EDT</div>
+  <a class="btn bind mark" href="#">Bind Q-2026-0004 v2 on the workbench →</a>
+  <details class="mark"><summary>Revise renewal quote (v3)</summary>
+    <div style="margin-top:10px;display:flex;flex-direction:column;gap:10px">
+      <div class="f"><label>Effective<input value="2026-11-09"></label><label>Expiration<input value="2027-11-09"></label></div>
+      <div class="ta"><label>Subjectivities (one per line)<textarea>Signed renewal application or no-change confirmation
+Complete named insured details (street, zip, FEIN)</textarea></label></div>
+      <button class="btn outline">Issue revised renewal quote (v3)</button>
+    </div></details>
+</div></div></div>
+</div>
+</body></html>

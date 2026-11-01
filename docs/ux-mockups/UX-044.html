@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>UX-044 · Audit trail: say when the 500-event cap bit</title>
+<style>
+  body{margin:0;padding:24px;font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:#0f172a;background:#f8fafc}
+  h1{font-size:18px;margin:0 0 4px} .sub{color:#64748b;margin:0 0 20px;font-size:13px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:1000px}
+  .label{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:#64748b;margin:0 0 8px}
+  .page{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:16px 20px}
+  h2{font-size:22px;margin:0;font-weight:600}
+  .filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-top:12px;font-size:12px}
+  .filters label{display:flex;flex-direction:column;gap:3px;color:#64748b;font-size:11px}
+  .filters input{border:1px solid #cbd5e1;border-radius:4px;padding:3px 6px;font:inherit;font-size:13px;color:#0f172a;width:110px}
+  .btn{background:#4f46e5;color:#fff;border:0;border-radius:6px;padding:5px 12px;font:inherit;font-size:13px;font-weight:500}
+  .count{font-size:12px;color:#64748b;margin:12px 0 0}
+  .cap{display:inline-block;margin-left:6px;background:#fffbeb;color:#92400e;border-radius:4px;padding:1px 6px}
+  .cap a{color:#4f46e5;text-decoration:none;margin-left:6px}
+  .empty{margin-top:10px;border:1px solid #e2e8f0;border-radius:8px;padding:24px;text-align:center;color:#64748b;font-size:13px}
+  .ev{margin-top:10px;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:13px;display:grid;grid-template-columns:150px 1fr;gap:12px}
+  .ev .t{font-size:11px;color:#64748b} .src{display:inline-block;margin-top:4px;background:#eef2ff;color:#4338ca;border-radius:4px;padding:1px 6px;font-size:11px}
+  code{font-size:11px;color:#64748b} .who{font-weight:500}
+  .mark{outline:2px solid #f59e0b;outline-offset:3px;border-radius:6px}
+</style></head><body>
+<h1>UX-044 · /audit?from=2026-01-01&amp;to=2026-01-31</h1>
+<p class="sub">Accounting's year-to-date view lists six journals in Jan 2026, each from a bind. Left: today the page loads the newest 500 desk events (back to Mar 8, 2026) and filters those. Right: the range reaches the database, and the cap is named when it applies.</p>
+<div class="cols">
+<div><p class="label">Before</p><div class="page">
+  <h2>Audit trail</h2>
+  <div class="filters"><label>Search<input placeholder="summary, action, reference"></label><label>From<input value="2026-01-01"></label><label>To<input value="2026-01-31"></label><button class="btn">Filter</button></div>
+  <p class="count">Showing 0 of 633 events · UW Desktop 500 · Rate admin 4 · Rating engine 129 · times in America/New York</p>
+  <div class="empty">No events match.</div>
+</div></div>
+<div><p class="label">After</p><div class="page">
+  <h2>Audit trail</h2>
+  <div class="filters"><label>Search<input placeholder="summary, action, reference"></label><label>From<input value="2026-01-01"></label><label>To<input value="2026-01-31"></label><button class="btn">Filter</button></div>
+  <p class="count">Showing 14 events for Jan 1 – Jan 31, 2026 · UW Desktop 14 · Rate admin 0 · Rating engine 0 · times in America/New York</p>
+  <div class="ev"><div class="t">Jan 27, 2026, 2:12 PM EST<br><span class="src">UW Desktop</span></div><div><span class="who">underwriter4</span> <code>policy.bound</code> <a href="#" style="color:#4f46e5;font-size:12px;text-decoration:none">policy GL-26-00006</a><br>GL-26-00006 bound for Catskill Mountain Carpentry LLC: $12,480, effective Feb 1, 2026</div></div>
+  <div class="ev"><div class="t">Jan 27, 2026, 2:12 PM EST<br><span class="src">UW Desktop</span></div><div><span class="who">underwriter4</span> <code>quote.issued</code> <a href="#" style="color:#4f46e5;font-size:12px;text-decoration:none">quote Q-2026-0006 v1</a><br>Q-2026-0006 v1 issued to Catskill Mountain Carpentry LLC: $12,480 total (SUB-0011)</div></div>
+  <p class="count" style="margin-top:18px">With no date range, the unfiltered page says:</p>
+  <p class="count mark" style="display:inline-block">Showing 633 of 633 loaded events · UW Desktop 500 · Rate admin 4 · Rating engine 129<span class="cap">UW Desktop shows its newest 500 only; events before Mar 8, 2026 are not on this page. Narrow From / To to reach them.<a href="#">Older →</a></span></p>
+</div></div>
+</div>
+</body></html>
