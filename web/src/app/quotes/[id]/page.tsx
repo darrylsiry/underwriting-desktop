@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { inputText } from "@/lib/renewal-compare";
 import { notFound } from "next/navigation";
 import { Fragment, cache } from "react";
@@ -25,6 +26,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
   if (!q) notFound();
   const [versions, policies] = await Promise.all([quoteVersions(q.quote_number), policiesForSubmission(q.submission_id)]);
   const policy = policies.find((p) => p.quote_id === q.id);
+  const live = versions.find((v) => v.status !== "superseded");   // UX-043: the version that is actually out
   const r = q.rating;
 
   return (
@@ -35,6 +37,13 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
         <Pill status={q.status} />
         <a href={`/quotes/${q.id}/pdf`} target="_blank" className="rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-50">Quote PDF</a>
         {q.has_memo && <a href={`/quotes/${q.id}/memo`} target="_blank" className="rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-50">Renewal memo</a>}
+        {/* UX-043: the page the "Chase bind order" task opens carries the next step; a superseded version points at the live one. */}
+        {q.status === "issued" && !policy && (
+          <Link href={`/submissions/${q.submission_id}/workbench`} className="rounded-md bg-emerald-700 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-600">Bind on the workbench →</Link>
+        )}
+        {q.status === "superseded" && live && live.id !== q.id && (
+          <RowLink href={`/quotes/${live.id}`}>Superseded by v{live.version} ({live.status}) →</RowLink>
+        )}
       </div>
       <p className="mt-1 text-sm text-slate-500">
         {q.insured_id ? <RowLink href={`/insureds/${q.insured_id}`}>{q.insured_name}</RowLink> : q.insured_name}

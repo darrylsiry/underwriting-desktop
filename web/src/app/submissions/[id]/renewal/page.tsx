@@ -221,7 +221,21 @@ export default async function RenewalPage({ params, searchParams }: Props) {
                 </ul>
               )}
               {drift.length > 0 && latest && <QuoteDriftNotice quote={latest} changes={drift} newTotal={rated && ws.last_rating ? ws.last_rating.total : null} />}
-              {!policy && (ready ? (
+              {/* UX-042: with a current quote out, the likely next step is to bind; revising stays one click away (the workbench's pattern). */}
+              {!policy && ready && latest && quoteCurrent ? (
+                <>
+                  <Link href={`/submissions/${id}/workbench`} className="block rounded-md bg-emerald-700 px-4 py-2 text-center text-sm font-medium text-white hover:bg-emerald-600">
+                    Bind {latest.quote_number} v{latest.version} on the workbench →
+                  </Link>
+                  <details>
+                    <summary className="cursor-pointer text-xs text-indigo-600">Revise renewal quote (v{latest.version + 1})</summary>
+                    <div className="mt-3">
+                      <IssueQuoteForm action={issueRenewalQuoteAction.bind(null, id)} effective={effective} expiration={expiration} subjectivities={subjectivities}
+                        label={`Issue revised renewal quote (v${latest.version + 1})`} primary={false} />
+                    </div>
+                  </details>
+                </>
+              ) : !policy && (ready ? (
                 <IssueQuoteForm action={issueRenewalQuoteAction.bind(null, id)} effective={effective} expiration={expiration} subjectivities={subjectivities}
                   label={latest ? `Issue revised renewal quote (v${latest.version + 1})` : `Issue renewal quote · ${money(ws.last_rating!.total)}`} />
               ) : (
@@ -229,7 +243,7 @@ export default async function RenewalPage({ params, searchParams }: Props) {
                   {!rated ? "Rate the renewing terms to quote." : `Clear ${openReferrals.length} open referral${openReferrals.length === 1 ? "" : "s"} on the workbench to quote.`}
                 </p>
               ))}
-              {latest && !policy && <p className="text-xs text-slate-500">Bind from the <RowLink href={`/submissions/${id}/workbench`}>workbench</RowLink> once the broker confirms.</p>}
+              {latest && !policy && !(ready && quoteCurrent) && <p className="text-xs text-slate-500">Bind from the <RowLink href={`/submissions/${id}/workbench`}>workbench</RowLink> once the broker confirms.</p>}
             </div>
           </Section>
 

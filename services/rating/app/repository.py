@@ -53,16 +53,21 @@ def get_rating(rating_id: str) -> dict | None:
         return conn.execute("SELECT * FROM rating_log WHERE id = %s", (rating_id,)).fetchone()
 
 
-def list_ratings(reference_prefix: str | None = None, limit: int = 200) -> list[dict]:
-    """Recent rating calls (summary only) for the audit timeline; optionally only one reference family."""
+def list_ratings(reference_prefix: str | None = None, limit: int = 200,
+                 since: str | None = None, until: str | None = None, tz: str = "UTC") -> list[dict]:
+    """Recent rating calls (summary only) for the audit timeline; optionally only one reference family.
+    UX-044: `since`/`until` are wall-clock timestamps in `tz`, so a day range chosen in the desktop's zone
+    reaches rows older than the newest `limit`."""
     with pool.connection() as conn:
         return conn.execute(
             "SELECT r.id, r.created_at, r.requested_by, r.reference, v.label AS rate_version,"
             " r.request->>'class_code' AS class_code, r.result->>'premium' AS premium, r.result->>'total' AS total"
             " FROM rating_log r JOIN rate_versions v ON v.id = r.version_id"
-            " WHERE %(p)s::text IS NULL OR r.reference LIKE %(p)s || '%%'"
+            " WHERE (%(p)s::text IS NULL OR r.reference LIKE %(p)s || '%%')"
+            " AND (%(since)s::timestamp IS NULL OR r.created_at >= (%(since)s::timestamp AT TIME ZONE %(tz)s))"
+            " AND (%(until)s::timestamp IS NULL OR r.created_at <= (%(until)s::timestamp AT TIME ZONE %(tz)s))"
             " ORDER BY r.created_at DESC LIMIT %(n)s",
-            {"p": reference_prefix, "n": limit},
+            {"p": reference_prefix, "n": limit, "since": since, "until": until, "tz": tz},
         ).fetchall()
 
 
@@ -224,10 +229,15 @@ def activate(version_id: int, actor: str, reason: str) -> None:
                reason=reason)
 
 
-def audit_trail(version_id: int | None = None, limit: int = 200) -> list[dict]:
+def audit_trail(version_id: int | None = None, limit: int = 200,
+                since: str | None = None, until: str | None = None, tz: str = "UTC") -> list[dict]:
+    """Rate-table changes, newest first. UX-044: `since`/`until` as in list_ratings."""
     with pool.connection() as conn:
         return conn.execute(
             "SELECT a.*, v.label AS version_label FROM rate_table_audit a JOIN rate_versions v ON v.id = a.version_id"
-            " WHERE %(v)s::int IS NULL OR a.version_id = %(v)s ORDER BY a.id DESC LIMIT %(n)s",
-            {"v": version_id, "n": limit},
+            " WHERE (%(v)s::int IS NULL OR a.version_id = %(v)s)"
+            " AND (%(since)s::timestamp IS NULL OR a.created_at >= (%(since)s::timestamp AT TIME ZONE %(tz)s))"
+            " AND (%(until)s::timestamp IS NULL OR a.created_at <= (%(until)s::timestamp AT TIME ZONE %(tz)s))"
+            " ORDER BY a.id DESC LIMIT %(n)s",
+            {"v": version_id, "n": limit, "since": since, "until": until, "tz": tz},
         ).fetchall()

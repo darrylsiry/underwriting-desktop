@@ -369,9 +369,11 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                     {/* UX-006: one display zone, named. */}
                     <span className="text-slate-500">{when(h.occurred_at)}</span>{" "}
                     <span className="font-medium">{h.actor}</span>: {h.summary}
-                    {h.action === "worksheet.input_changed" && (
-                      <span className="text-slate-500"> ({JSON.stringify(Object.values(h.before as object)[0])} → {JSON.stringify(Object.values(h.after as object)[0])})</span>
-                    )}
+                    {/* UX-045: the same text the inputs show ($1,000 → $2,500, AZ → AZ, NV). */}
+                    {h.action === "worksheet.input_changed" && (() => {
+                      const key = Object.keys(h.before as object)[0] as keyof RatingInputs;
+                      return <span className="text-slate-500"> ({inputText(key, Object.values(h.before as object)[0])} → {inputText(key, Object.values(h.after as object)[0])})</span>;
+                    })()}
                   </li>
                 ))}
               </ul>

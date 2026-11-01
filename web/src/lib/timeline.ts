@@ -1,6 +1,7 @@
 import { customerDb, policyDb } from "./db";
 import { RATING_TIMEOUT_MS } from "./rating-api";
 import { RATING_SERVICE_URL } from "./services";
+import { DISPLAY_TIME_ZONE } from "./time";
 import {
   fromDesktop, fromRateAdmin, fromRating, merge,
   type DesktopRow, type RateAdminRow, type RatingRow, type TimelineEvent,
@@ -13,7 +14,16 @@ export type Timeline = {
   labels: Map<string, string>;     // "quote:<id>" -> "Q-2026-0001 v3"
   warnings: string[];              // e.g. rating service unreachable
   scope: { submissionId: string; reference: string; applicant: string } | null;
+  // UX-044: the desk's newest-N cap, so the page can say when history was cut and offer the next page.
+  capped: boolean;
+  oldestDesktopId: number | null;
+  oldestDesktopAt: string | null;
 };
+
+/** UX-044: a From/To day range (in the display zone) and an "older than this id" cursor, applied in the queries. */
+export type TimelineRange = { from?: string; to?: string; before?: string };
+const isDay = (s?: string) => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
+const isId = (s?: string) => !!s && /^\d+$/.test(s);
 
 async function ratingApi<T>(path: string, warnings: string[]): Promise<T[]> {
   try {
@@ -30,7 +40,7 @@ async function ratingApi<T>(path: string, warnings: string[]): Promise<T[]> {
  * The audit timeline across services. With `submissionId`, only that case: the submission, its
  * quotes and policies, its insured, and rating calls referencing it (SUB-… or its quote numbers).
  */
-export async function loadTimeline(submissionId?: string): Promise<Timeline> {
+export async function loadTimeline(submissionId?: string, range: TimelineRange = {}): Promise<Timeline> {
   const warnings: string[] = [];
   let scope: Timeline["scope"] = null;
   let desktopRows: DesktopRow[];
@@ -40,7 +50,7 @@ export async function loadTimeline(submissionId?: string): Promise<Timeline> {
   if (submissionId) {
     const sub = (await customerDb.query<{ id: string; reference: string; applicant_name: string; insured_id: string | null }>(
       "SELECT id, reference, applicant_name, insured_id FROM submissions WHERE id = $1", [submissionId])).rows[0];
-    if (!sub) return { events: [], labels: new Map(), warnings: ["Submission not found"], scope: null };
+    if (!sub) return { events: [], labels: new Map(), warnings: ["Submission not found"], scope: null, capped: false, oldestDesktopId: null, oldestDesktopAt: null };
     scope = { submissionId: sub.id, reference: sub.reference, applicant: sub.applicant_name };
     const [quotes, policies] = await Promise.all([
       policyDb.query<{ id: string; quote_number: string }>("SELECT id, quote_number FROM quotes WHERE submission_id = $1", [sub.id]),
@@ -58,15 +68,36 @@ export async function loadTimeline(submissionId?: string): Promise<Timeline> {
     ratingRows = (await Promise.all(prefixes.map((p) =>
       ratingApi<RatingRow>(`/ratings?reference_prefix=${encodeURIComponent(p)}&limit=${LIMIT}`, warnings)))).flat();
   } else {
+    // UX-044: the day range reaches the database (in the display zone), so January is findable even when
+    // the newest 500 stop in March; `before` pages further back.
+    const from = isDay(range.from) ? range.from! : null;
+    const to = isDay(range.to) ? range.to! : null;
+    const before = isId(range.before) ? Number(range.before) : null;
+    const qs = new URLSearchParams({ limit: String(LIMIT) });
+    if (from) qs.set("since", `${from}T00:00:00`);
+    if (to) qs.set("until", `${to}T23:59:59.999`);
+    qs.set("tz", DISPLAY_TIME_ZONE);
     [desktopRows, ratingRows, adminRows] = await Promise.all([
-      policyDb.query<DesktopRow>(`SELECT * FROM audit_events ORDER BY id DESC LIMIT ${LIMIT}`).then((r) => r.rows),
-      ratingApi<RatingRow>(`/ratings?limit=${LIMIT}`, warnings),
-      ratingApi<RateAdminRow>(`/rate-table-audit?limit=${LIMIT}`, warnings),
+      policyDb.query<DesktopRow>(
+        `SELECT * FROM audit_events
+          WHERE ($1::date IS NULL OR occurred_at >= ($1::date::timestamp AT TIME ZONE $4))
+            AND ($2::date IS NULL OR occurred_at < (($2::date + 1)::timestamp AT TIME ZONE $4))
+            AND ($3::bigint IS NULL OR id < $3::bigint)
+          ORDER BY id DESC LIMIT ${LIMIT}`,
+        [from, to, before, DISPLAY_TIME_ZONE]).then((r) => r.rows),
+      ratingApi<RatingRow>(`/ratings?${qs}`, warnings),
+      ratingApi<RateAdminRow>(`/rate-table-audit?${qs}`, warnings),
     ]);
   }
 
   const events = merge(desktopRows.map(fromDesktop), adminRows.map(fromRateAdmin), ratingRows.map(fromRating));
-  return { events, labels: await entityLabels(events), warnings: [...new Set(warnings)], scope };
+  const oldest = desktopRows.at(-1);
+  return {
+    events, labels: await entityLabels(events), warnings: [...new Set(warnings)], scope,
+    capped: !submissionId && desktopRows.length >= LIMIT,
+    oldestDesktopId: oldest ? Number(oldest.id) : null,
+    oldestDesktopAt: oldest ? new Date(oldest.occurred_at).toISOString() : null,
+  };
 }
 
 /** Human labels (SUB-0001, Q-2026-0001 v3, GL-26-00001, insured name) for the entities in view. */

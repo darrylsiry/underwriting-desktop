@@ -110,7 +110,10 @@ export async function saveAndRate(sub: SubmissionRow, form: Record<string, strin
     })),
     ...(scheduleChanged ? [{
       actor, action: "worksheet.schedule_changed", entityType: "submission" as const, entityId: sub.id,
-      summary: `${sub.reference}: schedule ${formatPct(scheduleTotal(ws.schedule))} → ${formatPct(scheduleTotal(schedule))}`,
+      // UX-045: say what changed; a reason-only edit is not a percentage change.
+      summary: scheduleTotal(ws.schedule) === scheduleTotal(schedule) && scheduleKey(ws.schedule.map((i) => ({ ...i, rationale: "" }))) === scheduleKey(schedule.map((i) => ({ ...i, rationale: "" })))
+        ? `${sub.reference}: schedule reasons updated (total ${formatPct(scheduleTotal(schedule))})`
+        : `${sub.reference}: schedule ${formatPct(scheduleTotal(ws.schedule))} → ${formatPct(scheduleTotal(schedule))}`,
       before: ws.schedule, after: schedule, correlationId, occurredAt: at ?? undefined,
     }] : []),
   );

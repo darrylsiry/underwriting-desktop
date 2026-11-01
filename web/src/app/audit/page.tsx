@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { RowLink, when } from "@/components/ui";
+import { RowLink, when, whenDate } from "@/components/ui";
 import { getSubmission } from "@/lib/submissions";
 import { DISPLAY_TIME_ZONE } from "@/lib/time";
 import { loadTimeline } from "@/lib/timeline";
@@ -16,7 +16,7 @@ const SOURCES: Record<string, { label: string; style: string }> = {
   rating: { label: "Rating engine", style: "bg-slate-100 text-slate-600" },
 };
 
-type Params = { submission?: string; source?: string; entityType?: string; actor?: string; q?: string; from?: string; to?: string; correlation?: string };
+type Params = { submission?: string; source?: string; entityType?: string; actor?: string; q?: string; from?: string; to?: string; correlation?: string; before?: string };
 
 function entityHref(e: TimelineEvent): string | null {
   switch (e.entityType) {
@@ -40,7 +40,7 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
 
 export default async function AuditPage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
-  const { events: all, labels, warnings, scope } = await loadTimeline(params.submission);
+  const { events: all, labels, warnings, scope, capped, oldestDesktopId, oldestDesktopAt } = await loadTimeline(params.submission, params);
   const events = applyFilters(all, params);
   const groups = groupByCorrelation(events);
   const actors = [...new Set(all.map((e) => e.actor))].sort();
@@ -108,7 +108,17 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
         </p>
       )}
       <p className="mt-4 text-xs text-slate-500">
-        Showing {events.length} of {all.length} events · {counts.map(([s, n]) => `${SOURCES[s].label} ${n}`).join(" · ")} · times in {DISPLAY_TIME_ZONE.replace("_", " ")}
+        Showing {events.length} of {all.length} loaded events · {counts.map(([s, n]) => `${SOURCES[s].label} ${n}`).join(" · ")} · times in {DISPLAY_TIME_ZONE.replace("_", " ")}
+        {/* UX-044: say when the newest-500 cap bit, and offer the page before it. */}
+        {capped && oldestDesktopAt && (
+          <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-amber-800">
+            UW Desktop shows its newest 500 only; events before {whenDate(new Date(oldestDesktopAt))} are not on this page. Narrow From / To to reach them.
+            {oldestDesktopId !== null && (
+              <Link href={`/audit?${new URLSearchParams({ ...Object.fromEntries(Object.entries(params).filter(([k, v]) => v && k !== "before")), before: String(oldestDesktopId) } as Record<string, string>)}`}
+                className="ml-2 font-medium text-indigo-700 hover:underline">Older →</Link>
+            )}
+          </span>
+        )}
       </p>
 
       <ol className="mt-3 space-y-3">

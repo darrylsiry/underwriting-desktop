@@ -175,11 +175,21 @@ def activate(version_id: int, req: Activation):
 
 
 @app.get("/rate-table-audit")
-def rate_table_audit(version_id: int | None = None, limit: int = Query(200, ge=1, le=1000)):
-    return repository.audit_trail(version_id, limit)
+def rate_table_audit(version_id: int | None = None, limit: int = Query(200, ge=1, le=1000),
+                     since: str | None = Query(None, pattern=_WALL), until: str | None = Query(None, pattern=_WALL),
+                     tz: str = Query("UTC", pattern=_TZ)):
+    """Rate-table changes, newest first; `since`/`until` are wall-clock bounds in `tz` (UX-044)."""
+    return repository.audit_trail(version_id, limit, since, until, tz)
+_WALL = r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?)?$"   # a wall-clock timestamp, no zone (UX-044)
+_TZ = r"^[A-Za-z_]+(/[A-Za-z_+\-0-9]+)*$"
+
+
 
 
 @app.get("/ratings")
-def list_ratings(reference_prefix: str | None = None, limit: int = Query(200, ge=1, le=1000)):
-    """Rating calls, newest first: who rated what, on which rate version, for which reference (SUB-/Q-)."""
-    return repository.list_ratings(reference_prefix, limit)
+def list_ratings(reference_prefix: str | None = None, limit: int = Query(200, ge=1, le=1000),
+                 since: str | None = Query(None, pattern=_WALL), until: str | None = Query(None, pattern=_WALL),
+                 tz: str = Query("UTC", pattern=_TZ)):
+    """Rating calls, newest first: who rated what, on which rate version, for which reference (SUB-/Q-).
+    `since`/`until` are wall-clock bounds in `tz` (UX-044)."""
+    return repository.list_ratings(reference_prefix, limit, since, until, tz)

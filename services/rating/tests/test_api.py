@@ -48,3 +48,13 @@ def test_list_ratings_filters_by_reference(client):
     assert len(rows) == 1 and rows[0]["reference"] == "Q-2026-9999 v1" and rows[0]["total"]
     assert rows[0]["rate_version"] == "2026.1" and rows[0]["class_code"] == "92215"
     assert client.get("/ratings", params={"limit": 0}).status_code == 422
+
+
+def test_ratings_feed_honours_a_day_range(client):
+    """UX-044: since/until are wall-clock bounds in the given zone; a range in the future returns nothing,
+    an open range returns the rows, and a malformed bound is refused."""
+    assert client.get("/ratings", params={"since": "2999-01-01T00:00:00", "tz": "America/New_York"}).json() == []
+    assert client.get("/ratings", params={"until": "2999-01-01T23:59:59.999", "tz": "America/New_York"}).status_code == 200
+    assert client.get("/rate-table-audit", params={"since": "2999-01-01", "tz": "UTC"}).json() == []
+    assert client.get("/ratings", params={"since": "yesterday"}).status_code == 422
+    assert client.get("/ratings", params={"tz": "Not a zone;drop"}).status_code == 422
