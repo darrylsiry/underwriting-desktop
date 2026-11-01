@@ -7,10 +7,13 @@ primary_region = "iad"
   RATING_SERVICE_URL = "http://uwdesk-rating.flycast"
   INGESTION_SERVICE_URL = "http://uwdesk-ingestion.flycast"
   RATING_ADMIN_URL = "/admin"
-  # The one public origin (SEC-022/024): absolute links, the API's own URLs and the same-origin and
-  # MCP Origin checks use this, never a forwarded Host header. scripts/fly-deploy.sh overrides it
-  # for another FLY_PREFIX. RATING_ADMIN_TOKEN is a secret the script sets on web and rating (SEC-002).
-  PUBLIC_BASE_URL = "https://uwdesk-web.fly.dev"
+  # This deployment's public names, canonical first (SEC-022/024): the same-origin and MCP checks
+  # accept these and nothing else, and absolute links use the listed name a request came in on
+  # (else the first), never an unlisted Host header. uwdesktop.siryous.app is the custom domain
+  # (fly certs list -a uwdesk-web); list every name the app answers on, or posts from an unlisted
+  # one get 403. scripts/fly-deploy.sh overrides this for another FLY_PREFIX. RATING_ADMIN_TOKEN is
+  # a secret the script sets on web and rating (SEC-002).
+  PUBLIC_BASE_URL = "https://uwdesktop.siryous.app,https://uwdesk-web.fly.dev"
 
 [http_service]
   internal_port = 3000

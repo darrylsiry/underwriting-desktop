@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addressedToUs, configuredOrigin, contentDisposition, requestOrigin, safeReturnPath, sameOrigin } from "./http.ts";
+import { addressedToUs, configuredOrigin, configuredOrigins, contentDisposition, requestOrigin, safeReturnPath, sameOrigin } from "./http.ts";
 
 test("non-Latin-1 filenames are header-safe (CR-002)", () => {
   const value = contentDisposition('Submission – ACME "final".pdf', "inline");
@@ -56,4 +56,30 @@ test("with PUBLIC_BASE_URL the configured origin wins over forwarded headers (SE
   assert.equal(addressedToUs(rebound, {}), true);
   assert.equal(sameOrigin(h({ host: "172.19.0.5:3000", "x-forwarded-host": "uwdesk-web.fly.dev", origin: "https://uwdesk-web.fly.dev" }), env), true);
   assert.equal(addressedToUs(h({ host: "172.19.0.5:3000", "x-forwarded-host": "uwdesk-web.fly.dev" }), env), true);
+});
+
+test("PUBLIC_BASE_URL can list several public names: the first is canonical, all are ours, nothing else is", () => {
+  const env = { PUBLIC_BASE_URL: "https://uwdesktop.siryous.app, https://uwdesk-web.fly.dev" };
+  assert.deepEqual(configuredOrigins(env), ["https://uwdesktop.siryous.app", "https://uwdesk-web.fly.dev"]);
+  assert.equal(configuredOrigin(env), "https://uwdesktop.siryous.app");
+  assert.deepEqual(configuredOrigins({ PUBLIC_BASE_URL: "https://a.test https://a.test/ ftp://b.test junk" }), ["https://a.test"]);
+  assert.deepEqual(configuredOrigins({}), []);
+  const h = (o: Record<string, string>) => new Headers(o);
+  for (const name of ["uwdesktop.siryous.app", "uwdesk-web.fly.dev"]) {
+    // The browser's own posts are accepted on either name (the 403 on the custom domain)...
+    const own = h({ host: name, origin: `https://${name}`, "sec-fetch-site": "same-origin" });
+    assert.equal(sameOrigin(own, env), true, name);
+    assert.equal(addressedToUs(own, env), true, name);
+    // ...and absolute links stay on the name the page was opened at.
+    assert.equal(requestOrigin(own, env), `https://${name}`, name);
+  }
+  // A one-name config refuses the other name: what happened when only fly.dev was configured.
+  const custom = h({ host: "uwdesktop.siryous.app", origin: "https://uwdesktop.siryous.app", "sec-fetch-site": "same-origin" });
+  assert.equal(sameOrigin(custom, { PUBLIC_BASE_URL: "https://uwdesk-web.fly.dev" }), false);
+  // Every other name is still refused, and its links fall back to the canonical name.
+  const rebound = h({ host: "evil.example", origin: "http://evil.example" });
+  assert.equal(sameOrigin(rebound, env), false);
+  assert.equal(addressedToUs(rebound, env), false);
+  assert.equal(requestOrigin(rebound, env), "https://uwdesktop.siryous.app");
+  assert.equal(requestOrigin(h({ host: "172.19.0.5:3000", "x-forwarded-proto": "http" }), env), "https://uwdesktop.siryous.app");
 });
