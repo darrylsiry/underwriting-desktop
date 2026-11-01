@@ -16,9 +16,10 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 
-from app import repository
+from app import auth, repository
 
-router = APIRouter(prefix="/admin", include_in_schema=False)
+# The whole admin UI needs the service's bearer token, which the UW Desktop proxy attaches (SEC-002).
+router = APIRouter(prefix="/admin", include_in_schema=False, dependencies=[Depends(auth.require_admin)])
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 
@@ -208,10 +209,10 @@ def redirect(url: str, **params) -> RedirectResponse:
 
 
 def signed_in_user(request: Request) -> str | None:
-    """The UW Desktop user. The web app's /admin proxy sets this header from the login it checked
-    (and builds its outgoing headers from an allow-list, so a browser can't supply it); on Fly this
-    service is private, reachable only through that proxy."""
-    return (request.headers.get("x-uw-user") or "").strip()[:60] or None
+    """The UW Desktop user. The web app's /admin proxy sets the x-uw-user header from the login it
+    checked, and proves it is the proxy with the service's bearer token (SEC-002): the header is
+    believed from no one else."""
+    return auth.acting_user(request)
 
 
 def form_actor(request: Request, form) -> str:

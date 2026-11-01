@@ -2,6 +2,16 @@ export const RATING_SERVICE_URL = process.env.RATING_SERVICE_URL ?? "http://loca
 export const INGESTION_SERVICE_URL = process.env.INGESTION_SERVICE_URL ?? "http://localhost:8002";
 
 /**
+ * The shared secret the rating service wants before it trusts who we say is acting (SEC-002):
+ * `RATING_ADMIN_TOKEN`, the same value on both apps (a Fly secret; scripts/fly-deploy.sh sets it).
+ * Unset locally, where the service runs open on localhost and trusts the header as before.
+ */
+export function ratingAuthHeaders(env: Record<string, string | undefined> = process.env): Record<string, string> {
+  const token = env.RATING_ADMIN_TOKEN?.trim();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/**
  * Ping rating and ingestion so Fly starts their machines if they auto-stopped while idle. Run by
  * keep-warm (src/instrumentation.ts): when the web process starts and every minute while it runs.
  */

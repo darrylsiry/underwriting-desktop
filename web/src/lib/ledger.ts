@@ -2,7 +2,7 @@ import { plural } from "./text.ts";
 import type { PoolClient } from "pg";
 import { audit } from "./audit";
 import { toCsv } from "./csv";
-import { policyDb } from "./db";
+import { policyDb, type Queryable } from "./db";
 import {
   GL_TIME_ZONE, TRANSACTION_LABEL, accountingPeriod, bindJournal, glDate, isBalanced,
   type ExportFormat, type JournalLine, type PolicyAmounts, type TransactionType,
@@ -27,14 +27,14 @@ const POSTING_COLUMNS = `id, journal_no, line_no, posted_at, accounting_period, 
   description, policy_id, policy_number, insured_name, effective_date::text, expiration_date::text, quote_ref,
   submission_id, submission_ref, underwriter, producer, source_action, correlation_id, export_batch, exported_at, exported_by`;
 
-export async function listPostings(f: LedgerFilter): Promise<Posting[]> {
-  const { rows } = await policyDb.query<Posting>(
+export async function listPostings(f: LedgerFilter, db: Queryable = policyDb, lock = false): Promise<Posting[]> {
+  const { rows } = await db.query<Posting>(
     `SELECT ${POSTING_COLUMNS} FROM gl_postings
      WHERE ($1::date IS NULL OR (posted_at AT TIME ZONE $5)::date >= $1)
        AND ($2::date IS NULL OR (posted_at AT TIME ZONE $5)::date <= $2)
        AND ($3::text = '' OR transaction_type = $3)
        AND ($4::text = '' OR export_batch = $4)
-     ORDER BY posted_at, journal_no, line_no`,
+     ORDER BY posted_at, journal_no, line_no${lock ? " FOR UPDATE" : ""}`,
     [f.from, f.to, f.type, f.batch, GL_TIME_ZONE]);
   return rows;
 }
@@ -205,21 +205,35 @@ export function renderLedger(rows: Posting[], f: LedgerFilter, format: ExportFor
  * batch; lines pushed earlier keep their batch (the file shows which). Audited.
  */
 export async function exportLedger(f: LedgerFilter, format: ExportFormat, actor: string, origin: string, period: string | null = null) {
-  const rows = await listPostings(f);
-  const batch = (await policyDb.query<{ b: string }>(
-    "SELECT 'GLX-' || to_char(now() AT TIME ZONE $1, 'YYYYMMDD') || '-' || lpad(nextval('gl_export_seq')::text, 3, '0') AS b", [GL_TIME_ZONE])).rows[0].b;
-  const fresh = (await policyDb.query<{ id: number }>(
-    "UPDATE gl_postings SET export_batch = $1, exported_at = now(), exported_by = $2 WHERE id = ANY($3) AND export_batch IS NULL RETURNING id",
-    [batch, actor, rows.map((r) => r.id)])).rows.length;
+  // One transaction (SEC-026): the lines are read and locked, stamped, and audited together, so a
+  // failure after the stamp can't leave pushed lines with no audit row, and two pushes of the same
+  // filter at once can't both claim the same lines (the second waits, then sees them stamped).
+  const client = await policyDb.connect();
+  let rows: Posting[], batch: string, fresh: number;
+  try {
+    await client.query("BEGIN");
+    rows = await listPostings(f, client, true);
+    batch = (await client.query<{ b: string }>(
+      "SELECT 'GLX-' || to_char(now() AT TIME ZONE $1, 'YYYYMMDD') || '-' || lpad(nextval('gl_export_seq')::text, 3, '0') AS b", [GL_TIME_ZONE])).rows[0].b;
+    fresh = (await client.query<{ id: number }>(
+      "UPDATE gl_postings SET export_batch = $1, exported_at = now(), exported_by = $2 WHERE id = ANY($3) AND export_batch IS NULL RETURNING id",
+      [batch, actor, rows.map((r) => r.id)])).rows.length;
+    const t = ledgerTotals(rows);
+    const range = `${f.from ?? "start"} to ${f.to ?? "today"}`;
+    await audit([{
+      actor, action: "gl.exported", entityType: "ledger", entityId: batch,
+      summary: `Sub-ledger pushed to the GL as ${format.toUpperCase()} (${batch}): ${rows.length} lines in ${t.journals} journals, `
+        + `$${Math.round(t.debit).toLocaleString("en-US")} debits, ${range}${f.type ? `, ${TRANSACTION_LABEL[f.type]} only` : ""}; ${plural(fresh, "line")} newly marked as pushed`,
+      after: { format, from: f.from, to: f.to, type: f.type || null, lines: rows.length, journals: t.journals, debit: t.debit, credit: t.credit, newly_stamped: fresh },
+    }], client);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
   const file = renderLedger(rows, f, format, { batch, actor, origin, period });
   const t = ledgerTotals(rows);
-  const range = `${f.from ?? "start"} to ${f.to ?? "today"}`;
-
-  await audit({
-    actor, action: "gl.exported", entityType: "ledger", entityId: batch,
-    summary: `Sub-ledger pushed to the GL as ${format.toUpperCase()} (${batch}): ${rows.length} lines in ${t.journals} journals, `
-      + `$${Math.round(t.debit).toLocaleString("en-US")} debits, ${range}${f.type ? `, ${TRANSACTION_LABEL[f.type]} only` : ""}; ${plural(fresh, "line")} newly marked as pushed`,
-    after: { format, from: f.from, to: f.to, type: f.type || null, lines: rows.length, journals: t.journals, debit: t.debit, credit: t.credit, newly_stamped: fresh },
-  });
   return { ...file, batch, lines: rows.length, journals: t.journals, fresh };
 }

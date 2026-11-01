@@ -5,19 +5,44 @@ ELECTRICAL = {
     "class_code": "92215", "gross_receipts": 6_800_000, "states": ["TX"], "home_state": "TX",
     "occurrence_limit": 1_000_000, "aggregate_limit": 2_000_000, "deductible": 5000,
     "residential_pct": 0, "subcontracted_pct": 10, "subcontractor_coi_required": True, "max_height_ft": 30,
-    "reference": "sub-001", "requested_by": "test",
+    "reference": "sub-001",
 }
+AS_TEST = {"x-uw-user": "test"}   # who is acting travels in a header (SEC-002)
 
 
 def test_rate_and_log(client):
-    res = client.post("/rate", json=ELECTRICAL)
+    res = client.post("/rate", json=ELECTRICAL, headers=AS_TEST)
     assert res.status_code == 200, res.text
     body = res.json()
     # 6.50 × 6,800 = 44,200 × 1.10 TX × 1.00 ILF × 0.93 ded × 1.10 height = 49,738.26
     assert body["premium"] == "49738"
     assert body["rate_version"] == "2026.1"
     logged = client.get(f"/ratings/{body['rating_id']}").json()
-    assert logged["reference"] == "sub-001"
+    assert logged["reference"] == "sub-001" and logged["requested_by"] == "test"
+
+
+def test_requested_by_comes_from_the_header_not_the_body(client):
+    """SEC-002: a body can't name the requester; without a trusted caller's header it is anonymous."""
+    res = client.post("/rate", json=ELECTRICAL | {"requested_by": "mallory"})
+    assert res.status_code == 200, res.text
+    assert client.get(f"/ratings/{res.json()['rating_id']}").json()["requested_by"] == "anonymous"
+
+
+def test_admin_token_gates_changes_and_the_acting_user(client, monkeypatch):
+    """SEC-002: with RATING_ADMIN_TOKEN set, changing rate tables and naming the actor need the bearer token."""
+    monkeypatch.setenv("RATING_ADMIN_TOKEN", "s3cret")
+    assert client.post("/rate-versions", json={"label": "nope"}).status_code == 401
+    assert client.post("/rate-versions", json={"label": "nope"}, headers={"Authorization": "Bearer wrong"}).status_code == 401
+    assert client.get("/admin").status_code == 401
+    assert client.get("/admin", headers={"Authorization": "Bearer s3cret"}).status_code == 200
+    # /rate itself stays open, but an unproven x-uw-user is not believed
+    res = client.post("/rate", json=ELECTRICAL, headers={"x-uw-user": "mallory"})
+    assert client.get(f"/ratings/{res.json()['rating_id']}").json()["requested_by"] == "anonymous"
+    res = client.post("/rate", json=ELECTRICAL, headers={"x-uw-user": "pat", "Authorization": "Bearer s3cret"})
+    assert client.get(f"/ratings/{res.json()['rating_id']}").json()["requested_by"] == "pat"
+    monkeypatch.setenv("FLY_APP_NAME", "uwdesk-rating")
+    monkeypatch.delenv("RATING_ADMIN_TOKEN")
+    assert client.post("/rate-versions", json={"label": "nope"}).status_code == 503   # fails closed on Fly without the secret
 
 
 def test_rated_at_backdates_the_log_entry(client):

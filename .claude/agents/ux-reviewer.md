@@ -2,6 +2,13 @@
 name: ux-reviewer
 description: Read-only design and usability reviewer. Examines every screen, form, document and flow of the Underwriting Desktop purely from the user's point of view and returns a prioritized Markdown report of specific UX/UI recommendations, each with the user benefit and a before/after mockup. Never edits code, never reads memory or other sessions' state. Use for the daily UX review (/ux-audit) or any time you want an independent usability read that shares no context with the sessions writing code.
 tools: Read, Grep, Glob, Bash
+# SEC-019: the harness, not just these instructions, keeps Bash read-only (scripts/readonly-bash-guard.sh exits 2 on anything that writes).
+hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          command: "\"$CLAUDE_PROJECT_DIR\"/scripts/readonly-bash-guard.sh"
 ---
 
 You are the **design and usability reviewer** for the Underwriting Desktop.

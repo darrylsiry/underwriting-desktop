@@ -1,15 +1,38 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { browserLabel, buildReport, clientInfo, isPublicIp, place, reportMarkdown, summarize, type LoginEvent } from "./login-meta.ts";
+import { browserLabel, buildReport, clientInfo, isPublicIp, place, reportMarkdown, sanitizeGeo, summarize, type LoginEvent } from "./login-meta.ts";
 
 const H = (o: Record<string, string>) => ({ get: (n: string) => o[n.toLowerCase()] ?? null });
 
-test("clientInfo prefers Fly-Client-IP, then the first X-Forwarded-For hop, and records nothing locally", () => {
-  assert.equal(clientInfo(H({ "fly-client-ip": "203.0.113.9", "x-forwarded-for": "198.51.100.1, 10.0.0.1" })).ip, "203.0.113.9");
-  assert.equal(clientInfo(H({ "x-forwarded-for": " 198.51.100.1 , 10.0.0.1" })).ip, "198.51.100.1");
-  assert.equal(clientInfo(H({ "x-forwarded-for": "::ffff:198.51.100.7" })).ip, "198.51.100.7");
-  const local = clientInfo(H({ "user-agent": "Mozilla/5.0", "accept-language": "en-US,en;q=0.9", "fly-region": "iad" }));
-  assert.deepEqual(local, { ip: null, user_agent: "Mozilla/5.0", accept_language: "en-US,en;q=0.9", edge_region: "iad" });
+test("clientInfo believes address headers only from a proxy that is in front (SEC-033)", () => {
+  const fly = { FLY_APP_NAME: "uwdesk-web" }, proxied = { TRUSTED_PROXY: "1" }, bare = {};
+  assert.equal(clientInfo(H({ "fly-client-ip": "203.0.113.9", "x-forwarded-for": "198.51.100.1, 10.0.0.1" }), fly).ip, "203.0.113.9");
+  assert.equal(clientInfo(H({ "x-forwarded-for": " 198.51.100.1 , 10.0.0.1" }), proxied).ip, "198.51.100.1");
+  assert.equal(clientInfo(H({ "x-forwarded-for": "::ffff:198.51.100.7" }), proxied).ip, "198.51.100.7");
+  assert.equal(clientInfo(H({ "x-real-ip": "198.51.100.8" }), proxied).ip, "198.51.100.8");
+  // Off Fly and with no trusted proxy, a client-sent address header is ignored, and the row says so.
+  const spoofed = clientInfo(H({ "fly-client-ip": "203.0.113.9", "x-forwarded-for": "198.51.100.1" }), bare);
+  assert.equal(spoofed.ip, null);
+  assert.equal(spoofed.untrusted, true);
+  assert.equal(clientInfo(H({ "x-forwarded-for": "198.51.100.1" }), fly).ip, null);   // on Fly only Fly's own header counts
+  assert.equal(clientInfo(H({ "fly-client-ip": "a".repeat(100) }), fly).ip?.length, 45);
+  const local = clientInfo(H({ "user-agent": "Mozilla/5.0", "accept-language": "en-US,en;q=0.9", "fly-region": "iad" }), bare);
+  assert.deepEqual(local, { ip: null, user_agent: "Mozilla/5.0", accept_language: "en-US,en;q=0.9", edge_region: "iad", untrusted: false });
+});
+
+test("sanitizeGeo keeps known, bounded fields of the lookup's reply and nothing else (SEC-033)", () => {
+  const reply = { success: true, country: "United States", country_code: "US", region: "California", city: "San Jose",
+    latitude: 37.3, longitude: -121.9, timezone: { id: "America/Los_Angeles" }, connection: { asn: 15169, isp: "Google LLC" }, flag: { img: "x" }, extra: "<script>" };
+  assert.deepEqual(sanitizeGeo(reply), { country: "United States", country_code: "US", region: "California", city: "San Jose",
+    timezone: "America/Los_Angeles", isp: "Google LLC", asn: 15169, lat: 37.3, lon: -121.9 });
+  const hostile = sanitizeGeo({ city: "x".repeat(500), latitude: "37.3", connection: { asn: "15169", org: "Org" }, timezone: 42 });
+  assert.equal(hostile?.city?.length, 80);
+  assert.equal(hostile?.lat, undefined);
+  assert.equal(hostile?.asn, undefined);
+  assert.equal(hostile?.isp, "Org");
+  assert.equal(hostile?.timezone, undefined);
+  assert.equal(sanitizeGeo({ success: true }), null);
+  assert.equal(sanitizeGeo("nope"), null);
 });
 
 test("isPublicIp skips private, loopback and link-local ranges", () => {

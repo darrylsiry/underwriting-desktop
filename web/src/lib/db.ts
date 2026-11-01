@@ -4,6 +4,9 @@ import { Pool } from "pg";
 // `policy` (quotes, binders, policies, audit events).
 export type DbName = "customer" | "policy";
 
+/** A pool or a checked-out client: anything `query` can run on, so a function can join a caller's transaction. */
+export type Queryable = Pick<Pool, "query">;
+
 const urls: Record<DbName, string> = {
   customer: process.env.CUSTOMER_DATABASE_URL ?? "postgresql://uw:uw@localhost:5432/customer",
   policy: process.env.POLICY_DATABASE_URL ?? "postgresql://uw:uw@localhost:5432/policy",

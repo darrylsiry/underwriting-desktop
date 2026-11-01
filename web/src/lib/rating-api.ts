@@ -1,4 +1,4 @@
-import { RATING_SERVICE_URL } from "./services";
+import { RATING_SERVICE_URL, ratingAuthHeaders } from "./services";
 import { scheduleMod, type RatingInputs, type ScheduleItem } from "./worksheet";
 import type { Rating } from "./worksheets";
 
@@ -36,11 +36,13 @@ function errorDetail(text: string): string {
  * non-JSON reply (an HTML 502 from the proxy while the machine starts) becomes a readable error
  * instead of a SyntaxError (CR-037).
  */
-async function ratingPost<T>(path: string, body: unknown): Promise<T> {
+async function ratingPost<T>(path: string, body: unknown, actor?: string): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`${RATING_SERVICE_URL}${path}`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      method: "POST", body: JSON.stringify(body),
+      // Who is acting travels in a header the service trusts from us (SEC-002), not in the body.
+      headers: { "Content-Type": "application/json", ...(actor ? { "x-uw-user": actor } : {}), ...ratingAuthHeaders() },
       signal: AbortSignal.timeout(RATING_TIMEOUT_MS),
     });
   } catch (err) {
@@ -73,6 +75,6 @@ export async function rateOn(
 ): Promise<Rating> {
   return ratingPost<Rating>("/rate", {
     ...inputs, schedule_mod: scheduleMod(schedule), ...(versionId ? { rate_version_id: versionId } : {}),
-    reference, requested_by: actor, rated_at: at?.toISOString(),
-  });
+    reference, rated_at: at?.toISOString(),
+  }, actor);
 }

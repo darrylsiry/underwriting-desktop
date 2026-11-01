@@ -7,19 +7,21 @@ import pytest
 
 from tests.test_api import ELECTRICAL
 
+AS_PAT = {"x-uw-user": "pat"}   # the actor is the trusted caller's header, not a body field (SEC-002)
+
 
 @pytest.fixture(scope="module")
 def draft(client):
-    res = client.post("/rate-versions", json={"label": "2026.2", "notes": "TX review", "actor": "pat"})
+    res = client.post("/rate-versions", json={"label": "2026.2", "notes": "TX review"}, headers=AS_PAT)
     assert res.status_code == 201, res.text
     return res.json()
 
 
 def edit(client, version_id, reason="TX loss trend", **factor):
     return client.post(f"/rate-versions/{version_id}/edits", json={
-        "actor": "pat", "reason": reason,
+        "reason": reason,
         "edits": [{"kind": "factor", "factor": "territory", "key": "TX", "value": 1.10} | factor],
-    })
+    }, headers=AS_PAT)
 
 
 def test_draft_copies_active_version(client, draft):
@@ -35,7 +37,7 @@ def test_duplicate_label_rejected(client, draft):
 @pytest.mark.parametrize("label", ["x'); alert(1); ('", " ", "a" * 33, "2026.3<b>"])
 def test_label_characters_are_constrained(client, label):
     """A label is shown on the page and in attributes, so it's letters, digits and . _ - only (CR-044)."""
-    assert client.post("/rate-versions", json={"label": label, "actor": "pat"}).status_code == 422
+    assert client.post("/rate-versions", json={"label": label}, headers=AS_PAT).status_code == 422
     res = client.post("/admin/versions", follow_redirects=False, data={"based_on": "1", "label": label, "actor": "pat"})
     assert res.status_code == 303 and "/admin?error=" in res.headers["location"]
     assert label.strip() not in {v["label"] for v in client.get("/rate-versions").json()}

@@ -7,6 +7,10 @@ primary_region = "iad"
   RATING_SERVICE_URL = "http://uwdesk-rating.flycast"
   INGESTION_SERVICE_URL = "http://uwdesk-ingestion.flycast"
   RATING_ADMIN_URL = "/admin"
+  # The one public origin (SEC-022/024): absolute links, the API's own URLs and the same-origin and
+  # MCP Origin checks use this, never a forwarded Host header. scripts/fly-deploy.sh overrides it
+  # for another FLY_PREFIX. RATING_ADMIN_TOKEN is a secret the script sets on web and rating (SEC-002).
+  PUBLIC_BASE_URL = "https://uwdesk-web.fly.dev"
 
 [http_service]
   internal_port = 3000

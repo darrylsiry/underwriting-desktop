@@ -3,6 +3,12 @@
 #
 # Needs one repository secret, FLY_API_TOKEN: an org token (`fly tokens create org`), because the
 # script touches three apps and the Managed Postgres cluster. A per-app deploy token is not enough.
+#
+# Supply chain (SEC-021): the actions below are pinned to commit SHAs, so a moved tag or branch can't
+# change what runs with that token; Dependabot (.github/dependabot.yml) proposes bumps. Two steps
+# stay on the account, not in this file: once the cluster and apps exist, replace the org token with
+# per-app deploy tokens (`fly tokens create deploy -a <app>`), and give the `production` environment
+# a required reviewer under Settings > Environments so a push can't deploy unattended.
 name: Deploy to Fly.io
 
 on:
@@ -30,8 +36,8 @@ jobs:
     timeout-minutes: 30
     environment: production
     steps:
-      - uses: actions/checkout@v4
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (2026-10)
+      - uses: superfly/flyctl-actions/setup-flyctl@98172f70657cb3e15db199af139be99bd3e61200 # master as of 2026-10-31
       # setup-flyctl installs the binary as `flyctl`; the deploy script calls `fly`.
       - run: sudo ln -sf "$(command -v flyctl)" /usr/local/bin/fly && fly version
       - name: Check the Fly token is configured

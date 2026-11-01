@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { contentDisposition, safeReturnPath, sameOrigin } from "./http.ts";
+import { addressedToUs, configuredOrigin, contentDisposition, requestOrigin, safeReturnPath, sameOrigin } from "./http.ts";
 
 test("non-Latin-1 filenames are header-safe (CR-002)", () => {
   const value = contentDisposition('Submission – ACME "final".pdf', "inline");
@@ -35,4 +35,25 @@ test("cross-site form posts are told apart from the site's own and from API clie
   assert.equal(sameOrigin(h({ origin: "http://localhost:3000", host: "localhost:3000" })), true);
   assert.equal(sameOrigin(h({ origin: "https://uwdesk-web.fly.dev", host: "172.19.0.5:3000", "x-forwarded-host": "uwdesk-web.fly.dev" })), true);
   assert.equal(sameOrigin(h({})), true);   // curl, another system: no browser credentials attached
+});
+
+test("with PUBLIC_BASE_URL the configured origin wins over forwarded headers (SEC-022, SEC-024)", () => {
+  const env = { PUBLIC_BASE_URL: "https://uwdesk-web.fly.dev/" };
+  assert.equal(configuredOrigin(env), "https://uwdesk-web.fly.dev");
+  assert.equal(configuredOrigin({}), null);
+  assert.equal(configuredOrigin({ PUBLIC_BASE_URL: "not a url" }), null);
+  assert.equal(configuredOrigin({ PUBLIC_BASE_URL: "javascript:alert(1)" }), null);
+  // Absolute links never follow a client's Host or X-Forwarded-Host.
+  const h = (o: Record<string, string>) => new Headers(o);
+  assert.equal(requestOrigin(h({ host: "evil.example", "x-forwarded-host": "evil.example", "x-forwarded-proto": "http" }), env), "https://uwdesk-web.fly.dev");
+  assert.equal(requestOrigin(h({ host: "evil.example", "x-forwarded-proto": "http" }), {}), "http://evil.example");   // unset: as before
+  assert.equal(requestOrigin(h({ host: "localhost:3100" }), {}), "http://localhost:3100");
+  // Rebinding: Origin and Host agree with each other but not with this deployment.
+  const rebound = h({ host: "evil.example", origin: "http://evil.example" });
+  assert.equal(sameOrigin(rebound, env), false);
+  assert.equal(addressedToUs(rebound, env), false);
+  assert.equal(sameOrigin(rebound, {}), true);
+  assert.equal(addressedToUs(rebound, {}), true);
+  assert.equal(sameOrigin(h({ host: "172.19.0.5:3000", "x-forwarded-host": "uwdesk-web.fly.dev", origin: "https://uwdesk-web.fly.dev" }), env), true);
+  assert.equal(addressedToUs(h({ host: "172.19.0.5:3000", "x-forwarded-host": "uwdesk-web.fly.dev" }), env), true);
 });

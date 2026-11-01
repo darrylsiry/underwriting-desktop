@@ -4,10 +4,10 @@ from contextlib import asynccontextmanager
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from app import admin, db, repository
+from app import admin, auth, db, repository
 from app.engine import RatingError, RatingInput, RatingResult, rate
 
 
@@ -37,7 +37,7 @@ def health():
 class RateRequest(RatingInput):
     rate_version_id: int | None = None
     reference: str | None = None  # caller's ID, e.g. the submission or quote
-    requested_by: str = "anonymous"
+    # Who asked is read from the x-uw-user header of a trusted caller (SEC-002), not from the body.
     rated_at: datetime | None = None  # when the rating happened, if not now (seeded history)
 
 
@@ -46,7 +46,7 @@ class RateResponse(RatingResult):
 
 
 @app.post("/rate", response_model=RateResponse)
-def rate_risk(req: RateRequest):
+def rate_risk(req: RateRequest, request: Request):
     try:
         tables = repository.load_tables(req.rate_version_id)
         result = rate(tables, RatingInput(**req.model_dump(include=set(RatingInput.model_fields))))
@@ -55,7 +55,7 @@ def rate_risk(req: RateRequest):
     except RatingError as e:
         raise HTTPException(422, str(e)) from e
     rating_id = repository.log_rating(
-        tables.version_id, req.reference, req.requested_by,
+        tables.version_id, req.reference, auth.acting_user(request) or "anonymous",
         req.model_dump(mode="json", exclude={"rated_at"}), result.model_dump(mode="json"), req.rated_at,
     )
     return RateResponse(rating_id=rating_id, **result.model_dump())
@@ -87,6 +87,12 @@ def rate_versions():
 
 
 # --- Rate-table administration (the /admin UI uses the same repository calls) ---
+# Changing rate tables needs the service's bearer token (SEC-002); the actor is the signed-in
+# UW Desktop user the trusted caller names, never a name typed into the request body.
+
+def actor_of(request: Request) -> str:
+    return auth.acting_user(request) or "anonymous"
+
 
 def admin_errors(fn, *args):
     try:
@@ -112,13 +118,12 @@ class NewDraft(BaseModel):
     label: str = Field(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9._-]+$")
     based_on: int | None = Field(default=None, description="Version to copy; defaults to the active version")
     notes: str = ""
-    actor: str = "anonymous"
 
 
-@app.post("/rate-versions", status_code=201)
-def create_draft(req: NewDraft):
+@app.post("/rate-versions", status_code=201, dependencies=[Depends(auth.require_admin)])
+def create_draft(req: NewDraft, request: Request):
     base = req.based_on or repository.active_version_id()
-    new_id = admin_errors(repository.create_draft, base, req.label, req.notes, req.actor)
+    new_id = admin_errors(repository.create_draft, base, req.label, req.notes, actor_of(request))
     return repository.get_version(new_id)
 
 
@@ -143,13 +148,12 @@ class ParameterEdit(BaseModel):
 
 
 class EditRequest(BaseModel):
-    actor: str = "anonymous"
     reason: str = Field(min_length=1)
     edits: list[Annotated[ClassEdit | FactorEdit | ParameterEdit, Field(discriminator="kind")]]
 
 
-@app.post("/rate-versions/{version_id}/edits")
-def edit_draft(version_id: int, req: EditRequest):
+@app.post("/rate-versions/{version_id}/edits", dependencies=[Depends(auth.require_admin)])
+def edit_draft(version_id: int, req: EditRequest, request: Request):
     """Change values in a draft. Each changed row is audited with before/after and the reason."""
     edits = []
     for e in req.edits:
@@ -160,18 +164,21 @@ def edit_draft(version_id: int, req: EditRequest):
             edits.append(repository.Edit("factor", (e.factor, e.key), {"value": e.value}))
         else:
             edits.append(repository.Edit("parameter", (e.name,), {"value": e.value}))
-    return {"changed": admin_errors(repository.apply_edits, version_id, edits, req.actor, req.reason)}
+    return {"changed": admin_errors(repository.apply_edits, version_id, edits, actor_of(request), req.reason)}
 
 
 class Activation(BaseModel):
-    actor: str = "anonymous"
     reason: str = Field(min_length=1)
 
 
-@app.post("/rate-versions/{version_id}/activate")
-def activate(version_id: int, req: Activation):
-    admin_errors(repository.activate, version_id, req.actor, req.reason)
+@app.post("/rate-versions/{version_id}/activate", dependencies=[Depends(auth.require_admin)])
+def activate(version_id: int, req: Activation, request: Request):
+    admin_errors(repository.activate, version_id, actor_of(request), req.reason)
     return repository.get_version(version_id)
+
+
+_WALL = r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?)?$"   # a wall-clock timestamp, no zone (UX-044)
+_TZ = r"^[A-Za-z_]+(/[A-Za-z_+\-0-9]+)*$"
 
 
 @app.get("/rate-table-audit")
@@ -180,10 +187,6 @@ def rate_table_audit(version_id: int | None = None, limit: int = Query(200, ge=1
                      tz: str = Query("UTC", pattern=_TZ)):
     """Rate-table changes, newest first; `since`/`until` are wall-clock bounds in `tz` (UX-044)."""
     return repository.audit_trail(version_id, limit, since, until, tz)
-_WALL = r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?)?$"   # a wall-clock timestamp, no zone (UX-044)
-_TZ = r"^[A-Za-z_]+(/[A-Za-z_+\-0-9]+)*$"
-
-
 
 
 @app.get("/ratings")

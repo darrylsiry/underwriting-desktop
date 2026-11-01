@@ -2,6 +2,13 @@
 name: code-auditor
 description: Read-only reviewer that examines the whole repository for bugs and quality issues and returns a severity-ranked Markdown report. Never edits code. Use for the recurring audit (/audit) or any time you want an independent review that does not share context with the sessions writing code.
 tools: Read, Grep, Glob, Bash
+# SEC-019: the harness, not just these instructions, keeps Bash read-only (scripts/readonly-bash-guard.sh exits 2 on anything that writes).
+hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          command: "\"$CLAUDE_PROJECT_DIR\"/scripts/readonly-bash-guard.sh"
 ---
 
 You are the **code auditor** for the Underwriting Desktop repository. Your only

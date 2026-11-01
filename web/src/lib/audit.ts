@@ -1,4 +1,4 @@
-import { policyDb } from "./db";
+import { policyDb, type Queryable } from "./db";
 
 export type AuditEvent = {
   actor: string;
@@ -12,11 +12,16 @@ export type AuditEvent = {
   occurredAt?: Date;   // when it happened, if not now (seeded history)
 };
 
-/** Append one row to policy.audit_events. Events from one user action share a correlation ID. */
-export async function audit(...events: AuditEvent[]): Promise<void> {
+/**
+ * Append one row per event to policy.audit_events. Events from one user action share a correlation
+ * ID. Pass the events as an array plus a client to write them inside that client's transaction
+ * (so the audit row commits or rolls back with the change it describes).
+ */
+export async function audit(...args: AuditEvent[] | [AuditEvent[], Queryable]): Promise<void> {
+  const [events, db]: [AuditEvent[], Queryable] = Array.isArray(args[0]) ? [args[0], args[1] as Queryable] : [args as AuditEvent[], policyDb];
   const correlationId = events[0]?.correlationId ?? crypto.randomUUID();
   for (const e of events) {
-    await policyDb.query(
+    await db.query(
       `INSERT INTO audit_events (actor, action, entity_type, entity_id, summary, before, after, correlation_id, occurred_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, coalesce($9, now()))`,
       [e.actor, e.action, e.entityType, e.entityId, e.summary,

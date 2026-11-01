@@ -25,20 +25,49 @@ export type LoginEvent = {
 
 export type ClientInfo = { ip: string | null; user_agent: string | null; accept_language: string | null; edge_region: string | null };
 
+export type TrustEnv = Record<string, string | undefined>;   // FLY_APP_NAME, TRUSTED_PROXY
+
 /**
- * The client as the request headers describe it. On Fly the proxy sets Fly-Client-IP (which a
- * client can't forge) and Fly-Region; elsewhere the first X-Forwarded-For entry, then X-Real-IP.
- * Locally (no proxy) there is no address: the row says so instead of claiming 127.0.0.1.
+ * The client as the request headers describe it. Address headers are only believed from a proxy
+ * that overwrites them (SEC-033): Fly-Client-IP on Fly (FLY_APP_NAME is set there and a client can't
+ * forge the header past Fly's proxy), and X-Forwarded-For / X-Real-IP only when TRUSTED_PROXY=1 says
+ * such a proxy is in front. Otherwise the row records no address rather than one the client chose;
+ * `untrusted` says an address header was present but ignored.
  */
-export function clientInfo(h: { get(name: string): string | null }): ClientInfo {
-  const forwarded = h.get("x-forwarded-for")?.split(",")[0].trim() || null;
-  const ip = h.get("fly-client-ip")?.trim() || forwarded || h.get("x-real-ip")?.trim() || null;
+export function clientInfo(h: { get(name: string): string | null }, env: TrustEnv = process.env): ClientInfo & { untrusted: boolean } {
+  const fly = env.FLY_APP_NAME ? h.get("fly-client-ip")?.trim() || null : null;
+  const forwarded = env.TRUSTED_PROXY === "1" ? h.get("x-forwarded-for")?.split(",")[0].trim() || h.get("x-real-ip")?.trim() || null : null;
+  const ip = fly || forwarded;
+  const untrusted = !ip && !!(h.get("fly-client-ip") || h.get("x-forwarded-for") || h.get("x-real-ip"));
   return {
-    ip: ip ? ip.replace(/^\[|\]$/g, "").replace(/^::ffff:/, "") : null,
+    ip: ip ? ip.replace(/^\[|\]$/g, "").replace(/^::ffff:/, "").slice(0, 45) : null,
     user_agent: h.get("user-agent")?.slice(0, 500) || null,
     accept_language: h.get("accept-language")?.slice(0, 100) || null,
-    edge_region: h.get("fly-region")?.trim() || null,
+    edge_region: h.get("fly-region")?.trim().slice(0, 20) || null,
+    untrusted,
   };
+}
+
+const GEO_TEXT_MAX = 80;
+const text = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim().slice(0, GEO_TEXT_MAX) : undefined);
+const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+
+/**
+ * A geo lookup's reply reduced to what we store: known fields only, strings trimmed to 80
+ * characters, numbers only where a number is expected (SEC-033). The vendor's JSON is untrusted
+ * input like any other; nothing else of it is kept. Null when it says nothing usable.
+ */
+export function sanitizeGeo(j: unknown): Geo | null {
+  if (!j || typeof j !== "object") return null;
+  const r = j as Record<string, unknown>;
+  const tz = r.timezone && typeof r.timezone === "object" ? (r.timezone as Record<string, unknown>).id : r.timezone;
+  const conn = r.connection && typeof r.connection === "object" ? (r.connection as Record<string, unknown>) : {};
+  const geo: Geo = {
+    country: text(r.country), country_code: text(r.country_code)?.slice(0, 3), region: text(r.region), city: text(r.city),
+    timezone: text(tz), isp: text(conn.isp) ?? text(conn.org), asn: num(conn.asn), lat: num(r.latitude), lon: num(r.longitude),
+  };
+  for (const k of Object.keys(geo) as (keyof Geo)[]) if (geo[k] === undefined) delete geo[k];
+  return Object.keys(geo).length ? geo : null;
 }
 
 /** False for loopback, private and link-local ranges: a geo lookup can't place them. */
@@ -153,7 +182,7 @@ function eventsTable(events: LoginEvent[]): string {
   if (!events.length) return "_No events._\n";
   const lines = ["| When (UTC) | User | Result | Via | IP | Location | ISP | Edge | Browser | Language |", "|---|---|---|---|---|---|---|---|---|---|"];
   for (const e of events) {
-    lines.push(`| ${when(e.occurred_at)} | ${esc(e.username)} | ${e.success ? "ok" : "FAILED"} | ${e.method} | ${e.ip ?? "—"} | ${esc(place(e.geo)) || (e.geo_source ? esc(e.geo_source) : "—")} | ${esc(e.geo?.isp ?? "") || "—"} | ${e.edge_region ?? "—"} | ${esc(browserLabel(e.user_agent)) || "—"} | ${e.accept_language?.split(",")[0] ?? "—"} |`);
+    lines.push(`| ${when(e.occurred_at)} | ${esc(e.username)} | ${e.success ? "ok" : "FAILED"} | ${e.method} | ${e.ip ?? "—"} | ${esc(place(e.geo)) || (e.geo_source ? esc(e.geo_source) : "—")} | ${esc(e.geo?.isp ?? "") || "—"} | ${e.edge_region ?? "—"} | ${esc(browserLabel(e.user_agent)) || "—"} | ${esc(e.accept_language?.split(",")[0] ?? "") || "—"} |`);
   }
   return lines.join("\n") + "\n";
 }

@@ -1,7 +1,7 @@
 import { after } from "next/server";
 import { policyDb } from "./db";
 import { loadUsers } from "./basic-auth";
-import { buildReport, clientInfo, isPublicIp, type Geo, type LoginEvent, type LoginMethod, type LoginReport } from "./login-meta";
+import { buildReport, clientInfo, isPublicIp, sanitizeGeo, type Geo, type LoginEvent, type LoginMethod, type LoginReport } from "./login-meta";
 
 // Recording sign-ins (policy.login_events) and the sign-in report over them. The geo lookup
 // happens after the response is sent, so signing in never waits on it; rows it missed are
@@ -17,7 +17,8 @@ export async function recordLogin(username: string, success: boolean, method: Lo
   const { rows } = await policyDb.query<{ id: number }>(
     `INSERT INTO login_events (username, success, method, ip, user_agent, accept_language, edge_region, geo_source)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-    [username, success, method, c.ip, c.user_agent, c.accept_language, c.edge_region, c.ip ? null : "no client address (local)"]);
+    [username, success, method, c.ip, c.user_agent, c.accept_language, c.edge_region,
+     c.ip ? null : c.untrusted ? "address header ignored (no trusted proxy; set TRUSTED_PROXY=1 behind one)" : "no client address (local)"]);
   const id = Number(rows[0].id);
   if (isPublicIp(c.ip)) {
     const ip = c.ip;
@@ -52,14 +53,11 @@ export async function lookupGeo(ip: string): Promise<{ geo: Geo | null; source: 
   try {
     const res = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`, { signal: AbortSignal.timeout(GEO_TIMEOUT_MS), cache: "no-store" });
     if (!res.ok) return { geo: null, source: `ipwho.is HTTP ${res.status}` };
-    const j = await res.json() as { success?: boolean; message?: string; country?: string; country_code?: string; region?: string; city?: string;
-      latitude?: number; longitude?: number; timezone?: { id?: string }; connection?: { isp?: string; org?: string; asn?: number } };
-    if (!j.success) return { geo: null, source: `ipwho.is: ${j.message ?? "no result"}` };
-    return {
-      source: "ipwho.is",
-      geo: { country: j.country, country_code: j.country_code, region: j.region, city: j.city, timezone: j.timezone?.id,
-        isp: j.connection?.isp || j.connection?.org, asn: j.connection?.asn, lat: j.latitude, lon: j.longitude },
-    };
+    const j = await res.json() as { success?: boolean; message?: string };
+    if (!j || typeof j !== "object") return { geo: null, source: "ipwho.is: unreadable reply" };
+    if (!j.success) return { geo: null, source: `ipwho.is: ${typeof j.message === "string" ? j.message.slice(0, 80) : "no result"}` };
+    const geo = sanitizeGeo(j);   // the vendor's JSON is untrusted input: known fields, bounded (SEC-033)
+    return geo ? { source: "ipwho.is", geo } : { geo: null, source: "ipwho.is: empty result" };
   } catch (err) {
     return { geo: null, source: `ipwho.is unreachable (${(err as Error).name})` };
   }

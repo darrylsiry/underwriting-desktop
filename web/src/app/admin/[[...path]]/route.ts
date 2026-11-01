@@ -1,13 +1,15 @@
 import { CROSS_SITE_REFUSED, sameOrigin } from "@/lib/http";
-import { RATING_SERVICE_URL } from "@/lib/services";
+import { RATING_SERVICE_URL, ratingAuthHeaders } from "@/lib/services";
 import { currentUser } from "@/lib/user";
 
 // The rating service's rate-table admin UI, served through the web app so it sits behind the
 // same password gate and the rating service can stay private (Fly: reachable on .flycast only).
 export const dynamic = "force-dynamic";
 
-const FORWARD_REQUEST = ["content-type", "cookie", "accept"];
-const FORWARD_RESPONSE = ["content-type", "location", "set-cookie"];
+// No cookies either way (SEC-030): the browser's session cookie is for this app, not the rating
+// service, and the service never needs to remember a name when the proxy says who is signed in.
+const FORWARD_REQUEST = ["content-type", "accept"];
+const FORWARD_RESPONSE = ["content-type", "location"];
 
 async function proxy(req: Request): Promise<Response> {
   const url = new URL(req.url);
@@ -23,6 +25,8 @@ async function proxy(req: Request): Promise<Response> {
       // Tell the admin it's inside the UW Desktop so it renders the desktop's top nav (display only).
       "x-uw-desktop": "1",
       "x-uw-user": await currentUser(),
+      // The service trusts x-uw-user only from a caller holding this shared secret (SEC-002).
+      ...ratingAuthHeaders(),
     },
     body: req.method === "GET" || req.method === "HEAD" ? undefined : await req.arrayBuffer(),
     redirect: "manual",  // the admin redirects after each POST; let the browser follow it
@@ -30,8 +34,8 @@ async function proxy(req: Request): Promise<Response> {
   });
   const headers = new Headers();
   for (const h of FORWARD_RESPONSE) {
-    const values = h === "set-cookie" ? upstream.headers.getSetCookie() : [upstream.headers.get(h)].filter(Boolean) as string[];
-    for (const v of values) headers.append(h, v);
+    const v = upstream.headers.get(h);
+    if (v) headers.set(h, v);
   }
   return new Response(upstream.body, { status: upstream.status, headers });
 }

@@ -1,0 +1,10 @@
+# SEC-021: keep the pinned GitHub Actions current. Dependabot opens a PR when an action we pin by
+# commit SHA has a newer release, and updates the SHA and the version comment together.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"

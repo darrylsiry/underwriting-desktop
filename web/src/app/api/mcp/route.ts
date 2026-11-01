@@ -1,6 +1,6 @@
 import { glDate } from "@/lib/gl-journal";
 import { glMcpServer } from "@/lib/gl-mcp";
-import { requestOrigin } from "@/lib/http";
+import { addressedToUs, requestOrigin } from "@/lib/http";
 import { serveMcpHttp } from "@/lib/mcp";
 import { noteApiLogin } from "@/lib/login-events";
 import { currentUser, signedInUser } from "@/lib/user";
@@ -13,6 +13,9 @@ export const dynamic = "force-dynamic";
 const server = glMcpServer();
 
 async function serve(req: Request) {
+  // A request that reached us under a name that isn't this deployment's is DNS rebinding (SEC-024):
+  // its Origin would match its own Host, so the Origin check alone can't tell.
+  if (!addressedToUs(req.headers)) return Response.json({ error: "Forbidden: this request was not addressed to this server" }, { status: 403 });
   const origin = requestOrigin(req.headers);
   noteApiLogin(await signedInUser(), req.headers);   // the sign-in report counts MCP clients' logins too
   const ctx = { actor: await currentUser(), origin, today: glDate(new Date()) };

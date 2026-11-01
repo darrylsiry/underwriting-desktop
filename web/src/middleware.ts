@@ -15,7 +15,16 @@ export function middleware(req: NextRequest) {
   const headers = new Headers(req.headers);
   headers.delete(AUTH_USER_HEADER);
   const users = loadUsers(process.env);
-  if (!users.size) return NextResponse.next({ request: { headers } });
+  if (!users.size) {
+    // Fail closed on the public deployment (SEC-001): with no logins configured, Fly would otherwise
+    // serve the whole desk to anyone. Locally (no FLY_APP_NAME) the gate stays off as before;
+    // AUTH_DISABLED=1 opens it on purpose elsewhere.
+    if (process.env.FLY_APP_NAME && process.env.AUTH_DISABLED !== "1") {
+      return new NextResponse("Sign-in is not configured on this deployment (set the BASIC_AUTH_USERS secret).",
+        { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
+    }
+    return NextResponse.next({ request: { headers } });
+  }
 
   const name = verifySession(req.cookies.get(SESSION_COOKIE)?.value, sessionKey(process.env))
     ?? authenticate(req.headers.get("authorization"), users);

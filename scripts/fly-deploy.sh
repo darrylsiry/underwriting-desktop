@@ -111,10 +111,23 @@ else
   echo "Login for $user saved to .fly-credentials"
 fi
 
-# Default fly.toml names are uwdesk-*; with another prefix, point the apps at each other.
-overrides=()
+# The rating service trusts who the web app says is acting only from a caller holding this shared
+# secret (SEC-002). One value on both apps; generated here, never printed or saved. Set again on
+# both when either lacks it, so they can't drift apart.
+if has_secret "$WEB" RATING_ADMIN_TOKEN && has_secret "$RATING" RATING_ADMIN_TOKEN; then
+  echo "web and rating already share RATING_ADMIN_TOKEN"
+else
+  token="$(openssl rand -hex 32)"
+  for app in "$WEB" "$RATING"; do printf 'RATING_ADMIN_TOKEN=%s\n' "$token" | fly secrets import --stage -a "$app"; done
+  echo "RATING_ADMIN_TOKEN set on web and rating"
+fi
+
+# Default fly.toml names are uwdesk-*; with another prefix, point the apps at each other and tell
+# web its public origin (SEC-022).
+overrides=() web_overrides=()
 if [ "$PREFIX" != "uwdesk" ]; then
   overrides=(-e "RATING_SERVICE_URL=http://$RATING.flycast" -e "INGESTION_SERVICE_URL=http://$INGESTION.flycast")
+  web_overrides=(-e "PUBLIC_BASE_URL=https://$WEB.fly.dev")
 fi
 
 step "Deploy private services (no public IPs) and give them Flycast addresses"
@@ -130,7 +143,7 @@ step "Deploy web (public)"
 # The Submissions inbox reads a drop folder; on Fly it's baked into the web image from samples/.
 find "$ROOT/web/inbox" -mindepth 1 ! -name .gitkeep -exec rm -rf {} +
 cp -R "$ROOT/samples/submissions/." "$ROOT/web/inbox/"
-fly deploy web --config "$ROOT/web/fly.toml" --app "$WEB" --ha=false ${overrides[@]+"${overrides[@]}"}
+fly deploy web --config "$ROOT/web/fly.toml" --app "$WEB" --ha=false ${overrides[@]+"${overrides[@]}"} ${web_overrides[@]+"${web_overrides[@]}"}
 
 step "Done"
 echo "UW Desktop: https://$WEB.fly.dev  (credentials in .fly-credentials)"
