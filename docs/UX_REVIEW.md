@@ -8,40 +8,37 @@ chosen, keep the `UX-NNN` ID in your commit message, and leave this file
 alone. The reviewer marks items resolved when it sees the change. Mockups
 live in `docs/ux-mockups/`.*
 
-- **Run:** 2026-10-31 19:51
-- **Commit reviewed:** `c51fd92` (`UX-037 UX-038 UX-039 UX-040 UX-041: freeze a bound worksheet, confirm before Bind, name every input, next step follows the stage, finish the copy clean-up`). The working tree has one uncommitted change, the BUILD_LOG entry for that batch; no uncommitted UI changes.
-- **Previous run:** 2026-10-31 19:36 (commit `eda475a`)
-- **Reviewed against:** running app at localhost:3100 (web) and localhost:8001 (rating admin, also fetched through the desktop proxy at localhost:3100/admin). Port 3000 was ignored as instructed.
+- **Run:** 2026-10-31 20:14
+- **Commit reviewed:** `d1ea8c5` (`UX-042 UX-043 UX-044 UX-045 UX-046: renewal card leads with Bind, quote page next step, audit range in the query with a cap notice, readable history, matching admin menu`). The working tree has uncommitted changes from a concurrent security session (`admin/[[...path]]/route.ts`, `api/mcp/route.ts`, `lib/{audit,db,http,ledger,login-events,login-meta,rating-api,services}.ts`, `services/rating/app/{admin,main,auth}.py`, `middleware.ts`, deploy files); none of them is a UI change for this batch and they were excluded.
+- **Previous run:** 2026-10-31 19:51 (commit `c51fd92`)
+- **Reviewed against:** running app at localhost:3100 (web; port 3000 ignored as instructed) and localhost:8001 (rating admin, **not rebuilt** after `d1ea8c5`, so its parts of UX-044 and UX-046 were judged from code).
 
 ## Summary
 
 | Priority | Open | New this run | Improved | Resolved this run |
 |----------|------|--------------|----------|-------------------|
 | P1 Blocker | 0 | 0 | 0 | 0 |
-| P2 Major | 0 | 0 | 0 | 0 |
-| P3 Minor | 3 | 3 | 0 | 3 |
-| P4 Polish | 3 | 3 | 0 | 2 |
+| P2 Major | 1 | 1 | 0 | 0 |
+| P3 Minor | 1 | 1 | 0 | 3 |
+| P4 Polish | 0 | 0 | 0 | 3 |
 
-All five items from the 19:36 run are closed and check out on the rendered pages: Desert Bloom's bound workbench reads `Worksheet frozen at bind`, its inputs sit in `<fieldset disabled>`, the premium card says `Premium as bound`, and `saveAndRateAction` refuses a bound file; the Bind form asks first with the quote, the amount and the open subjectivities; every schedule, Clear-note and admin rate cell carries an `aria-label` built from its row; `/submissions?stage=bound` and the customer page link `Policy →` straight to `/policies/<id>`; new summaries go through `plural()` and `whenDate()` (the desk already reads `valid for 29 more days`). The underwriter's path from inbox to policy is now clean of the wrong-state traps earlier runs found. With fresh eyes on the seams, the most valuable change next is UX-042: the renewal comparison page, where every first renewal quote lands, leads its quote card with a full-size emerald **Issue revised renewal quote (v3)** even when the issued quote is current, and the data shows the slip already happened (Q-2026-0004 v1 and v2, both $89,725, issued in the same minute). The best quick win is UX-043: an issued quote's page, where the desk's "Chase bind order" task lands, has no Bind affordance at all.
+All six items from the 19:51 run are closed and check out: Red Rock's renewal page leads with `Bind Q-2026-0004 v2 on the workbench →` and folds the revise form behind `Revise renewal quote (v3)`; the quote page carries `Bind on the workbench →` on an issued version and `Superseded by v3 (bound) →` on a superseded one; `/audit?from=2026-01-01&to=2026-01-31` now reaches 56 January desk events including the binds, and `/audit` says when the 500 cap bit; the bound worksheet's labels are back to full contrast; the history reads `Deductible changed ($1,000 → $2,500)`. The underwriter's path is clean. The UX-044 fix exposed one real problem (UX-048): the audit trail orders and pages by row id, and because the 50-policy history was seeded *after* the first live files, the 87 October events of SUB-0001…SUB-0008 (the Desert Bloom bind, every Q-2026-0004 issue) sit on "page 2" behind `Older →`, while page 1 tells the manager that only events "before Feb 3, 2026" are missing; a search for `GL-26-00001` on `/audit` returns 0. That is the most valuable change next, and it is small (order and cut by `occurred_at`). The best quick win is UX-049: the desk header reads `Sunday, November 1, 2026` at 8:14 PM Eastern on Saturday because "today" is the UTC date everywhere.
 
 ## Outstanding items
 
 | ID | Priority | Effort | Status | Screen | Recommendation (one line) | First seen |
 |----|----------|--------|--------|--------|----------------------------|------------|
-| UX-042 | P3 | S | New | Renewal comparison, Renewal quote card | When the issued quote is current, lead with Bind and tuck the revise form behind a summary, as the workbench does | 2026-10-31 |
-| UX-043 | P3 | S | New | Quote detail | Give an issued quote a `Bind on the workbench →` action and a superseded one a link to the live version | 2026-10-31 |
-| UX-044 | P3 | M | New | Audit trail | Say when the newest-500 cap bit, and apply From/To in the query so a date range reaches older events | 2026-10-31 |
-| UX-045 | P4 | S | New | Workbench history, audit | Show input changes as formatted values and stop logging `schedule -5% → -5%` when only a reason changed | 2026-10-31 |
-| UX-046 | P4 | S | New | Rate admin header | Add `Sign-ins` to the admin's Admin menu so it matches the desktop's | 2026-10-31 |
-| UX-047 | P4 | S | New | Workbench (bound file) | Fade the frozen inputs, not their labels: `opacity-75` on the whole fieldset drops the 12px labels to about 3:1 | 2026-10-31 |
+| UX-048 | P2 | M | New | Audit trail | Order, cap and page the desk feed by `occurred_at` (not id), pass the same cut to the rating feeds, and give page 2 a header with `← Newer` | 2026-10-31 |
+| UX-049 | P3 | M | New | Desk, workbench Bind, policy pages, quote/binder dates | Compute "today" in the display zone, not UTC; the desk turns over to tomorrow at 8 PM Eastern | 2026-10-31 |
 
 ## What changed since last run
 
-- `web/src/app/submissions/[id]/workbench/page.tsx`, `workbench/actions.ts` (c51fd92): header shows `Worksheet frozen at bind` instead of Save & rate, an emerald line names `GL-26-00001 by underwriter on Oct 22, 2026` and where changes go, the form sits in `<fieldset disabled class="space-y-6 opacity-75">`, the card is `Premium as bound · bound Oct 22, 2026 · rates 2026.2`, and the action returns `Bound as GL-…; the worksheet can't change` (verified rendered on SUB-0001; SUB-0008 and SUB-0003 unchanged with Save & rate present). **Helped**: UX-037 resolved. **Neutral/slightly hurt**: the whole-fieldset opacity also fades the labels (UX-047).
-- `web/src/app/submissions/[id]/workbench/bind-form.tsx` (new, c51fd92): `onSubmit` counts unticked `received` boxes and asks `Bind Q-2026-0004 v2 for $89,725? … subjectivit(y|ies) stay open, due in 30 days. This issues policy and binder numbers and books the premium to the GL.` **Helped**: UX-039 resolved (judged from code and the rendered form; not clicked).
-- `web/src/app/submissions/page.tsx`, `insureds/[id]/page.tsx`, `lib/stage.ts`, `lib/dashboard.ts` (c51fd92): `Stage.href` carries `/policies/<id>`; the Received table and the customer page render `Policy →` for bound rows. **Helped**: UX-038 resolved; `/submissions?stage=bound` shows `Policy →` on every row with direct `/policies/…` hrefs, the Aspen Grove customer page links `/policies/ca98ddea-…` without the search detour.
-- `services/rating/app/templates/version.html`, `workbench/page.tsx` (c51fd92): `aria-label` on the 12 schedule inputs (`Safety program & training: percent (credit negative, debit positive)` / `: reason`), on each Clear note (`Why "Loss frequency" is acceptable`) and on all 16 rate cells of 2026.3 (`Roofing - residential rate per $1,000`). **Helped**: UX-040 resolved (verified in the rendered HTML of SUB-0003's workbench and `/admin/versions/3`).
-- `web/src/lib/{text,submissions,ledger,policies,renewals,timeline-merge,dashboard}.ts` (c51fd92): `plural()` in the receive, accept and GL-push summaries; `whenDate()` in the bind, renewal-start and subjectivity-diff text; the desk's Bind task reads `valid for 29 more days` (rendered). **Helped**: UX-041 resolved by code path; stored rows keep their old text (`2 document(s)`, `0 line(s)` still show in "Your recent activity", as expected).
+- `web/src/app/submissions/[id]/workbench/page.tsx` (d9a646e): the frozen fieldset lost `opacity-75` and gained `[&_input:disabled]:bg-slate-50 [&_input:disabled]:text-slate-700` (+ the select twins). Rendered on SUB-0001: labels at full `slate-500`, inputs on slate-50. **Helped**: UX-047 resolved.
+- `web/src/app/submissions/[id]/renewal/page.tsx` (d1ea8c5): when the issued quote is current, an emerald `Bind Q-2026-0004 v2 on the workbench →` link and a `<details>` summary `Revise renewal quote (v3)` with the outlined form; the "Bind from the workbench once the broker confirms" sentence only shows in the other branches. **Helped**: UX-042 resolved (rendered on SUB-0008).
+- `web/src/app/quotes/[id]/page.tsx` (d1ea8c5): `Bind on the workbench →` for issued + unbound; `Superseded by vN (status) →` for superseded. **Helped**: UX-043 resolved (rendered on Q-2026-0004 v2, Q-2026-0004 v1, Q-2026-0001 v1/v2, Q-2026-0003 v1).
+- `web/src/lib/timeline.ts`, `web/src/app/audit/page.tsx`, `services/rating/app/{main,repository}.py` (d1ea8c5): From/To applied in the desk query in the display zone and sent to the rating feeds as `since`/`until`/`tz`; `capped`/`oldestDesktopId`/`oldestDesktopAt` drive an amber notice and `Older →` (`?before=<id>`). **Helped** for the date range (January reachable, UX-044 resolved). **Hurt** on the cap and the cursor: both are by row id, which is not time order in this database (UX-048).
+- `web/src/lib/worksheets.ts`, `workbench/page.tsx:372-375` (d1ea8c5): input changes print through `inputText`; a reason-only schedule edit logs `schedule reasons updated (total …)`. **Helped**: UX-045 resolved.
+- `services/rating/app/templates/base.html` (d1ea8c5): `Sign-ins` in the Admin menu. **Helped** (UX-046); not yet visible at :8001 because the container was not rebuilt.
 
 ## P1 Blocker
 
@@ -49,158 +46,107 @@ None.
 
 ## P2 Major
 
-None.
+### UX-048 — The audit trail's "newest 500" and `Older →` go by row id, so last week's live events are hidden behind "older" history and the cap notice names the wrong date
+- **Status:** New (follows UX-044, whose fix added the notice and the cursor)
+- **Effort:** M
+- **Who / when:** Underwriting manager or auditor opening `/audit` to see what happened this week, or typing a reference into its Search box; demo audience when the presenter shows the trail after binding Desert Bloom or issuing Red Rock's quote.
+- **Where:** `web/src/lib/timeline.ts:85-86` (`AND ($3::bigint IS NULL OR id < $3::bigint) ORDER BY id DESC LIMIT 500`), `:94-98` (`oldest = desktopRows.at(-1)`, `capped`, `oldestDesktopId`), `web/src/app/audit/page.tsx:115-118` (notice text and `before=<id>` link). URLs: `/audit`, `/audit?before=186`, `/audit?q=GL-26-00001`.
+- **What the user experiences:** `/audit` renders `Showing 633 of 633 loaded events · UW Desktop 500 …` and the amber note `UW Desktop shows its newest 500 only; events before Feb 3, 2026 are not on this page. Narrow From / To to reach them. Older →`. But the 500 are the newest *ids*, and the seeded history (step 19) was inserted after SUB-0001…SUB-0008 had already been worked, so page 1 runs Oct 30 → Feb 2 while **87 UW Desktop events dated October 2026** (counted from the rendered `<time>` elements) are not on it: SUB-0008's `worksheet.rated` at `Oct 30, 2026, 5:03 PM`, the `Q-2026-0004 v1`/`v2` issues, the `GL-26-00001` bind. Click `Older →` and the "older" page opens with `Oct 30, 2026, 5:03 PM EDT · UW Desktop · underwriter1 · worksheet.rated SUB-0008`, followed by the same 129 Rating-engine and 4 Rate-admin rows that were on page 1 (the cursor is a desk id, so the rating feeds are re-fetched whole). Type `GL-26-00001` into Search on page 1: `Showing 0 of 633 loaded events`, with a note implying only pre-February history is missing. Page 2 has no heading, no `← Newer`, and the filter form drops `before`, so filtering there jumps back to page 1.
+- **Why it matters:** An audit page that silently omits last week's events while naming a different cut-off date is the trust failure UX-044 set out to fix, moved rather than removed (visibility of system status; the heuristic is "say what is not shown, truthfully"). The per-case view and the From/To range are correct because they query by time, which is also the fix here. This is the state on Fly too: the seed ran after the live demo files there as well.
+- **Recommendation:** Order, cut and page the desk feed by time, and give the rating feeds the same cut:
+  ```ts
+  // lib/timeline.ts — cursor is the oldest `at` on the previous page (ISO), not an id
+  const before = isIso(range.before) ? range.before : null;
+  `SELECT * FROM audit_events
+     WHERE ($1::date IS NULL OR occurred_at >= ($1::date::timestamp AT TIME ZONE $4))
+       AND ($2::date IS NULL OR occurred_at <  (($2::date + 1)::timestamp AT TIME ZONE $4))
+       AND ($3::timestamptz IS NULL OR occurred_at < $3::timestamptz)
+     ORDER BY occurred_at DESC, id DESC LIMIT ${LIMIT}`
+  if (before) qs.set("until", wallClock(before, DISPLAY_TIME_ZONE));   // the service already takes until/tz
+  …
+  return { …, capped: !submissionId && desktopRows.length >= LIMIT, oldestDesktopAt: oldest?.occurred_at ?? null };
+  ```
+  (If two rows share a timestamp, use the pair `(occurred_at, id) < ($cut_at, $cut_id)`; the seed stamps distinct seconds, so the simple form is enough for the demo.) In `audit/page.tsx`: the link becomes `before=<oldestDesktopAt ISO>`; the notice reads `UW Desktop shows its newest 500 by time; everything before {when(oldestDesktopAt)} continues on the next page.` and, when `params.before` is set, a line above the list: `Older than {when(params.before)} · ← Newer`. Keep `before` out of the filter form on purpose (a new filter starts from the newest), but keep it in `Older →`.
+- **Before / after:**
+  ```
+  BEFORE                                          AFTER
+  Showing 633 of 633 loaded events · UW Desktop   Showing 633 of 633 loaded events · UW Desktop
+  500 · Rate admin 4 · Rating engine 129          500 · Rate admin 4 · Rating engine 129
+  [UW Desktop shows its newest 500 only; events   [UW Desktop shows its newest 500 by time;     ◀
+   before Feb 3, 2026 are not on this page.]       everything before Feb 20, 2026, 3:02 PM EST
+   Older →                                         continues on the next page.] Older →
+  Oct 30, 2026, 7:48 PM  gl.exported GLX-…008     Oct 30, 2026, 7:48 PM  gl.exported GLX-…008
+  Oct 30, 2026, 5:47 PM  submission.received       Oct 30, 2026, 5:47 PM  submission.received
+  (SUB-0008 rated 5:03 PM, Q-2026-0004 issued,    Oct 30, 2026, 5:03 PM  worksheet.rated SUB-0008 ◀
+   GL-26-00001 bound: not on this page)           Oct 30, 2026, 4:51 PM  quote.issued Q-2026-0004 v2 ◀
+  ── Older → ─────────────────────────────────    ── Older → ─────────────────────────────────
+  (no heading)                                    Older than Feb 20, 2026, 3:02 PM EST · ← Newer ◀
+  Oct 30, 2026, 5:03 PM  worksheet.rated SUB-0008 Feb 20, 2026, 3:01 PM  policy.bound GL-26-00012 ◀
+  Oct 30, 2026, 5:03 PM  Rating engine …           Feb 20, 2026, 2:58 PM  worksheet.rated SUB-0022
+  ```
+  Mockup: `docs/ux-mockups/UX-048.html`
+- **Verify:** `/audit` lists `Oct 30, 2026, 5:03 PM EDT worksheet.rated SUB-0008` and the `Q-2026-0004 v1`/`v2` `quote.issued` rows on page 1; `/audit?q=GL-26-00001` finds the Oct 22 bind; the amber note names the timestamp of the 500th-newest desk event; `Older →` opens a page headed `Older than <that timestamp> · ← Newer` whose first row is older than it and whose Rating-engine count is only the rows before the cut; `/audit?submission=<id>` and `/audit?from=…&to=…` are unchanged.
 
 ## P3 Minor
 
-### UX-042 — Renewal comparison leads with "Issue revised renewal quote" when the quote is current
-- **Status:** New
-- **Effort:** S
-- **Who / when:** Underwriter right after issuing the first renewal quote (the action lands here: `renewal/actions.ts:49`), and again when the desk's `Finish renewal` task opens this page; demo audience at step 16.
-- **Where:** `web/src/app/submissions/[id]/renewal/page.tsx:224-232` (`IssueQuoteForm` rendered whenever `!policy && ready`, `primary` left at its default `true`; the Bind path is the sentence at `:232`). Compare `workbench/page.tsx:270-276`, where the same state puts the form behind `<details><summary>Revise quote (v3)</summary>` and Bind is the primary control. URL: `/submissions/8855bf37-5d5a-4c8a-8e2e-48343d95e57f/renewal`.
-- **What the user experiences:** On SUB-0008 the Renewal quote card shows `Q-2026-0004 v2 issued $89,725`, `v1 superseded $89,725`, then the Effective / Expiration / Subjectivities fields and a full-width emerald **Issue revised renewal quote (v3)**; under it, in 12px grey, `Bind from the workbench once the broker confirms.` The header chip says `Quoted · Q-2026-0004 v2` and nothing has drifted. The record shows what that layout invites: `Q-2026-0004 v1 issued` and `Q-2026-0004 v2 issued` both at `Oct 30, 2026, 4:51 PM EDT`, same total, and the v2 summary reads `premium unchanged`. The broker now holds two identical quote documents, one marked withdrawn.
-- **Why it matters:** The primary control should be the likely next step (the quote is out; the next step is to bind or wait), and the two pages that describe one file should agree about what that step is (consistency, error prevention). A duplicate version is recoverable, but every renewal passes through this page. The demo playbook's step 16 does issue a revised quote from here on purpose; a summary keeps that path one click away.
-- **Recommendation:** When the latest quote is current (`quoteCurrent`, already computed at `:70`), make Bind the visible action and fold the form into a summary, outlined:
-  ```tsx
-  {!policy && ready && latest && quoteCurrent ? (
-    <>
-      <Link href={`/submissions/${id}/workbench`} className="block rounded-md bg-emerald-700 px-4 py-2 text-center text-sm font-medium text-white hover:bg-emerald-600">
-        Bind {latest.quote_number} v{latest.version} on the workbench →
-      </Link>
-      <details>
-        <summary className="cursor-pointer text-xs text-indigo-600">Revise renewal quote (v{latest.version + 1})</summary>
-        <div className="mt-3"><IssueQuoteForm action={…} effective={effective} expiration={expiration} subjectivities={subjectivities}
-          label={`Issue revised renewal quote (v${latest.version + 1})`} primary={false} /></div>
-      </details>
-    </>
-  ) : (…the existing branches…)}
-  ```
-  Drop the `Bind from the workbench once the broker confirms.` sentence when the link is shown.
-- **Before / after:**
-  ```
-  BEFORE                                   AFTER
-  RENEWAL QUOTE                            RENEWAL QUOTE
-  Q-2026-0004 v2  issued       $89,725     Q-2026-0004 v2  issued       $89,725
-  Q-2026-0004 v1  superseded   $89,725     Q-2026-0004 v1  superseded   $89,725
-  Effective [2026-11-09] Expir.[2027-11-09] [ Bind Q-2026-0004 v2 on the       ] ◀
-  Subjectivities (one per line)            [ workbench →                       ]
-  [ Signed renewal application …        ]  ▸ Revise renewal quote (v3)          ◀
-  [ Issue revised renewal quote (v3)   ]
-  Bind from the workbench once the broker
-  confirms.
-  ```
-  Mockup: `docs/ux-mockups/UX-042.html`
-- **Verify:** Open SUB-0008's renewal page: the emerald control reads `Bind Q-2026-0004 v2 on the workbench →` and lands on the workbench's Bind card; `Revise renewal quote (v3)` opens the dated form with an outlined button. Change the deductible on the workbench and Save & rate: the renewal page shows the drift notice and the full issue form again, as today.
-
-### UX-043 — An issued quote's page offers no way to bind it
-- **Status:** New
-- **Effort:** S
-- **Who / when:** Underwriter following the desk's `Chase bind order: Red Rock Electric Group LLC` task (`lib/dashboard.ts:139` links to `/quotes/<id>`), or opening a quote from `/quotes`, when the broker confirms; underwriting manager landing on a superseded version from search or the audit.
-- **Where:** `web/src/app/quotes/[id]/page.tsx:33-46` (header: number, `Pill`, `Quote PDF`, `Renewal memo`; subtitle links `SUB-0008` to the workbench, `comparison` to the renewal page). URL: `/quotes/7eb722b6-d021-41c1-8649-667a544a4ec0`.
-- **What the user experiences:** The page reads `Q-2026-0004 v2 issued · Quote PDF · Renewal memo`, then `Red Rock Electric Group LLC · SUB-0008 · issued by underwriter1 … · valid until Nov 29, 2026`. There is no Bind control and nothing says where binding happens; the only route is to know that the `SUB-0008` reference is the workbench link. A superseded version (Q-2026-0001 v1) says `superseded` but not which version is live; the reader has to open the Versions card and compare pills.
-- **Why it matters:** Recognition over recall: the page the task list sends people to should carry the next step, so the underwriter does not have to remember the app's layout under a broker's phone call. A manager who lands on v1 should be one click from the version that is actually out.
-- **Recommendation:** In the header row, after the PDF buttons:
-  ```tsx
-  const live = versions.find((v) => v.status !== "superseded");
-  …
-  {q.status === "issued" && !policy && (
-    <Link href={`/submissions/${q.submission_id}/workbench`} className="rounded-md bg-emerald-700 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-600">
-      Bind on the workbench →
-    </Link>
-  )}
-  {q.status === "superseded" && live && live.id !== q.id && (
-    <RowLink href={`/quotes/${live.id}`}>Superseded by v{live.version} ({live.status}) →</RowLink>
-  )}
-  ```
-  (`bound as GL-…` already appears in the subtitle for bound versions.)
-- **Before / after:**
-  ```
-  BEFORE                                        AFTER
-  Q-2026-0004 v2 [issued] [Quote PDF] [Memo]    Q-2026-0004 v2 [issued] [Quote PDF] [Memo]
-  Red Rock Electric Group LLC · SUB-0008 ·        [ Bind on the workbench → ]            ◀
-  issued by underwriter1 Oct 30, 2026 …         Red Rock Electric Group LLC · SUB-0008 ·
-                                                issued by underwriter1 Oct 30, 2026 …
-  Q-2026-0001 v1 [superseded] [Quote PDF]       Q-2026-0001 v1 [superseded] [Quote PDF]
-                                                Superseded by v3 (bound) →              ◀
-  ```
-  Mockup: `docs/ux-mockups/UX-043.html`
-- **Verify:** From the desk click `Chase bind order: Red Rock Electric Group LLC`: the quote page shows `Bind on the workbench →`, which lands on SUB-0008's workbench with the Bind card visible. Open Q-2026-0001 v1: `Superseded by v3 (bound) →` opens v3. A bound quote's page shows neither.
-
-### UX-044 — The audit trail caps at the newest 500 desk events without saying so, and the date filter only searches those
+### UX-049 — "Today" is the UTC date, so the desk says tomorrow from 8 PM Eastern and day counts and date stamps shift with it
 - **Status:** New
 - **Effort:** M
-- **Who / when:** Underwriting manager or auditor answering "what happened in January" on `/audit`; demo audience when the presenter filters the trail by date.
-- **Where:** `web/src/lib/timeline.ts:9,55,62` (`LIMIT = 500`, `ORDER BY id DESC LIMIT 500`, applied before any filter), `web/src/app/audit/page.tsx:44` (`applyFilters` runs on the loaded 500) and `:110-112` (the count line). URL: `/audit`, `/audit?to=2026-04-30`.
-- **What the user experiences:** `/audit` renders 633 events on one page (6.5 MB of HTML, measured) and says `Showing 633 of 633 events · UW Desktop 500 · Rate admin 4 · Rating engine 129`, which reads as the whole history. It is not: the oldest UW Desktop event on the page is `Mar 8, 2026`, while Accounting's year-to-date view lists 6 journals in Jan 2026 and 5 in Feb 2026, each the result of a bind that wrote `policy.bound`. Filter `?to=2026-04-30` and the page says `Showing 181 of 633 events`; set the range to January and it says `No events match`. Nothing tells the reader that the archive was cut at 500 rows.
-- **Why it matters:** An audit view that silently omits history is worse than one that says "older events not loaded"; a manager can conclude an action never happened (visibility of system status, trust). The 6.5 MB page is also slow to load and scroll on the Fly deployment. The per-case view (`?submission=`) is unaffected because one case never reaches 500 rows.
-- **Recommendation:** Push `from` / `to` into the query so a date range reaches older rows (`WHERE occurred_at >= $from::date AT TIME ZONE $tz AND occurred_at < ($to::date + 1) AT TIME ZONE $tz`, and `from`/`to` on the rating service's `/ratings` and `/rate-table-audit`), keep the 500 cap per page, and say when it bit:
-  ```tsx
-  const capped = all.filter((e) => e.source === "desktop").length >= LIMIT;
-  const oldest = all.filter((e) => e.source === "desktop").at(-1)?.at;
-  <p className="mt-4 text-xs text-slate-500">
-    Showing {events.length} of {all.length} loaded events · …
-    {capped && <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-amber-800">
-      UW Desktop shows its newest {LIMIT} only; events before {whenDate(oldest)} are not on this page. Narrow From / To to reach them.</span>}
-  </p>
+- **Who / when:** Underwriter working an evening (or anyone on the West Coast from 5 PM); the broker reading a quote or binder issued after 8 PM Eastern; demo audience if the session runs in the evening.
+- **Where:** `web/src/lib/dashboard.ts:46,54` (`iso(new Date())` → `today`), `web/src/app/page.tsx:38,45` (header date from `d.today`), `web/src/app/submissions/[id]/workbench/page.tsx:66` (`bindBlockers(latest, new Date().toISOString().slice(0, 10))`), `web/src/app/policies/[id]/page.tsx:34` and `policies/book/[id]/page.tsx:31` (`daysLeft`), `web/src/lib/quotes.ts:114` (`validUntil` from the UTC issue date, also printed on the quote PDF via `quote-pdf.ts:46`), `web/src/lib/policies.ts:84` (subjectivity due dates from the UTC bind date). Every on-screen *time* already goes through `DISPLAY_TIME_ZONE` (`lib/time.ts`); the *dates* do not.
+- **What the user experiences (rendered at 20:14 EDT on Saturday Oct 31):** the desk header reads `underwriter1's desk · E&S Contractors General Liability · Sunday, November 1, 2026`. The Bind task that read `valid for 29 more days` in the 19:51 run now reads `valid for 28 more days`; `expires in 14 days` on Hill Country Roofing lost a day at 8 PM too. A quote issued at 9 PM Eastern is stamped `Issued Nov 1` with `Valid until Dec 1` on the broker's PDF while the underwriter's own history line says `Oct 31, 2026, 9:00 PM EDT`; a bind at that hour dates its subjectivities one day later than the underwriter expects; a quote whose `valid_until` is today is refused as expired four hours early.
+- **Why it matters:** Two dates for the same moment on one screen is exactly the ambiguity the app otherwise avoids (consistency; match between system and the real world). None of it loses work, but a demo opening with the wrong weekday in the title line, or a broker's PDF dated the day after the cover email, is a credibility cost out of proportion to the fix.
+- **Recommendation:** One helper next to `when`/`whenDate`, used by every site above:
+  ```ts
+  // lib/time.ts
+  /** Today's `YYYY-MM-DD` in the display zone: the desk turns over at midnight Eastern, not at 8 PM. */
+  export const todayIso = (d: Date = new Date()) =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: DISPLAY_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
   ```
-  Optionally an `Older →` link that passes `before=<oldest id>` for a second page.
+  `dashboard.ts:54` → `const today = todayIso();`; `workbench/page.tsx:66`, the two policy pages → `todayIso()`; `quotes.ts:114` → `addDays(todayIso(issuedAt), QUOTE_VALID_DAYS)`; `policies.ts:84` → `todayIso(boundAt)`. The home page's `todayLabel` keeps `timeZone: "UTC"` because it formats a bare date.
 - **Before / after:**
   ```
-  BEFORE                                            AFTER
-  Showing 181 of 633 events · UW Desktop 500 ·      Showing 181 of 633 loaded events · UW Desktop
-  Rate admin 4 · Rating engine 129 · times in       500 · Rate admin 4 · Rating engine 129 · times
-  America/New York                                  in America/New York
-                                                    [UW Desktop shows its newest 500 only; events ◀
-  (January: "No events match.")                      before Mar 8, 2026 are not on this page.
-                                                     Narrow From / To to reach them.]  Older →
-                                                    (January, with From/To in the query: the 6
-                                                     binds appear)                              ◀
+  BEFORE (Sat Oct 31, 8:14 PM EDT)              AFTER
+  underwriter1's desk                           underwriter1's desk
+  E&S Contractors GL · Sunday, November 1, 2026 E&S Contractors GL · Saturday, October 31, 2026 ◀
+  BIND  Chase bind order: Red Rock Electric …   BIND  Chase bind order: Red Rock Electric …
+        Q-2026-0004 v2 · valid for 28 more days       Q-2026-0004 v2 · valid for 29 more days ◀
   ```
-  Mockup: `docs/ux-mockups/UX-044.html`
-- **Verify:** `/audit?from=2026-01-01&to=2026-01-31` lists the six January `policy.bound` events that Accounting's Jan 2026 journals point to; `/audit` with no filter shows the amber note naming the oldest loaded date; `/audit?submission=<id>` is unchanged.
+  Mockup: inline only
+- **Verify:** Between 8 PM and midnight Eastern the desk header shows the Eastern weekday and date and the task day counts match the 7 PM values; a quote issued at 9 PM Eastern shows `Issued Oct 31` on its PDF with `valid until Nov 30`; `time.test.ts` pins `todayIso(new Date("2026-11-01T01:00:00Z")) === "2026-10-31"`.
 
 ## P4 Polish
 
-### UX-045 — Worksheet history shows raw values and no-op schedule lines
-- **Status:** New · **Effort:** S · **Who / when:** underwriter or manager reading the Worksheet history card or the case history. · **Where:** `web/src/app/submissions/[id]/workbench/page.tsx:372-374` renders `({JSON.stringify(before)} → {JSON.stringify(after)})`; `web/src/lib/worksheets.ts:100,111-115` logs `worksheet.schedule_changed` whenever `scheduleKey` (which includes the rationale) differs, with a summary that only shows the totals. · **What the user experiences (rendered):** SUB-0001 reads `Deductible changed ( 1000 → 2500 )` next to a card that shows `$2,500`, and `schedule -5% → -5%` twice; SUB-0003 shows `schedule +18% → +18%` twice in Pat's actions. The reader cannot tell what, if anything, changed. · **Recommendation:** format through `inputText` (`($1,000 → $2,500)`, `(AZ → AZ, NV)`), and in `saveAndRate` write `schedule reasons updated (total +18%)` when the total is unchanged, or skip the event when neither percent nor reason changed. · **Verify:** change a schedule reason only and Save & rate: the history says `schedule reasons updated (total -5%)`; change the deductible: `Deductible changed ($2,500 → $5,000)`.
-
-### UX-046 — The rate admin's Admin menu is missing `Sign-ins`
-- **Status:** New · **Effort:** S · **Who / when:** anyone moving between the desktop and the rate tables; demo audience when the presenter opens Admin ▼ on the admin page. · **Where:** `services/rating/app/templates/base.html:86-90` lists Audit, Accounting, Rate tables; `web/src/app/layout.tsx:52-57` lists Audit, Sign-ins, Accounting, Rate tables (rendered: `/admin` header `Admin Audit Accounting Rate tables`). · **Recommendation:** add `<a href="/audit/logins" role="menuitem">Sign-ins</a>` after Audit so the two menus are the same list in the same order. · **Verify:** Admin ▼ on `localhost:3100/admin` shows four items matching the desktop's.
-
-### UX-047 — Frozen worksheet: the fade lowers the labels below AA
-- **Status:** New (follows UX-037; the recommendation there included `opacity-75`) · **Effort:** S · **Who / when:** manager reading a bound worksheet. · **Where:** `web/src/app/submissions/[id]/workbench/page.tsx:144` `<fieldset disabled className="space-y-6 opacity-75">`. The 12px labels are `text-slate-500` (about 4.8:1 on white); at 75% opacity they blend to about `#8b97a8`, roughly 3:1, and the schedule table's header and helper text go with them. The values keep `text-slate-900` (Tailwind's preflight `color: inherit` wins over the browser's disabled colour), so they stay readable. · **Recommendation:** fade the controls, not the text: remove `opacity-75` and give the inputs a quiet disabled look, e.g. `className="space-y-6 [&_input:disabled]:bg-slate-50 [&_input:disabled]:text-slate-700 [&_select:disabled]:bg-slate-50 [&_select:disabled]:text-slate-700"` on the fieldset (or `disabled:bg-slate-50` on `WorksheetInput`'s input). · **Verify:** on SUB-0001's workbench the label `Gross receipts` measures ≥ 4.5:1 and the value `650,000` sits on a slate-50 field that cannot be focused.
+None.
 
 ## What works well
 
-- **The frozen worksheet says what it is before anyone acts** (`workbench/page.tsx:111,123-128,285,294`, rendered on SUB-0001): `Worksheet frozen at bind` in the title row, `Bound as GL-26-00001 by underwriter on Oct 22, 2026 · this worksheet is the rating that was bound …`, and `Premium as bound · bound Oct 22, 2026 · rates 2026.2`; the action refuses a stale tab too. Keep all three.
-- **Bind asks with the facts that matter** (`workbench/bind-form.tsx`): quote, version, amount, how many subjectivities stay open and that the premium is booked, on the same `confirm()` pattern as Activate and Start renewal.
-- **One `Stage` object now carries the link as well as the words** (`lib/stage.ts:5,18`): `/submissions`, `/search`, the customer page and the Received filters all say `Bound GL-26-00051` and offer `Policy →` to the same place.
-- **Inputs are named from their rows, invisibly** (`workbench/page.tsx:187,192,352`, `version.html:48`): `Safety program & training: percent (credit negative, debit positive)`, `Why "Loss frequency" is acceptable`, `Roofing - residential rate per $1,000`; no visual change, every control announceable.
-- **The Activate card** (`version.html:69-97`, rendered on 2026.3): `0 values differ from active 2026.2`, the red "activating changes nothing" line, the same text in the confirm, Activate disabled on unsaved edits. Still the model for irreversible actions.
-- **The quoted workbench's Quote card** (`workbench/page.tsx:247-276`, rendered on SUB-0008): Bind is the primary emerald control and `Revise quote (v3)` is a one-line summary; UX-042 asks the renewal page to match it, not the other way round.
+- **The renewal card and the quoted workbench now say the same thing** (`renewal/page.tsx:224-237`, `workbench/page.tsx:270-276`, rendered on SUB-0008): Bind is the one emerald control, revising is a one-line summary, and the drift notice brings the full form back. Keep the three-state branch as it is.
+- **A quote page carries its next step** (`quotes/[id]/page.tsx:40-46`): `Bind on the workbench →` only while issued and unbound, `Superseded by v3 (bound) →` on old versions, nothing extra once bound (rendered on five quote pages).
+- **The From/To range queries the database in the display zone** (`timeline.ts:76-91`): `/audit?from=2026-01-01&to=2026-01-31` returns 56 desk events down to `Jan 1, 2026, 10:09 AM EST`, including the binds Accounting's January journals point to. UX-048 should build on this query, not replace it.
+- **The frozen worksheet keeps its labels legible and its controls quiet** (`workbench/page.tsx:144`): the arbitrary `[&_input:disabled]` variants outrank `WorksheetInput`'s `bg-transparent`, so values sit on slate-50 while labels stay `slate-500`.
+- **Worksheet history speaks the inputs' language** (`workbench/page.tsx:372-375`): `Deductible changed ($1,000 → $2,500)` is the same text the card shows.
+- **The Activate card, the Bind confirm and the Start-renewal confirm** (`version.html:69-97`, `workbench/bind-form.tsx`, `policies/start-renewal-form.tsx`) remain the pattern for irreversible actions: what, how much, what stays open, then a `confirm()` with the same words.
 
 ## Declined
 - **UX-020 — Hide developer detail behind human labels** — declined on 2026-10-31: the model, token counts, action codes and folder stamps are wanted on screen for the demo.
 
 ## Resolved since last run
-- **UX-037 — A bound file's workbench still looks like a live worksheet** — resolved as recommended: no Save & rate or dirty hint when `policy` exists, `Worksheet frozen at bind` in the title row, the emerald line naming the policy, who bound it and where changes go, `<fieldset disabled>` round both cards, `Premium as bound`, and `saveAndRateAction` returns `Bound as GL-…; the worksheet can't change` (`workbench/page.tsx:111-128,144,285,294`, `workbench/actions.ts:31-33`). Verified rendered on SUB-0001; SUB-0008 and SUB-0003 unchanged. Commit `c51fd92`. The fade's side effect on the labels is the new UX-047.
-- **UX-038 — Received table: Next step says `Workbench →` for bound files** — resolved as recommended: `Stage.href` (`lib/stage.ts:5,18`, selected in `dashboard.ts:214`), `Policy →` on `/submissions` (`page.tsx:86-88`) and the customer page (`insureds/[id]/page.tsx:93`) linking `/policies/<id>` directly. Verified: every row of `/submissions?stage=bound` reads `Policy →` with a `/policies/…` href; the Aspen Grove page links `/policies/ca98ddea-…` with no redirect. Commit `c51fd92`.
-- **UX-039 — Bind is one click with no confirmation** — resolved as recommended: `workbench/bind-form.tsx` wraps the form and asks `Bind Q-2026-0004 v2 for $89,725?` with the open-subjectivity count and what the click does; `workbench/page.tsx:253` passes the label. Judged from code and the rendered form (no POST sent). Commit `c51fd92`.
-- **UX-040 — Schedule, Clear-note and admin rate inputs have no accessible name** — resolved as recommended: `aria-label` on all twelve schedule inputs and three Clear notes of SUB-0003's workbench and on all sixteen cells of `/admin/versions/3`, in the wording proposed. Verified in the rendered HTML. Commit `c51fd92`.
-- **UX-041 — Copy left over from the plural and date clean-up** — resolved by code path: `lib/text.ts` `plural()` used in `submissions.ts:122,245` and `ledger.ts:221`; `whenDate()` in `policies.ts:161`, `renewals.ts:218` and `timeline-merge.ts:120` (test updated to `due Nov 22, 2026`); `dashboard.ts:138` reads `valid for 29 more days` (verified on the desk). Stored summaries keep their old text, as the build log says. Commit `c51fd92`.
+- **UX-042 — Renewal comparison leads with "Issue revised renewal quote" when the quote is current** — resolved as recommended: `renewal/page.tsx:224-237` renders `Bind Q-2026-0004 v2 on the workbench →` (emerald, linking to the workbench) and a `<details>` summary `Revise renewal quote (v3)` holding the outlined `IssueQuoteForm` (`primary={false}`); the "Bind from the workbench once the broker confirms" line is suppressed in that state. Verified rendered on SUB-0008. Commit `d1ea8c5`.
+- **UX-043 — An issued quote's page offers no way to bind it** — resolved as recommended: `quotes/[id]/page.tsx:29,40-46`. Rendered: Q-2026-0004 v2 shows `Bind on the workbench →`; Q-2026-0004 v1 shows `Superseded by v2 (issued) →`; Q-2026-0001 v1 and v2 show `Superseded by v3 (bound) →`; bound Q-2026-0003 v1 shows neither. Commit `d1ea8c5`.
+- **UX-044 — The audit trail caps at the newest 500 desk events without saying so, and the date filter only searches those** — resolved as recommended: From/To are applied in the desk query (`timeline.ts:76-91`, display zone) and passed as `since`/`until`/`tz` to `/ratings` and `/rate-table-audit` (`main.py`, `repository.py`, judged from code: the admin container was not rebuilt, so the running service still returns its newest 129/4 rows, which `applyFilters` then trims); the cap notice and `Older →` are rendered on `/audit`. `/audit?from=2026-01-01&to=2026-01-31` lists 56 January desk events including `policy.bound`. Commit `d1ea8c5`. The id-based ordering the notice and cursor rely on is the new UX-048.
+- **UX-045 — Worksheet history shows raw values and no-op schedule lines** — resolved by code path: `workbench/page.tsx:372-375` formats through `inputText` (rendered on SUB-0001: `Deductible changed ($1,000 → $2,500)`, `($0 → $1,000)`); `worksheets.ts:112-116` writes `schedule reasons updated (total …)` when only reasons changed. Stored rows keep `schedule -5% → -5%`, as the build log says. Commit `d1ea8c5`.
+- **UX-046 — The rate admin's Admin menu is missing `Sign-ins`** — resolved in code: `base.html:88` adds `<a href="/audit/logins" role="menuitem">Sign-ins</a>` after Audit, matching `layout.tsx`. The running admin at :8001 still shows three items because it was not rebuilt. Commit `d1ea8c5`.
+- **UX-047 — Frozen worksheet: the fade lowers the labels below AA** — resolved as recommended: `workbench/page.tsx:144` drops `opacity-75` for `[&_input:disabled]:bg-slate-50 [&_input:disabled]:text-slate-700` and the select twins (rendered on SUB-0001's fieldset). Labels keep `slate-500` on white. Cosmetic note only: the `$` / `%` unit cell of `WorksheetInput` stays white beside the slate-50 input. Commit `d9a646e`.
 
 ## Coverage notes
-- The web app **was running** at localhost:3100 (`/api/health` returned JSON with `components`, all ok; `/` contains "Underwriting Desktop"). Fetched read-only and read as text and raw HTML: `/`, `/submissions`, `/submissions?stage=bound`, `/submissions/ba2856e7-…` (SUB-0059, needs review), `/submissions/0a1cec23-…` and its `/workbench` (SUB-0001, bound), `/submissions/8855bf37-…/workbench` and `/renewal` (SUB-0008, quoted renewal), `/submissions/67d881fe-…/workbench` (SUB-0003, referred), `/quotes`, `/quotes/7eb722b6-…` (Q-2026-0004 v2), `/policies`, `/policies/66197f4c-…` (GL-27-00003), `/insureds`, `/insureds/e475c8c7-…`, `/audit`, `/audit?to=2026-04-30`, `/audit?from=2026-01-01&to=2026-06-30&source=desktop`, `/audit?source=desktop`, `/audit?submission=67d881fe-…`, `/search?q=roof`, `/search?q=zzzz`, `/accounting`, `/accounting?period=ytd`, and the rating admin at `localhost:8001/admin`, `/admin/versions/3` and through the proxy at `localhost:3100/admin`. Port 3000 was ignored as instructed.
-- Every in-scope source file was read in full: the `web/src/app/**` pages, actions and client components (including accounting, assistant, sign-in, book, sign-ins, error and not-found), `web/src/components/**`, `globals.css`, `layout.tsx`, the libs whose copy reaches the screen (`referrals`, `bind-rules`, `quote-terms`, `worksheet`, `worksheets`, `stage`, `text`, `time`, `service-errors`, `dashboard`, `timeline`, `timeline-merge`, `renewal-compare`), the four admin templates and `admin.py`, and the four PDF builders. The focus, per the brief, was the five outstanding items and the fifteen files `c51fd92` changed; items resolved in earlier runs were spot-checked on the rendered pages (chip pair, stage filters, header rows, dates, factors, Activate card, titles) and none has regressed.
-- Not exercised (no POSTs): the Bind confirm (UX-039 judged from code), Save & rate on a bound file from a stale tab (judged from `saveAndRateAction`), the rejected-submit paths, the GL push, extraction, the admin's 422 re-render.
-- Not judged from pixels: the contrast figures in UX-047 are computed from the class colours, not measured on screen; header wrapping at 1280/1440/1920, hover and focus rings, actual PDF rendering.
-- UX-044's claim that January events are missing rests on the oldest UW Desktop event on `/audit` (`Mar 8, 2026`) against Accounting's Jan/Feb 2026 journals; the database was not queried directly.
-- One Bash call attempted to re-read a large tool result from a file under `~/.claude/` and was refused by the permission layer; the sources were re-read directly from the repository instead, and nothing under `~/.claude/` was read. No file was created or modified; no POST was sent; no service was started.
+- The web app **was running** at localhost:3100 (`/api/health` returned JSON with `components`, all ok; `/` contains "Underwriting Desktop"). Fetched read-only and read as text and raw HTML: `/`, `/submissions`, `/submissions/8855bf37-…/renewal` and `/workbench` (SUB-0008, quoted renewal), `/submissions/0a1cec23-…/workbench` (SUB-0001, bound), `/quotes`, `/quotes/7eb722b6-…` (Q-2026-0004 v2 issued), `/quotes/f739b2d1-…` (v1 superseded), `/quotes/435efc47-…` and `/quotes/262f8535-…` (Q-2026-0001 v1/v2), `/quotes/0b60ed53-…` (Q-2026-0003 v1 bound), `/policies`, `/insureds`, `/audit`, `/audit?before=186`, `/audit?from=2026-01-01&to=2026-01-31`, `/audit?from=2026-10-30`, `/audit?from=2026-10-30&source=desktop`, `/audit?q=Q-2026-0004`, `/audit?q=SUB-0008`, `/audit?q=GL-26-00001`, `/search?q=roof`, `/search?q=zzzz`, and the rating admin header at `localhost:8001/admin` (with the desktop header flag). Port 3000 was ignored as instructed.
+- Per the brief, this run focused on the six outstanding items, the seven UI files the two commits changed, and the pages they render; those files were read in full (`renewal/page.tsx`, `quotes/[id]/page.tsx`, `audit/page.tsx`, `workbench/page.tsx`, `timeline.ts`, `worksheets.ts`, `base.html`), plus `worksheet-input.tsx`, `issue-quote-form.tsx` (the `primary` prop), `bind-rules.ts`, `time.ts`, the home page and `dashboard.ts` for UX-049. Items resolved in earlier runs were spot-checked on the rendered inbox, quotes, policies, customers, search and desk pages; none has regressed. The rest of the UI (intake review, accounting, assistant, sign-in, PDFs) was reviewed in full at 19:51 and has no commits since.
+- The rating admin was not rebuilt after `d1ea8c5`; UX-044's `since`/`until`/`tz` on `/ratings` and `/rate-table-audit`, and UX-046's menu item, were judged from the code.
+- The working tree held uncommitted changes from a concurrent security session (SEC-002: `services/rating/app/{auth,main,admin}.py`, `web/src/middleware.ts`, `web/src/lib/{login-meta,login-events,http,audit,db,ledger,rating-api,services}.ts`, `web/src/app/admin/[[...path]]/route.ts`, `web/src/app/api/mcp/route.ts`, deploy files). They were excluded from this review and are not counted as UX changes.
+- UX-048's counts come from the rendered `<time dateTime>` / source pairs of `/audit` (page 1: 500 desk events, Feb 2 → Oct 30, none from SUB-0001…SUB-0008's October work) and `/audit?before=186` (185 desk events: 87 dated Oct 2026, the rest Dec 2025 → Feb 2026); the database was not queried directly.
+- Not exercised (no POSTs): issuing, binding, re-rating, the admin forms. Not judged from pixels: contrast (UX-047 judged from classes), header wrapping, hover and focus rings, PDF rendering. No file was created or modified in the repository; two page captures were written to the session scratchpad only; nothing under `~/.claude/` was read or written; no service was started.
 
 ## Mockup files
 
-- docs/ux-mockups/UX-042.html
-
-- docs/ux-mockups/UX-043.html
-
-- docs/ux-mockups/UX-044.html
+- docs/ux-mockups/UX-048.html
