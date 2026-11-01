@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { RowLink, when, whenDate } from "@/components/ui";
+import { RowLink, when } from "@/components/ui";
 import { getSubmission } from "@/lib/submissions";
 import { DISPLAY_TIME_ZONE } from "@/lib/time";
 import { loadTimeline } from "@/lib/timeline";
@@ -40,7 +40,8 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
 
 export default async function AuditPage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
-  const { events: all, labels, warnings, scope, capped, oldestDesktopId, oldestDesktopAt } = await loadTimeline(params.submission, params);
+  const { events: all, labels, warnings, scope, capped, oldestDesktopAt } = await loadTimeline(params.submission, params);
+  const withoutBefore = Object.fromEntries(Object.entries(params).filter(([k, v]) => v && k !== "before")) as Record<string, string>;
   const events = applyFilters(all, params);
   const groups = groupByCorrelation(events);
   const actors = [...new Set(all.map((e) => e.actor))].sort();
@@ -109,17 +110,19 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
       )}
       <p className="mt-4 text-xs text-slate-500">
         Showing {events.length} of {all.length} loaded events · {counts.map(([s, n]) => `${SOURCES[s].label} ${n}`).join(" · ")} · times in {DISPLAY_TIME_ZONE.replace("_", " ")}
-        {/* UX-044: say when the newest-500 cap bit, and offer the page before it. */}
+        {/* UX-044 / UX-048: say when the newest-500 cap (by time) bit, and offer the page before that instant. */}
         {capped && oldestDesktopAt && (
           <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-amber-800">
-            UW Desktop shows its newest 500 only; events before {whenDate(new Date(oldestDesktopAt))} are not on this page. Narrow From / To to reach them.
-            {oldestDesktopId !== null && (
-              <Link href={`/audit?${new URLSearchParams({ ...Object.fromEntries(Object.entries(params).filter(([k, v]) => v && k !== "before")), before: String(oldestDesktopId) } as Record<string, string>)}`}
-                className="ml-2 font-medium text-indigo-700 hover:underline">Older →</Link>
-            )}
+            UW Desktop shows its newest 500 by time; everything before {when(oldestDesktopAt)} continues on the next page.
+            <Link href={`/audit?${new URLSearchParams({ ...withoutBefore, before: oldestDesktopAt })}`} className="ml-2 font-medium text-indigo-700 hover:underline">Older →</Link>
           </span>
         )}
       </p>
+      {params.before && !Number.isNaN(Date.parse(params.before)) && (
+        <p className="mt-2 text-sm text-slate-700">
+          Older than {when(params.before)} · <Link href={`/audit?${new URLSearchParams(withoutBefore)}`} className="text-indigo-600 hover:underline">← Newer</Link>
+        </p>
+      )}
 
       <ol className="mt-3 space-y-3">
         {groups.map((g, gi) => (

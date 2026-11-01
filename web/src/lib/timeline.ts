@@ -14,16 +14,21 @@ export type Timeline = {
   labels: Map<string, string>;     // "quote:<id>" -> "Q-2026-0001 v3"
   warnings: string[];              // e.g. rating service unreachable
   scope: { submissionId: string; reference: string; applicant: string } | null;
-  // UX-044: the desk's newest-N cap, so the page can say when history was cut and offer the next page.
+  // UX-044 / UX-048: the desk's newest-N cap, by time, so the page can say when history was cut and offer the next page.
   capped: boolean;
-  oldestDesktopId: number | null;
-  oldestDesktopAt: string | null;
+  oldestDesktopAt: string | null;   // ISO instant of the oldest desk event on this page
 };
 
-/** UX-044: a From/To day range (in the display zone) and an "older than this id" cursor, applied in the queries. */
+/** UX-044: a From/To day range (in the display zone) and, UX-048, an "older than this instant" cursor (ISO), applied in the queries. */
 export type TimelineRange = { from?: string; to?: string; before?: string };
 const isDay = (s?: string) => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
-const isId = (s?: string) => !!s && /^\d+$/.test(s);
+const isInstant = (s?: string) => !!s && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(s) && !Number.isNaN(Date.parse(s));
+/** An ISO instant as the display zone's wall clock, `YYYY-MM-DDTHH:mm:ss`, for the rating service's since/until. */
+function wallClock(iso: string, timeZone: string): string {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })
+    .formatToParts(new Date(iso)).map((p) => [p.type, p.value]));
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`;
+}
 
 async function ratingApi<T>(path: string, warnings: string[]): Promise<T[]> {
   try {
@@ -50,7 +55,7 @@ export async function loadTimeline(submissionId?: string, range: TimelineRange =
   if (submissionId) {
     const sub = (await customerDb.query<{ id: string; reference: string; applicant_name: string; insured_id: string | null }>(
       "SELECT id, reference, applicant_name, insured_id FROM submissions WHERE id = $1", [submissionId])).rows[0];
-    if (!sub) return { events: [], labels: new Map(), warnings: ["Submission not found"], scope: null, capped: false, oldestDesktopId: null, oldestDesktopAt: null };
+    if (!sub) return { events: [], labels: new Map(), warnings: ["Submission not found"], scope: null, capped: false, oldestDesktopAt: null };
     scope = { submissionId: sub.id, reference: sub.reference, applicant: sub.applicant_name };
     const [quotes, policies] = await Promise.all([
       policyDb.query<{ id: string; quote_number: string }>("SELECT id, quote_number FROM quotes WHERE submission_id = $1", [sub.id]),
@@ -69,21 +74,23 @@ export async function loadTimeline(submissionId?: string, range: TimelineRange =
       ratingApi<RatingRow>(`/ratings?reference_prefix=${encodeURIComponent(p)}&limit=${LIMIT}`, warnings)))).flat();
   } else {
     // UX-044: the day range reaches the database (in the display zone), so January is findable even when
-    // the newest 500 stop in March; `before` pages further back.
+    // the newest 500 stop in March. UX-048: newest *by time* (row ids are not time order once history is
+    // seeded after live files), and `before` is an instant that cuts every feed the same way.
     const from = isDay(range.from) ? range.from! : null;
     const to = isDay(range.to) ? range.to! : null;
-    const before = isId(range.before) ? Number(range.before) : null;
+    const before = isInstant(range.before) ? range.before! : null;
     const qs = new URLSearchParams({ limit: String(LIMIT) });
     if (from) qs.set("since", `${from}T00:00:00`);
     if (to) qs.set("until", `${to}T23:59:59.999`);
+    if (before) qs.set("until", wallClock(before, DISPLAY_TIME_ZONE));
     qs.set("tz", DISPLAY_TIME_ZONE);
     [desktopRows, ratingRows, adminRows] = await Promise.all([
       policyDb.query<DesktopRow>(
         `SELECT * FROM audit_events
           WHERE ($1::date IS NULL OR occurred_at >= ($1::date::timestamp AT TIME ZONE $4))
             AND ($2::date IS NULL OR occurred_at < (($2::date + 1)::timestamp AT TIME ZONE $4))
-            AND ($3::bigint IS NULL OR id < $3::bigint)
-          ORDER BY id DESC LIMIT ${LIMIT}`,
+            AND ($3::timestamptz IS NULL OR occurred_at < $3::timestamptz)
+          ORDER BY occurred_at DESC, id DESC LIMIT ${LIMIT}`,
         [from, to, before, DISPLAY_TIME_ZONE]).then((r) => r.rows),
       ratingApi<RatingRow>(`/ratings?${qs}`, warnings),
       ratingApi<RateAdminRow>(`/rate-table-audit?${qs}`, warnings),
@@ -95,7 +102,6 @@ export async function loadTimeline(submissionId?: string, range: TimelineRange =
   return {
     events, labels: await entityLabels(events), warnings: [...new Set(warnings)], scope,
     capped: !submissionId && desktopRows.length >= LIMIT,
-    oldestDesktopId: oldest ? Number(oldest.id) : null,
     oldestDesktopAt: oldest ? new Date(oldest.occurred_at).toISOString() : null,
   };
 }
