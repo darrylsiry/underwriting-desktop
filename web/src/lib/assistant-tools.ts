@@ -83,7 +83,7 @@ export const APP_TOOLS: AppTool[] = [
       const [desks, inbox] = await Promise.all([Promise.all(names.map(async (n) => ({ n, d: await loadDashboard(n) }))), listInbox()]);
       const tasks = desks.flatMap(({ n, d }) => d.tasks.filter((t) => t.kind !== "inbox").map((t) => {
         const days = t.due ? daysUntil(t.due, ctx.today) : null;
-        return { underwriter: n, kind: t.kind, title: t.title, detail: t.detail, due: t.due, days_left: days, overdue: days !== null && days < 0, urgency: t.urgency, url: t.href };
+        return { underwriter: n, kind: t.kind, title: t.title, detail: t.detail, due: t.due, days_left: days, overdue: days !== null && days < 0, expiring_premium: t.expiringPremium === undefined ? undefined : money(t.expiringPremium), urgency: t.urgency, url: t.href };
       })).sort((x, y) => x.urgency - y.urgency);
       const oldestFirst = [...inbox].sort((x, y) => x.receivedAt.getTime() - y.receivedAt.getTime());
       return {

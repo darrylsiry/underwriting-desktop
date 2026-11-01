@@ -24,6 +24,7 @@ export type Task = {
   kind: "review" | "rate" | "referral" | "quote" | "bind" | "subjectivity" | "renewal" | "inbox";
   title: string; detail: string; href: string;
   due: string | null;      // YYYY-MM-DD the task is due, if it has a date
+  expiringPremium?: number; // a renewal's expiring premium, shown beside its days chip
   urgency: number;         // lower is more urgent; sorts the list
   pinned?: boolean;        // always shown first, ahead of the urgency order (the inbox)
 };
@@ -151,15 +152,15 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     const left = daysUntil(p.expiration_date, today);
     if (p.renewal_status === "in_progress" && left <= 30) {
       tasks.push({ kind: "renewal", title: `Finish renewal: ${p.insured_name}`,
-        detail: `${p.policy_number} · in progress · expires in ${plural(left, "day")} · $${Math.round(p.premium).toLocaleString("en-US")} expiring`,
+        detail: `${p.policy_number} · in progress · expires in ${plural(left, "day")}`,
         href: p.renewal_submission_id ? `/submissions/${p.renewal_submission_id}/renewal` : p.href ?? "#renewals",
-        due: p.expiration_date, urgency: left - 30 });
+        due: p.expiration_date, expiringPremium: p.premium, urgency: left - 30 });
       continue;
     }
     if (left > 60 || p.renewal_status !== "not_started") continue;
     tasks.push({ kind: "renewal", title: `Start renewal: ${p.insured_name}`,
-      detail: `${p.policy_number} · expires in ${plural(left, "day")} · $${Math.round(p.premium).toLocaleString("en-US")} expiring`,
-      href: p.href ?? "#renewals", due: p.expiration_date, urgency: left - 30 });
+      detail: `${p.policy_number} · expires in ${plural(left, "day")}`,
+      href: p.href ?? "#renewals", due: p.expiration_date, expiringPremium: p.premium, urgency: left - 30 });
   }
   if (inbox.length) {
     tasks.push({ kind: "inbox", title: `${inbox.length} new submission${inbox.length === 1 ? "" : "s"} in the inbox`,

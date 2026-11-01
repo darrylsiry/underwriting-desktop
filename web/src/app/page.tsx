@@ -16,6 +16,15 @@ const TASK_KIND: Record<Task["kind"], string> = {
   subjectivity: "Subjectivities", renewal: "Renewal", inbox: "Inbox",
 };
 
+/** The questions an underwriter asks most, one click from the desk: each opens the assistant and asks it. */
+const QUICK_QUESTIONS = [
+  "What should I work on next?",
+  "What quotes are outstanding?",
+  "Which renewals are due in the next 30 days?",
+  "What's waiting in the inbox?",
+  "Which submissions have open referrals?",
+];
+
 /** A KPI that opens the list behind the number. */
 function Tile({ label, value, sub, href }: { label: string; value: string; sub: string; href: string }) {
   return (
@@ -54,6 +63,14 @@ export default async function Home() {
           className="flex-1 bg-transparent px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none" />
         <button className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Ask</button>
       </form>
+      <ul aria-label="Common questions" className="mt-2 flex flex-wrap gap-2">
+        {QUICK_QUESTIONS.map((q) => (
+          <li key={q}>
+            <Link href={`/assistant?q=${encodeURIComponent(q)}`}
+              className="inline-block rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700">{q}</Link>
+          </li>
+        ))}
+      </ul>
 
       <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-label="Book summary">
         <Tile href="/book" label="In-force premium" value={usdShort(k.inForcePremium)} sub={`${k.policies} policies in force`} />
@@ -78,7 +95,16 @@ export default async function Home() {
                     <Link href={t.href} className="font-medium text-slate-900 hover:text-indigo-600 hover:underline">{t.title}</Link>
                     <div className="truncate text-xs text-slate-500" title={t.detail}>{t.detail}</div>
                   </div>
-                  {t.due && <DaysChip days={daysUntil(t.due, d.today)} />}
+                  {(t.due || t.expiringPremium !== undefined) && (
+                    // Phones stack the premium over the chip; wider screens set them side by side, the chip in a
+                    // fixed slot so the premiums line up down the list.
+                    <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-start sm:gap-3">
+                      {t.expiringPremium !== undefined && (
+                        <span className="text-sm font-medium tabular-nums text-slate-700" title="Expiring premium"><span className="sr-only">Expiring premium </span>{usd(t.expiringPremium)}</span>
+                      )}
+                      {t.due && <span className="flex min-w-12 justify-end"><DaysChip days={daysUntil(t.due, d.today)} /></span>}
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
