@@ -1,12 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { safeReturnPath } from "@/lib/http";
 import { FIELD_DEFS, fromInput, getPath, isEmpty, setPath, type SubmissionData } from "@/lib/submission";
 import { acceptSubmission, getSubmission, missingForRating, receiveSubmission, saveReview } from "@/lib/submissions";
-import { currentUser, signedInUser, USER_COOKIE } from "@/lib/user";
+import { currentUser } from "@/lib/user";
 import type { FormState } from "./[id]/action-form";
 
 export type UploadState = { error?: string };
@@ -78,13 +76,4 @@ export async function reviewAction(id: string, _prev: FormState, form: FormData)
   }
   revalidatePath(`/submissions/${id}`);
   back(id, { msg: changed ? `Saved ${changed} correction${changed === 1 ? "" : "s"}` : "Nothing changed" });
-}
-
-export async function setUserAction(form: FormData) {
-  const name = String(form.get("name") ?? "").trim().slice(0, 60);
-  // Signed-in users are who they logged in as; the free-text name is for local dev only.
-  if (name && !(await signedInUser())) (await cookies()).set(USER_COOKIE, name, { maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
-  // Back to the page the header form was on (same host, local path only).
-  const h = await headers();
-  redirect(safeReturnPath(h.get("referer"), h.get("host")));
 }

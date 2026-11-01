@@ -6,7 +6,7 @@ import { SESSION_COOKIE, sessionKey, verifySession } from "@/lib/session";
 // set as a Fly secret; off locally. A browser signs in on /signin and carries a signed session
 // cookie; other systems and agents send the same logins with HTTP Basic (the API and the MCP
 // endpoint document that). Node runtime so secrets are read at runtime and compared in constant time.
-export const config = { runtime: "nodejs", matcher: "/((?!_next/static|_next/image|favicon.ico|api/live|signin|signout).*)" };
+export const config = { runtime: "nodejs", matcher: "/((?!_next/static|_next/image|favicon.ico|api/live|signin|signout|request-access).*)" };
 
 const CHALLENGE = { "WWW-Authenticate": 'Basic realm="Underwriting Desktop", charset="UTF-8"' };
 

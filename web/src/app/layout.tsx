@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { AdminMenu } from "@/components/admin-menu";
 import { NavLink } from "@/components/nav-link";
-import { setUserAction } from "./submissions/actions";
+import { setUserAction } from "./working-as-action";
 import { loadUsers } from "@/lib/basic-auth";
 import { currentUser, signedInUser } from "@/lib/user";
 import "./globals.css";

@@ -51,6 +51,10 @@ services:
       # The desk's AI assistant (step 21) calls Claude from the web app: same key as ingestion (CR-078).
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-${UW_ANTHROPIC_API_KEY:-}}
       ASSISTANT_MODEL: ${ASSISTANT_MODEL:-claude-opus-5-5}
+      # Access requests (step 27) are emailed through SMTP_URL; unset, they are only kept (Admin → Sign-ins).
+      SMTP_URL: ${SMTP_URL:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      ACCESS_REQUEST_TO: ${ACCESS_REQUEST_TO:-darryl@siryous.com}
       DISPLAY_TZ: ${DISPLAY_TZ:-America/New_York}   # UX-006: the zone every on-screen timestamp is shown in
     volumes:
       # Broker drop folder shown in the Submissions inbox. Writable: when fewer than five submissions

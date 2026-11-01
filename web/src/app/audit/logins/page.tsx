@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Empty, RowLink, Section, when as whenAt } from "@/components/ui";
+import { listAccessRequests, type AccessRequestRow } from "@/lib/access-request-store";
 import { loginReport } from "@/lib/login-events";
 import { browserLabel, place, shortIp, type LoginEvent, type UserSummary } from "@/lib/login-meta";
 import { iso, whenShort } from "@/lib/time";
@@ -93,11 +94,39 @@ function EventsTable({ events }: { events: LoginEvent[] }) {
   );
 }
 
+/** Requests for a login from the sign-in page (step 27), newest first, with whether the email went out. */
+function AccessRequestsTable({ requests }: { requests: AccessRequestRow[] }) {
+  if (!requests.length) return <Empty>No requests yet. The sign-in page links to the request form.</Empty>;
+  return (
+    <div className="overflow-x-auto">
+    <table className="w-full text-sm">
+      <thead className="whitespace-nowrap text-left text-xs uppercase tracking-wide text-slate-500">
+        <tr><th className="px-4 py-2">When</th><th className="px-2 py-2">Name</th><th className="px-2 py-2">Email</th><th className="px-2 py-2">Company</th><th className="px-2 py-2">Address</th><th className="px-2 py-2">Emailed to you</th></tr>
+      </thead>
+      <tbody>
+        {requests.map((r) => (
+          <tr key={r.id} className="border-t border-slate-100">
+            <td className="whitespace-nowrap px-4 py-2 text-slate-600"><Stamp at={r.created_at} /></td>
+            <td className="px-2 py-2 font-medium text-slate-900">{r.name}</td>
+            <td className="px-2 py-2"><a href={`mailto:${r.email}`} className="text-indigo-600 hover:underline">{r.email}</a></td>
+            <td className="px-2 py-2 text-slate-600">{r.company || "—"}</td>
+            <td className="whitespace-nowrap px-2 py-2 text-slate-600"><Address ip={r.ip} /></td>
+            <td className="px-2 py-2 text-xs">{r.emailed_at
+              ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">sent</span>
+              : <span className="text-rose-700" title={r.email_error ?? ""}>not sent{r.email_error ? `: ${r.email_error.slice(0, 60)}${r.email_error.length > 60 ? "…" : ""}` : ""}</span>}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+    </div>
+  );
+}
+
 /** Who has signed in: the last 24 hours and all time, with everything the sign-in recorded. */
 export default async function LoginsPage({ searchParams }: { searchParams: Promise<{ hours?: string }> }) {
   const p = await searchParams;
   const hours = Math.min(24 * 90, Math.max(1, Number(p.hours) || 24));
-  const r = await loginReport({ windowHours: hours });
+  const [r, requests] = await Promise.all([loginReport({ windowHours: hours }), listAccessRequests()]);
   const recentUsers = r.last_24h.users.filter((u) => u.logins).length;
   const allUsers = r.all_time.users.filter((u) => u.logins).length;
   return (
@@ -125,6 +154,7 @@ export default async function LoginsPage({ searchParams }: { searchParams: Promi
 
       <div className="mt-6 space-y-6">
         <Section title={`Who signed in · last ${hours} hours`}><UsersTable users={r.last_24h.users} /></Section>
+        <Section title={`Access requests · ${requests.length}${requests.length === 50 ? " newest" : ""}`}><AccessRequestsTable requests={requests} /></Section>
         <Section title={`Every attempt · last ${hours} hours`}><EventsTable events={r.last_24h.events} /></Section>
         <Section title="Who has signed in · all time">
           <UsersTable users={r.all_time.users} />
