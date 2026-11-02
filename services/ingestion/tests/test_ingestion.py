@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from app import acord, claude, pipeline
 from app.documents import Document, load
 from app.main import app
-from app.schema import FieldValue, NormalizeError, normalize
+from app.schema import FieldValue, Loss, NormalizeError, normalize
 from tests.conftest import SAMPLES, case_files, fillable_pdf
 
 
@@ -128,8 +128,8 @@ def test_loss_from_application_and_loss_run_counted_once():
     from app.schema import Loss
     losses = [Loss("2024-03-18", "Trip (app)", 8200, "Closed", docs[0].filename),
               Loss("2024-03-18", "Trip (loss run)", 8200, "Closed", docs[1].filename)]
-    [kept] = pipeline.dedupe_losses(losses, docs)
-    assert kept.description == "Trip (loss run)"
+    [kept], warnings = pipeline.dedupe_losses(losses, docs)
+    assert kept.description == "Trip (loss run)" and warnings == []
 
 
 def test_same_day_same_amount_claims_on_one_loss_run_both_survive():
@@ -140,8 +140,8 @@ def test_same_day_same_amount_claims_on_one_loss_run_both_survive():
     losses = [Loss("2024-05-02", "Claimant A", 5000, "Closed", loss_run),
               Loss("2024-05-02", "Claimant B", 5000, "Closed", loss_run),
               Loss("2024-05-02", "Same incident (app)", 5000, "Closed", docs[0].filename)]
-    kept = pipeline.dedupe_losses(losses, docs)
-    assert sorted(l.description for l in kept) == ["Claimant A", "Claimant B"]
+    kept, warnings = pipeline.dedupe_losses(losses, docs)
+    assert sorted(l.description for l in kept) == ["Claimant A", "Claimant B"] and warnings == []
 
 
 def test_extract_endpoint():
@@ -374,6 +374,55 @@ def test_loss_row_without_an_amount_is_kept_and_named_in_a_warning():
         LossHistory_OccurrenceDate_B="03/18/2024", LossHistory_OccurrenceDescription_B="Trip"))
     assert (loss.date, loss.incurred) == ("2024-03-18", 0)
     assert warnings == ["app.pdf: loss row B has no amount and was read as $0 (03/18/2024, Trip)"]
+
+
+def app_and_loss_run() -> list[Document]:
+    return [Document("app.pdf", "acord_application", "application/pdf"), Document("lr.pdf", "loss_run", "application/pdf")]
+
+
+def test_same_claim_at_two_valuations_counts_once_at_the_loss_run_amount():
+    """CR-122: an application and a loss run valued on different dates used to double the claim count."""
+    losses = [Loss("2024-03-18", "Trip (app)", 8200, "Closed", "app.pdf"),
+              Loss("2024-03-18", "Trip (loss run)", 11846, "Closed", "lr.pdf"),
+              Loss("2025-06-01", "Only on the application", 500, "Closed", "app.pdf")]
+    kept, warnings = pipeline.dedupe_losses(losses, app_and_loss_run())
+    assert sorted((l.date, l.incurred) for l in kept) == [("2024-03-18", 11846), ("2025-06-01", 500)]
+    assert warnings == ["2024-03-18: ACORD-style application shows $8,200, loss run shows $11,846; used the loss run"]
+
+
+def test_loss_run_keeps_several_rows_on_one_date_and_names_them_in_the_warning():
+    losses = [Loss("2024-05-02", "Claimant A", 5000, "Closed", "lr.pdf"),
+              Loss("2024-05-02", "Claimant B", 7000, "Open", "lr.pdf"),
+              Loss("2024-05-02", "Incident (app)", 9000, "Closed", "app.pdf")]
+    kept, warnings = pipeline.dedupe_losses(losses, app_and_loss_run())
+    assert sorted(l.description for l in kept) == ["Claimant A", "Claimant B"]
+    assert warnings == ["2024-05-02: ACORD-style application shows $9,000, loss run shows $5,000 and $7,000; used the loss run"]
+
+
+def test_without_a_loss_run_rows_at_different_amounts_all_survive():
+    docs = [Document("app.pdf", "acord_application", "application/pdf"), Document("a.eml", "broker_email", "text/plain")]
+    losses = [Loss("2024-03-18", "Trip", 8200, "Closed", "app.pdf"), Loss("2024-03-18", "Trip", 9000, "Closed", "a.eml")]
+    kept, warnings = pipeline.dedupe_losses(losses, docs)
+    assert len(kept) == 2 and warnings == []
+
+
+def test_differing_claim_amounts_reach_the_result_and_the_live_feed(monkeypatch):
+    fake_claude(monkeypatch, losses=[Loss("2024-03-18", "Trip", 11846, "Closed", "lone-star-electric-loss-run.pdf")])
+    files = [(name, data) for name, data in case_files("01")]
+    events = []
+    result = pipeline.run(files, classes=[], emit=events.append)
+    assert [l["incurred"] for l in result["submission"]["loss_history"]] == [11846]
+    text = "2024-03-18: ACORD-style application shows $8,200, loss run shows $11,846; used the loss run"
+    assert text in result["warnings"] and {"type": "warning", "message": text} in events
+
+
+def test_same_states_in_another_order_are_not_a_conflict():
+    """CR-060"""
+    fv = lambda value, doc: FieldValue("operations.states", value, 0.9, "claude", "stated", doc)  # noqa: E731
+    _, conflicts = pipeline.merge([fv(["FL", "GA"], "a.pdf"), fv(["GA", "FL"], "b.pdf")])
+    assert conflicts == []
+    _, conflicts = pipeline.merge([fv(["FL", "GA"], "a.pdf"), fv(["GA", "SC"], "b.pdf")])
+    assert len(conflicts) == 1
 
 
 def test_blank_and_complete_loss_rows_warn_about_nothing():

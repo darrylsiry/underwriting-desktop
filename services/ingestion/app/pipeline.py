@@ -82,10 +82,12 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
     step("merge", f"Merged into {len(chosen)} fields"
          + (f"; {len(conflicts)} conflict(s) between documents" if conflicts else "")
          + (f"; missing for rating: {', '.join(missing)}" if missing else "; everything rating needs is present"))
+    kept_losses, loss_warnings = dedupe_losses(losses, docs)
+    warnings += loss_warnings
     for w in warnings:
         emit({"type": "warning", "message": w})
     return {
-        "submission": build_submission(chosen, dedupe_losses(losses, docs)),
+        "submission": build_submission(chosen, kept_losses),
         "fields": {path: {k: v for k, v in fv.to_dict().items() if k != "path"} for path, fv in chosen.items()},
         "conflicts": conflicts,
         "missing_for_rating": missing,
@@ -115,23 +117,37 @@ def merge(candidates: list[FieldValue]) -> tuple[dict[str, FieldValue], list[dic
 
 
 def _same_value(a, b) -> bool:
+    if isinstance(a, list) and isinstance(b, list):  # operations.states: order carries no meaning
+        return sorted(a) == sorted(b)
     return a.casefold() == b.casefold() if isinstance(a, str) and isinstance(b, str) else a == b
 
 
-def dedupe_losses(losses: list[Loss], docs: list[Document]) -> list[Loss]:
+def dedupe_losses(losses: list[Loss], docs: list[Document]) -> tuple[list[Loss], list[str]]:
     """The same claim often appears on the application and the loss run; keep one document's version.
 
-    Rows are grouped by (date, incurred). Within a group, every row from one document is kept
-    (two claimants hurt the same day for the same amount are two claims), but the same claim
-    repeated on another document is dropped, preferring the loss run's rows.
+    A loss run is the source for every date it covers: rows from other documents on those dates are
+    dropped, with a warning when their amount isn't on the loss run (the two are often valued on
+    different dates). The remaining rows are grouped by (date, incurred). Within a group, every row
+    from one document is kept (two claimants hurt the same day for the same amount are two claims),
+    but the same claim repeated on another document is dropped.
     """
+    labels = {d.filename: DOC_TYPE_LABELS.get(d.doc_type, d.doc_type) for d in docs}
     loss_runs = {d.filename for d in docs if d.doc_type == "loss_run"}
+    on_loss_run: dict[str, list[int]] = {}
+    for loss in losses:
+        if loss.source_document in loss_runs:
+            on_loss_run.setdefault(loss.date, []).append(loss.incurred)
+
+    warnings = []
     groups: dict[tuple, list[Loss]] = {}
     for loss in losses:
-        groups.setdefault((loss.date, loss.incurred), []).append(loss)
+        if loss.source_document in loss_runs or loss.date not in on_loss_run:
+            groups.setdefault((loss.date, loss.incurred), []).append(loss)
+        elif loss.incurred not in on_loss_run[loss.date]:
+            amounts = " and ".join(f"${n:,}" for n in on_loss_run[loss.date])
+            warnings.append(f"{loss.date}: {labels.get(loss.source_document, loss.source_document)} shows "
+                            f"${loss.incurred:,}, loss run shows {amounts}; used the loss run")
     kept = []
     for rows in groups.values():
-        sources = list(dict.fromkeys(r.source_document for r in rows))
-        source = next((s for s in sources if s in loss_runs), sources[0])
-        kept += [r for r in rows if r.source_document == source]
-    return kept
+        kept += [r for r in rows if r.source_document == rows[0].source_document]
+    return kept, warnings
