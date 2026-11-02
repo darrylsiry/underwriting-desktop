@@ -8,7 +8,7 @@ import os
 from datetime import timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import quote, unquote, urlencode, urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -77,6 +77,15 @@ def audit_kind(entry: dict, column: str) -> str | None:
     return value_kind(action.removeprefix("update_"), (entry.get("entity") or "",), column)
 
 
+def audit_value(value, entry: dict, column: str) -> str:
+    """One before/after value of an audit row: a number formatted for its kind, anything else as written.
+    CR-039: `num` without a kind would drop the trailing zero of the version label 2026.10."""
+    kind = audit_kind(entry, column)
+    if kind is None:
+        return "" if value is None else str(value)
+    return num(value, kind)
+
+
 # UX-006: every on-screen timestamp in one named zone, the same one the web app shows.
 DEFAULT_TZ = "America/New_York"
 
@@ -100,7 +109,7 @@ def when(dt) -> str:
 
 templates.env.filters["num"] = num
 templates.env.filters["when"] = when
-templates.env.filters["audit_kind"] = audit_kind
+templates.env.filters["audit_value"] = audit_value
 
 ACTOR_COOKIE = "rating_admin_user"
 
@@ -234,8 +243,13 @@ def same_origin(request: Request) -> None:
 
 def remember_actor(request: Request, response: RedirectResponse, actor: str) -> RedirectResponse:
     if not signed_in_user(request):  # the typed name is only remembered when there's no login
-        response.set_cookie(ACTOR_COOKIE, actor, max_age=60 * 60 * 24 * 365, samesite="lax")
+        # Quoted: a Set-Cookie header is Latin-1, and raising here would fail a save already committed (CR-057).
+        response.set_cookie(ACTOR_COOKIE, quote(actor, safe=""), max_age=60 * 60 * 24 * 365, samesite="lax")
     return response
+
+
+def remembered_actor(request: Request) -> str:
+    return unquote(request.cookies.get(ACTOR_COOKIE, ""))
 
 
 def next_label(versions: list[dict]) -> str:
@@ -255,7 +269,7 @@ def versions_page(request: Request, msg: str = "", error: str = ""):
         "next_label": next_label(versions),
         "active": next((v for v in versions if v["status"] == "active"), None),
         "audit": repository.audit_trail(limit=25),
-        "actor": signed_in_user(request) or request.cookies.get(ACTOR_COOKIE, ""),
+        "actor": signed_in_user(request) or remembered_actor(request),
         "signed_in": signed_in_user(request) is not None,
         "msg": msg, "error": error,
     })
@@ -321,7 +335,7 @@ def version_context(request: Request, version_id: int, section: str, msg: str = 
         "activate_confirm": diff_summary(version, active, diff),
         "reason": reason,
         "audit": repository.audit_trail(version_id),
-        "actor": signed_in_user(request) or request.cookies.get(ACTOR_COOKIE, ""),
+        "actor": signed_in_user(request) or remembered_actor(request),
         "signed_in": signed_in_user(request) is not None,
         "msg": msg, "error": error,
     }

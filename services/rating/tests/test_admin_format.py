@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.admin import audit_kind, diff_summary, num, value_kind, when
+from app.admin import audit_kind, audit_value, diff_summary, num, value_kind, when
 
 
 @pytest.mark.parametrize("value, kind, expected", [
@@ -35,6 +35,14 @@ def test_audit_kind_reads_the_audit_row():
     assert audit_kind({"action": "update_factor", "entity": "territory:FL"}, "value") == "factor"
     assert audit_kind({"action": "update_parameter", "entity": "sl_tax.FL"}, "value") == "tax"
     assert audit_kind({"action": "update_parameter", "entity": "policy_fee"}, "value") == "amount"
+
+
+def test_audit_value_formats_numbers_and_leaves_version_labels_alone():
+    """CR-039: an activation's before/after are version labels, so 2026.10 must not become 2026.1."""
+    activation = {"action": "activate"}
+    assert audit_value("2026.10", activation, "active") == "2026.10"
+    assert audit_value(None, activation, "active") == ""   # the first activation had nothing before it
+    assert audit_value("1.2000", {"action": "update_factor", "entity": "territory:FL"}, "value") == "1.20"
 
 
 def test_when_renders_in_display_tz(monkeypatch):

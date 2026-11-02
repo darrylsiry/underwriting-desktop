@@ -9,7 +9,7 @@
     <td><code>{{ a.entity or "" }}</code></td>
     <td>
       {% if a.before and a.after %}
-        {% for k, v in a.after.items() %}{% if a.after | length > 1 %}{{ k.replace("_", " ") }} {% endif %}{{ a.before[k] | num(a | audit_kind(k)) }} → <strong>{{ v | num(a | audit_kind(k)) }}</strong>{% if not loop.last %}, {% endif %}{% endfor %}
+        {% for k, v in a.after.items() %}{% if a.after | length > 1 %}{{ k.replace("_", " ") }} {% endif %}{{ a.before[k] | audit_value(a, k) }} → <strong>{{ v | audit_value(a, k) }}</strong>{% if not loop.last %}, {% endif %}{% endfor %}
       {% elif a.after %}
         {% for k, v in a.after.items() %}{{ k.replace("_", " ") }}: {{ v }}{% if not loop.last %}, {% endif %}{% endfor %}
       {% endif %}
