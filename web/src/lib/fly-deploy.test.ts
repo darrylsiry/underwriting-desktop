@@ -31,23 +31,24 @@ exit 0
 
 function deploy(o: { secrets?: string; listFails?: boolean; credentials?: string; ci?: boolean }) {
   const root = mkdtempSync(path.join(tmpdir(), "fly-deploy-"));
-  const env = {
+  const log = path.join(root, ".fly-calls");
+  const env = {   // nothing else from this shell: no CI, no real Fly token, no GIT_DIR
     PATH: `${path.join(root, ".bin")}:${process.env.PATH}`, HOME: root,
-    FLY_STUB_LOG: path.join(root, ".fly-calls"), FLY_STUB_SECRETS: o.secrets ?? ALL_SECRETS,
+    FLY_STUB_LOG: log, FLY_STUB_SECRETS: o.secrets ?? ALL_SECRETS,
     ...(o.listFails ? { FLY_STUB_LIST_FAILS: "1" } : {}), ...(o.ci ? { CI: "true" } : {}),
-  };
+  } as unknown as NodeJS.ProcessEnv;
   try {
     // Its own repo, or the script's "cd to the top of the repo" would find this one.
     assert.equal(spawnSync("git", ["init", "-q"], { cwd: root, env }).status, 0);
     for (const d of ["scripts", ".bin", "web/inbox", "web/agent-reports", "samples/submissions", "docs"]) mkdirSync(path.join(root, d), { recursive: true });
     copyFileSync(SCRIPT, path.join(root, "scripts/fly-deploy.sh"));
     writeFileSync(path.join(root, ".bin/fly"), FLY_STUB, { mode: 0o755 });
-    writeFileSync(env.FLY_STUB_LOG, "");
+    writeFileSync(log, "");
     const creds = path.join(root, ".fly-credentials");
     if (o.credentials !== undefined) writeFileSync(creds, o.credentials);
     const r = spawnSync("bash", [path.join(root, "scripts/fly-deploy.sh")], { cwd: root, env, encoding: "utf8" });
     return {
-      status: r.status, out: `${r.stdout}\n${r.stderr}`, calls: readFileSync(env.FLY_STUB_LOG, "utf8"),
+      status: r.status, out: `${r.stdout}\n${r.stderr}`, calls: readFileSync(log, "utf8"),
       credentials: existsSync(creds) ? readFileSync(creds, "utf8") : null,
       credentialsMode: existsSync(creds) ? statSync(creds).mode & 0o777 : null,
     };
