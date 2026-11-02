@@ -52,6 +52,14 @@ export const INPUT_DEFS: { key: keyof RatingInputs; label: string; kind: "text" 
 
 const num = (v: unknown, fallback: number) => (typeof v === "number" && Number.isFinite(v) ? v : fallback);
 
+/** The worksheet changed since this form was rendered. */
+export class StaleWorksheetError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StaleWorksheetError";
+  }
+}
+
 /** A validation error that names the form field it is about, so the form can show it under that input (UX-001). */
 export class FieldError extends Error {
   readonly field: string;   // a plain property: node's strip-only TS mode (the tests) has no parameter properties
@@ -157,6 +165,14 @@ export const scheduleMod = (items: ScheduleItem[]) => Math.round((1 + scheduleTo
 /** Schedule in a fixed key order, for comparing a stored (jsonb, keys reordered) schedule with a parsed one. */
 export function scheduleKey(schedule: ScheduleItem[]): string {
   return JSON.stringify(schedule.map((s) => [s.category, s.pct, s.rationale]));
+}
+
+/**
+ * Fingerprint of what a Save & rate form was rendered from: inputs and schedule with its reasons, in
+ * a fixed key order. A save from an older form is refused rather than reverting someone's edits (CR-017).
+ */
+export function worksheetFingerprint(inputs: RatingInputs, schedule: ScheduleItem[]): string {
+  return JSON.stringify([INPUT_DEFS.map((d) => inputs[d.key]), scheduleKey(schedule)]);
 }
 
 /** Fingerprint of what a rating used. Fixed key order: jsonb doesn't preserve object key order. */

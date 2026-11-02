@@ -60,9 +60,12 @@ export default async function RenewalPage({ params, searchParams }: Props) {
   const expiringHref = exp.source === "book" ? `/policies/book/${exp.policy_id}` : `/policies/${exp.policy_id}`;
 
   const expiringSide: Side = { inputs: exp.rating_inputs, schedule: exp.schedule, rating: exp.rating, effective_date: exp.effective_date, expiration_date: exp.expiration_date };
-  const comparison: Comparison | null = ws.last_rating
+  // CR-100: once bound, the comparison is the one frozen on the bound quote, not whatever the worksheet last rated.
+  const boundQuote = policy ? await getQuote(policy.quote_id) : null;
+  const rating = boundQuote?.rating ?? ws.last_rating;
+  const comparison: Comparison | null = boundQuote?.renewal_summary ?? (ws.last_rating
     ? compareRenewal(expiringSide, { inputs: ws.rating_inputs, schedule: ws.schedule, rating: ws.last_rating, effective_date: effective, expiration_date: expiration }, ws.bridge_rating)
-    : null;
+    : null);
   const b = comparison?.bridge;
 
   // UX-003: the same chip pair and drift notice as the workbench, so the two pages agree about one file.
@@ -87,14 +90,14 @@ export default async function RenewalPage({ params, searchParams }: Props) {
       </div>
       <p className="mt-1 text-sm text-slate-500">
         Expiring {exp.policy_number} ({whenDate(exp.effective_date)} → {whenDate(exp.expiration_date)}, {money(exp.premium)} on rates {exp.rate_version})
-        {" · "}<RowLink href={`/submissions/${id}/workbench`}>Adjust &amp; re-rate on the workbench →</RowLink>
+        {" · "}<RowLink href={`/submissions/${id}/workbench`}>{policy ? "Workbench →" : <>Adjust &amp; re-rate on the workbench →</>}</RowLink>
         {" · "}<RowLink href={`/audit?submission=${id}`}>case history</RowLink>
       </p>
 
       {msg && <p className="mt-4 rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{msg}</p>}
       {error && <p className="mt-4 rounded bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
-      {!ws.last_rating && <p className="mt-4 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">The renewing terms haven&apos;t been rated yet. Rate them to see the comparison.</p>}
-      {ws.last_rating && !rated && (
+      {!rating && <p className="mt-4 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">The renewing terms haven&apos;t been rated yet. Rate them to see the comparison.</p>}
+      {ws.last_rating && !rated && !policy && (
         <p className="mt-4 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
           {staleRates ? `Rates changed since this rating (${staleRates.from} → ${staleRates.to}).` : "Inputs changed since this rating."} Re-rate to refresh the comparison.
         </p>
@@ -154,7 +157,7 @@ export default async function RenewalPage({ params, searchParams }: Props) {
           </Section>
 
           {comparison && (
-            <Section title={`Rating factors · ${exp.rate_version} vs ${ws.last_rating!.rate_version}`}>
+            <Section title={`Rating factors · ${exp.rate_version} vs ${rating!.rate_version}`}>
               <table className="w-full text-xs">
                 <thead className="text-left text-slate-500">
                   <tr><th scope="col" className="px-4 py-2 font-medium">Step</th><th scope="col" className="px-4 py-2 font-medium">Expiring</th><th scope="col" className="px-4 py-2 font-medium">Renewing</th><th scope="col" className="px-4 py-2 font-medium">Moved by</th></tr>
@@ -183,16 +186,19 @@ export default async function RenewalPage({ params, searchParams }: Props) {
         </div>
 
         <aside className="space-y-6">
-          <Section title="Rate">
-            <div className="space-y-3 p-4 text-sm">
-              <form action={reRateAction.bind(null, id)}>
-                {/* UX-009 "Re-rating…"; UX-024 it comes back to this comparison. */}
-                <SubmitButton pending="Re-rating…" className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Re-rate</SubmitButton>
-                <p className="mt-1 text-xs text-slate-500">Rates the renewing terms as saved on current rates and refreshes this comparison.</p>
-              </form>
-              <Link href={`/submissions/${id}/workbench`} className="block rounded-md border border-slate-300 px-4 py-2 text-center text-sm hover:bg-slate-50">Adjust terms on the workbench →</Link>
-            </div>
-          </Section>
+          {/* CR-100: nothing to re-rate once the renewal is bound. */}
+          {!policy && (
+            <Section title="Rate">
+              <div className="space-y-3 p-4 text-sm">
+                <form action={reRateAction.bind(null, id)}>
+                  {/* UX-009 "Re-rating…"; UX-024 it comes back to this comparison. */}
+                  <SubmitButton pending="Re-rating…" className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Re-rate</SubmitButton>
+                  <p className="mt-1 text-xs text-slate-500">Rates the renewing terms as saved on current rates and refreshes this comparison.</p>
+                </form>
+                <Link href={`/submissions/${id}/workbench`} className="block rounded-md border border-slate-300 px-4 py-2 text-center text-sm hover:bg-slate-50">Adjust terms on the workbench →</Link>
+              </div>
+            </Section>
+          )}
 
           <Section title={policy ? "Renewed" : "Renewal quote"}>
             <div className="space-y-4 p-4 text-sm">

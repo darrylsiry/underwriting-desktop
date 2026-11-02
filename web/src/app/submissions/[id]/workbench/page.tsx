@@ -13,7 +13,7 @@ import { getSubmission } from "@/lib/submissions";
 import { currentUser } from "@/lib/user";
 import {
   INPUT_DEFS, MAX_CATEGORY_PCT, SCHEDULE_CATEGORIES, UW_AUTHORITY_PCT, inputChanges, inputUnit, inputsHash, scheduleMod, scheduleTotal,
-  worksheetChips, type RatingInputs,
+  worksheetChips, worksheetFingerprint, type RatingInputs,
 } from "@/lib/worksheet";
 import { activeRateVersion, money, openWorksheet, readiness } from "@/lib/worksheets";
 import { inputText } from "@/lib/renewal-compare";
@@ -64,9 +64,13 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
     : suggestedSubjectivities(flags, sub.data));
   const [policy] = await policiesForSubmission(id);
   const bindIssues = latest ? bindBlockers(latest, new Date().toISOString().slice(0, 10)) : [];
-  const rating = ws.last_rating;
-  const schedule = new Map(ws.schedule.map((s) => [s.category, s]));
-  const total = scheduleTotal(ws.schedule);
+  // CR-100: a bound file shows what was bound, frozen on its quote; the worksheet may have moved on after that quote was issued.
+  const boundQuote = policy ? await getQuote(policy.quote_id) : null;
+  const rating = boundQuote?.rating ?? ws.last_rating;
+  const shownInputs = boundQuote?.rating_inputs ?? ws.rating_inputs;
+  const shownSchedule = boundQuote?.schedule ?? ws.schedule;
+  const schedule = new Map(shownSchedule.map((s) => [s.category, s]));
+  const total = scheduleTotal(shownSchedule);
 
   // UX-003: does the worksheet still say what the latest issued quote says? The quote froze its inputs and schedule.
   const quoted = latest && !policy ? await getQuote(latest.id) : null;
@@ -141,6 +145,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
           <ActionForm className="space-y-6">
+            <input type="hidden" name="_fingerprint" value={worksheetFingerprint(ws.rating_inputs, ws.schedule)} />
             <fieldset disabled={!!policy} className="space-y-6 [&_input:disabled]:bg-slate-50 [&_input:disabled]:text-slate-700 [&_select:disabled]:bg-slate-50 [&_select:disabled]:text-slate-700">{/* UX-037; UX-047: quiet the controls, not the labels */}
             <Card title="Rating inputs">
               <div className="grid gap-x-6 gap-y-3 p-4 sm:grid-cols-2">
@@ -149,17 +154,17 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                     {/* UX-029: the input shows the unit, so the label does not repeat it. */}
                     {inputUnit(d) ? d.label.replace(/\s*%$|\s*\(ft\)$/, "") : d.label}
                     {d.kind === "bool" ? (
-                      <ActionSelect name={d.key} saved={ws.rating_inputs[d.key] ? "yes" : "no"} className="rounded border px-2 py-1.5 text-sm text-slate-900">
+                      <ActionSelect name={d.key} saved={shownInputs[d.key] ? "yes" : "no"} className="rounded border px-2 py-1.5 text-sm text-slate-900">
                         <option value="yes">yes</option><option value="no">no</option>
                       </ActionSelect>
                     ) : (
                       // UX-004: formatted with its unit, the same text as the "expiring:" line below it.
-                      <WorksheetInput def={d} saved={editValue(d, ws.rating_inputs)} unit={inputUnit(d)} />
+                      <WorksheetInput def={d} saved={editValue(d, shownInputs)} unit={inputUnit(d)} />
                     )}
                     <FieldMessage name={d.key} />
                     {exp && (() => {
                       const was = inputText(d.key, exp.rating_inputs[d.key]);
-                      const changed = was !== inputText(d.key, ws.rating_inputs[d.key]);
+                      const changed = was !== inputText(d.key, shownInputs[d.key]);
                       return <span className={`text-[11px] ${changed ? "font-medium text-amber-700" : "text-slate-500"}`}>expiring: {was}</span>;
                     })()}
                   </label>
@@ -167,7 +172,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
               </div>
             </Card>
 
-            <Card title={`Schedule rating · total ${total > 0 ? "+" : ""}${total}% · mod ${scheduleMod(ws.schedule).toFixed(2)}`}>
+            <Card title={`Schedule rating · total ${total > 0 ? "+" : ""}${total}% · mod ${scheduleMod(shownSchedule).toFixed(2)}`}>
               <p className="px-4 pt-3 text-xs text-slate-500">
                 Credits are negative, debits positive, up to ±{MAX_CATEGORY_PCT}% per category. Every credit or debit needs a written reason.
                 Totals beyond ±{UW_AUTHORITY_PCT}% need a referral.
@@ -285,7 +290,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
             <Card title={policy ? "Premium as bound" : "Indicative premium"}>
               {rating ? (
                 <div className="p-4">
-                  {!rated && (
+                  {!rated && !policy && (
                     <p className="mb-3 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
                       {staleRates ? `Rates changed since this rating (${staleRates.from} → ${staleRates.to}).` : "Inputs changed since this rating."} Save &amp; rate again.
                     </p>
@@ -345,7 +350,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                           {clearance.by} cleared this for {clearance.detail ? `“${clearance.detail}”` : "earlier facts"} on {when(clearance.at)}; the facts changed, so it needs clearing again.
                         </p>
                       )}
-                      {status !== "cleared" && f.severity === "refer" && (
+                      {status !== "cleared" && f.severity === "refer" && !policy && (
                         // UX-002: Clear waits for unsaved rating edits, so a flag isn't cleared against stale facts.
                         <WaitForSave hint={WAIT} className="mt-2">
                           <form action={clearReferralAction.bind(null, id, f.code)} className="flex gap-2">
