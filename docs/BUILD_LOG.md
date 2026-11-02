@@ -921,3 +921,31 @@ read this to replay the build quickly.
   - The rate admin form requires a reason, so a script's `requestSubmit()` with it blank silently posts nothing.
   - A review run can land mid-batch: re-read the report before calling the backlog done.
 - **How to show it:** `/` and `/book` for the new row; a bound file's workbench; two tabs on one draft, then Save & rate in both; `/admin/versions/<draft>?section=territory` for the same with rates; `/app-tests` after the next review run.
+
+## step-29: The code review backlog after step-28 (19 findings; one left for the owner's decision)
+- **Prompt used:** "Fix all 15" (the review listed 15 open findings; a run at 12:12 raised it to 19 while this step began, and all 19 were taken on)
+- **What was built:** No new feature. CR-135 to CR-150, plus CR-021 and CR-014, have fixes named in commit messages. CR-096 is part-done, see below. What users will notice:
+  - **The desk tells the truth about a bound policy's claims.** Policies bound in the desk show the claims on their submission instead of zero, on the desk, `/book` and the assistant. No claims on file reads "none reported". The book loss ratio stays prior-system only.
+  - **In force ends on the expiration date.** That day belongs to the renewal, so the two aren't both counted. A policy expiring today is still on the renewal work list.
+  - **Quotes out counts live quotes.** An expired quote is no longer both "out" and "lost". The tile links to `/quotes?status=issued&live=1`.
+  - **The assistant says when a list is cut.** `count`, `total_matching`, `truncated` and a note; money totals cover every match.
+  - **Intake:** a NUL or other control character can't stop a submission being stored. The same file sent twice is read once, with a warning. A loss run nobody read no longer counts as on file: the warning and subjectivity follow, and intake says "No losses read". "Try again" on an extraction restarts its clock.
+  - **Rates:** a surplus lines tax of 1 or more is refused ("enter a fraction: 0.05 for 5%"), a version whose mod range leaves out 1 can't be activated, and gross receipts above $10 billion are refused under the field.
+  - **Stale tabs:** Clear and Issue from an out-of-date page are refused with nothing saved, as Save & rate already was.
+  - **A bound file's referrals judge the terms that were bound,** not a worksheet edited after the quote.
+  - **Accounting:** a push with an invalid filter is refused rather than widened. The API docs list every error status the OpenAPI document declares.
+- **Files:** `web/src/lib/{book-metrics,dashboard,renewals,policies,quotes,worksheets,submissions,referrals,worksheet,gl-query,gl-openapi,assistant-tools}.ts`, new `web/src/lib/assistant-lists.ts`, `web/src/lib/persistence.test.ts`, `web/src/lib/env-example.test.ts`; `web/src/app/{page,book/page,quotes/page,accounting/actions,accounting/api/page}`, `web/src/app/submissions/[id]/...`; `services/ingestion/app/{schema,pipeline,documents}.py`; `services/rating/app/{engine,repository}.py`; `.env.example`; new `scripts/python-tests.sh`. Removed `web/src/app/accounting/export/route.ts`, which had no caller.
+- **Commit:** `step-29: the code review backlog after step-28 (build log and playbook)`, after six `fix:` and `test:` commits.
+- **Decisions:**
+  - CR-144 left a choice for `openWorksheet` and `rateAndStore`: same transaction, or log the failure. Both use the same transaction as the others. A failure there has nothing to double, unlike `storeSubmission`, whose log-only rule stands (a retry there makes a second reference).
+  - The Try again fix (CR-145) was not exercised by hand: a new React `key` per attempt remounts the panel by definition.
+  - CR-143's "warning band for factors far from 1" was offered as optional and left out.
+  - `CR-014`: `web/src/lib/persistence.test.ts` runs under `npm test` against two databases it creates for its own process and drops after, and skips when no Postgres answers. It deletes the `*_MIGRATION_DATABASE_URL` variables and overrides both database URLs before anything opens a pool, so it can only reach its own databases.
+- **Dead ends / gotchas:**
+  - **Hand-testing found one thing the tests didn't.** Judging a bound file's flags by the bound terms made a referral read "since bind" if the worksheet had moved on and been cleared again. The quote couldn't have been issued with it open, so any clearance now counts on a bound file (`clearanceStatus(flag, clearance, bound)`).
+  - **CR-096 is part-done, on purpose.** `scripts/python-tests.sh` runs both Python suites in containers on this host (no `uv`, `.venv` built for containers). Telling the reviewers to use it means editing `scripts/readonly-bash-guard.sh` and `.claude/agents/code-auditor.md`. The auto-mode check refused that as self-modification, and it was not worked around, so the auditor still reports the Python suites as not run until the owner applies or approves those edits.
+  - The worksheet's inputs are uncontrolled, so after "Bind v1 as issued" they kept figures typed since that quote until a reload. A `key` on the form provider that changes on bind remounts them.
+  - Setting a hidden field's value from a script right after loading a page doesn't always stick: React can restore it. Add a second field instead, because the server action reads the last value. One such test ran a real push on the local database, so a `gl.exported` row with no new lines is there, in an append-only table.
+  - `node --test` can load modules that import each other without extensions only through a resolve hook, and the hook must leave `node_modules` alone, or named imports from CommonJS packages such as `pdf-lib` fail. It also can't load TypeScript parameter properties, so `RatingServiceError` declares `status` as a field.
+- **How to show it:** two tabs on one workbench: change the height and Save & rate in one, then Clear in the other. It's refused and names the new height. Then `/quotes?status=issued&live=1` from the Quotes out tile, and a bound policy's claims on the desk.
+

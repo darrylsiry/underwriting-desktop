@@ -104,7 +104,8 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
 
   return (
     <main className="mx-auto max-w-7xl p-8">
-      <ActionFormProvider formId="worksheet-form" action={saveAndRateAction.bind(null, id)}>
+      {/* The key remounts on bind: the inputs then show what was bound, not figures typed since that quote. */}
+      <ActionFormProvider key={policy ? "bound" : "open"} formId="worksheet-form" action={saveAndRateAction.bind(null, id)}>
         {/* UX-010: where this page sits. */}
         <nav aria-label="Breadcrumb" className="text-sm text-slate-500">
           <Link href="/submissions" className="text-indigo-600 hover:underline">Inbox</Link> ›{" "}
