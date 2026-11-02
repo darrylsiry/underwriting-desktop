@@ -45,6 +45,17 @@ def test_admin_token_gates_changes_and_the_acting_user(client, monkeypatch):
     assert client.post("/rate-versions", json={"label": "nope"}).status_code == 503   # fails closed on Fly without the secret
 
 
+def test_a_non_ascii_bearer_token_is_refused_not_a_crash(client, monkeypatch):
+    """CR-110: compare_digest raises on a non-ASCII str, which was a 500 here and lost the rating on /rate."""
+    monkeypatch.setenv("RATING_ADMIN_TOKEN", "s3cret")
+    bad = {"Authorization": "Bearer \u00e9".encode("latin-1")}
+    assert client.get("/admin", headers=bad).status_code == 401
+    assert client.post("/rate-versions", json={"label": "nope"}, headers=bad).status_code == 401
+    res = client.post("/rate", json=ELECTRICAL, headers=bad | {"x-uw-user": "mallory"})
+    assert res.status_code == 200
+    assert client.get(f"/ratings/{res.json()['rating_id']}").json()["requested_by"] == "anonymous"
+
+
 def test_rated_at_backdates_the_log_entry(client):
     res = client.post("/rate", json=ELECTRICAL | {"reference": "SUB-0099", "rated_at": "2026-03-30T18:13:00Z"})
     assert res.status_code == 200, res.text
@@ -73,6 +84,19 @@ def test_list_ratings_filters_by_reference(client):
     assert len(rows) == 1 and rows[0]["reference"] == "Q-2026-9999 v1" and rows[0]["total"]
     assert rows[0]["rate_version"] == "2026.1" and rows[0]["class_code"] == "92215"
     assert client.get("/ratings", params={"limit": 0}).status_code == 422
+
+
+def test_reference_prefix_is_one_reference_and_not_its_lookalikes(client):
+    """CR-045: SUB-7000 also matched SUB-70001, and % and _ acted as wildcards."""
+    for reference in ("SUB-7000", "SUB-7000 (expiring rates)", "SUB-70001", "SUBX7000"):
+        client.post("/rate", json=ELECTRICAL | {"reference": reference})
+
+    def found(prefix):
+        return {r["reference"] for r in client.get("/ratings", params={"reference_prefix": prefix}).json()}
+
+    assert found("SUB-7000") == {"SUB-7000", "SUB-7000 (expiring rates)"}
+    assert found("SUB-700") == set()
+    assert found("SUB_7000") == set() and found("SUB-70%") == set()
 
 
 def test_ratings_feed_honours_a_day_range(client):

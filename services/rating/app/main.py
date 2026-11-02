@@ -2,7 +2,7 @@ from datetime import datetime
 import uuid
 from contextlib import asynccontextmanager
 from decimal import Decimal
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -23,7 +23,90 @@ app = FastAPI(title="Rating Service", description="Contractors GL rating engine"
 app.include_router(admin.router)
 
 
-@app.get("/health")
+# CR-064: what the read endpoints return, so a renamed column fails here instead of reaching a web page as
+# `undefined`. Numeric columns are floats on the wire (a JSON number, as the web tier reads them); a Decimal
+# field would serialise as a string.
+
+class Health(BaseModel):
+    service: str
+    status: str
+    database: str
+    active_rate_version: str | None
+
+
+class RateVersion(BaseModel):
+    id: int
+    label: str
+    status: str
+    notes: str
+    created_by: str
+    created_at: datetime
+    activated_at: datetime | None
+    based_on: int | None
+
+
+class ClassRateRow(BaseModel):
+    class_code: str
+    description: str
+    base_rate: float
+    min_premium: float
+
+
+class FactorRow(BaseModel):
+    factor: str
+    kind: str
+    key: str
+    value: float
+    label: str
+
+
+class ParameterRow(BaseModel):
+    name: str
+    value: float
+    label: str
+
+
+class RateVersionTables(RateVersion):
+    classes: list[ClassRateRow]
+    factors: list[FactorRow]
+    parameters: list[ParameterRow]
+
+
+class RatingRecord(BaseModel):
+    id: uuid.UUID
+    version_id: int
+    reference: str | None
+    requested_by: str
+    request: dict[str, Any]
+    result: dict[str, Any]
+    created_at: datetime
+
+
+class RatingSummary(BaseModel):
+    id: uuid.UUID
+    created_at: datetime
+    requested_by: str
+    reference: str | None
+    rate_version: str
+    class_code: str | None
+    premium: str | None
+    total: str | None
+
+
+class RateTableAuditEntry(BaseModel):
+    id: int
+    version_id: int
+    version_label: str
+    actor: str
+    action: str
+    entity: str | None
+    before: dict[str, Any] | None
+    after: dict[str, Any] | None
+    reason: str
+    created_at: datetime
+
+
+@app.get("/health", response_model=Health)
 def health():
     with db.pool.connection() as conn:
         conn.execute("SELECT 1")
@@ -61,7 +144,7 @@ def rate_risk(req: RateRequest, request: Request):
     return RateResponse(rating_id=rating_id, **result.model_dump())
 
 
-@app.get("/ratings/{rating_id}")
+@app.get("/ratings/{rating_id}", response_model=RatingRecord)
 def get_rating(rating_id: uuid.UUID):
     row = repository.get_rating(str(rating_id))
     if row is None:
@@ -81,7 +164,7 @@ def classes():
     return [ClassInfo(class_code=k, description=v["description"]) for k, v in sorted(tables.classes.items())]
 
 
-@app.get("/rate-versions")
+@app.get("/rate-versions", response_model=list[RateVersion])
 def rate_versions():
     return repository.list_versions()
 
@@ -99,13 +182,13 @@ def admin_errors(fn, *args):
         return fn(*args)
     except LookupError as e:
         raise HTTPException(404, str(e)) from e
-    except repository.VersionNotEditable as e:
+    except (repository.VersionNotEditable, repository.VersionConflict) as e:
         raise HTTPException(409, str(e)) from e
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
 
 
-@app.get("/rate-versions/{version_id}")
+@app.get("/rate-versions/{version_id}", response_model=RateVersionTables)
 def rate_version(version_id: int):
     version = repository.get_version(version_id)
     if version is None:
@@ -181,7 +264,7 @@ _WALL = r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?)?$"   # a wall-cl
 _TZ = r"^[A-Za-z_]+(/[A-Za-z_+\-0-9]+)*$"
 
 
-@app.get("/rate-table-audit")
+@app.get("/rate-table-audit", response_model=list[RateTableAuditEntry])
 def rate_table_audit(version_id: int | None = None, limit: int = Query(200, ge=1, le=1000),
                      since: str | None = Query(None, pattern=_WALL), until: str | None = Query(None, pattern=_WALL),
                      tz: str = Query("UTC", pattern=_TZ)):
@@ -189,10 +272,11 @@ def rate_table_audit(version_id: int | None = None, limit: int = Query(200, ge=1
     return repository.audit_trail(version_id, limit, since, until, tz)
 
 
-@app.get("/ratings")
+@app.get("/ratings", response_model=list[RatingSummary])
 def list_ratings(reference_prefix: str | None = None, limit: int = Query(200, ge=1, le=1000),
                  since: str | None = Query(None, pattern=_WALL), until: str | None = Query(None, pattern=_WALL),
                  tz: str = Query("UTC", pattern=_TZ)):
     """Rating calls, newest first: who rated what, on which rate version, for which reference (SUB-/Q-).
+    `reference_prefix` is one whole reference, with or without what follows it after a space (CR-045).
     `since`/`until` are wall-clock bounds in `tz` (UX-044)."""
     return repository.list_ratings(reference_prefix, limit, since, until, tz)

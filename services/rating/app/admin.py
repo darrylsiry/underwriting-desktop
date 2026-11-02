@@ -8,7 +8,7 @@ import os
 from datetime import timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import quote, unquote, urlencode, urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -77,6 +77,15 @@ def audit_kind(entry: dict, column: str) -> str | None:
     return value_kind(action.removeprefix("update_"), (entry.get("entity") or "",), column)
 
 
+def audit_value(value, entry: dict, column: str) -> str:
+    """One before/after value of an audit row: a number formatted for its kind, anything else as written.
+    CR-039: `num` without a kind would drop the trailing zero of the version label 2026.10."""
+    kind = audit_kind(entry, column)
+    if kind is None:
+        return "" if value is None else str(value)
+    return num(value, kind)
+
+
 # UX-006: every on-screen timestamp in one named zone, the same one the web app shows.
 DEFAULT_TZ = "America/New_York"
 
@@ -100,7 +109,7 @@ def when(dt) -> str:
 
 templates.env.filters["num"] = num
 templates.env.filters["when"] = when
-templates.env.filters["audit_kind"] = audit_kind
+templates.env.filters["audit_value"] = audit_value
 
 ACTOR_COOKIE = "rating_admin_user"
 
@@ -234,8 +243,13 @@ def same_origin(request: Request) -> None:
 
 def remember_actor(request: Request, response: RedirectResponse, actor: str) -> RedirectResponse:
     if not signed_in_user(request):  # the typed name is only remembered when there's no login
-        response.set_cookie(ACTOR_COOKIE, actor, max_age=60 * 60 * 24 * 365, samesite="lax")
+        # Quoted: a Set-Cookie header is Latin-1, and raising here would fail a save already committed (CR-057).
+        response.set_cookie(ACTOR_COOKIE, quote(actor, safe=""), max_age=60 * 60 * 24 * 365, samesite="lax")
     return response
+
+
+def remembered_actor(request: Request) -> str:
+    return unquote(request.cookies.get(ACTOR_COOKIE, ""))
 
 
 def next_label(versions: list[dict]) -> str:
@@ -255,7 +269,7 @@ def versions_page(request: Request, msg: str = "", error: str = ""):
         "next_label": next_label(versions),
         "active": next((v for v in versions if v["status"] == "active"), None),
         "audit": repository.audit_trail(limit=25),
-        "actor": signed_in_user(request) or request.cookies.get(ACTOR_COOKIE, ""),
+        "actor": signed_in_user(request) or remembered_actor(request),
         "signed_in": signed_in_user(request) is not None,
         "msg": msg, "error": error,
     })
@@ -300,6 +314,11 @@ def version_context(request: Request, version_id: int, section: str, msg: str = 
     current = section_rows(rows, section)
     if compare_rows:
         with_base(current, section_rows(compare_rows, section))
+    for r in current:
+        for c in r["cells"]:
+            # CR-052: what the page shows now, sent back with the save. A failed save keeps the original,
+            # so retrying it can't turn a colleague's change in the meantime into an edit of ours.
+            c["was"] = (posted or {}).get(f"{c['field']}|was", c["value"])
     if posted:   # UX-001: show what was typed, flagged against the comparison version when it parses
         for r in current:
             for c in r["cells"]:
@@ -321,7 +340,7 @@ def version_context(request: Request, version_id: int, section: str, msg: str = 
         "activate_confirm": diff_summary(version, active, diff),
         "reason": reason,
         "audit": repository.audit_trail(version_id),
-        "actor": signed_in_user(request) or request.cookies.get(ACTOR_COOKIE, ""),
+        "actor": signed_in_user(request) or remembered_actor(request),
         "signed_in": signed_in_user(request) is not None,
         "msg": msg, "error": error,
     }
@@ -349,7 +368,7 @@ async def save_section(request: Request, version_id: int, section: str):
     edits: dict[tuple, repository.Edit] = {}
     try:
         for name, raw in posted.items():
-            kind, *ident, column = name.split("|")
+            kind, *ident, column = name.removesuffix("|was").split("|")
             if kind not in repository.EDITABLE:
                 continue
             if len(ident) != len(repository.EDITABLE[kind][1]):  # e.g. "class|a|b|base_rate"
@@ -358,7 +377,7 @@ async def save_section(request: Request, version_id: int, section: str):
             value = Decimal(raw.strip())
             if not value.is_finite():   # "Infinity"/"NaN" parse as Decimals but aren't rates
                 raise InvalidOperation
-            edit.values[column] = value
+            (edit.was if name.endswith("|was") else edit.values)[column] = value
         changed = await run_in_threadpool(repository.apply_edits, version_id, list(edits.values()), actor, reason)
     except InvalidOperation:
         return await again("Every value must be a number")
@@ -374,6 +393,6 @@ async def activate_version(request: Request, version_id: int):
     actor = form_actor(request, form)
     try:
         await run_in_threadpool(repository.activate, version_id, actor, str(form.get("reason", "")))
-    except (LookupError, ValueError, repository.VersionNotEditable) as e:
+    except (LookupError, ValueError, repository.VersionNotEditable, repository.VersionConflict) as e:
         return redirect(f"/admin/versions/{version_id}", error=str(e))
     return remember_actor(request, redirect(f"/admin/versions/{version_id}", msg="Activated. New ratings now use this version."), actor)

@@ -1,8 +1,10 @@
 """Loads rate tables from the rating DB, records rating calls, and administers rate versions."""
 import re
-from dataclasses import dataclass
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from decimal import Decimal
 
+import psycopg
 from psycopg.types.json import Jsonb
 
 from app.db import pool
@@ -55,7 +57,9 @@ def get_rating(rating_id: str) -> dict | None:
 
 def list_ratings(reference_prefix: str | None = None, limit: int = 200,
                  since: str | None = None, until: str | None = None, tz: str = "UTC") -> list[dict]:
-    """Recent rating calls (summary only) for the audit timeline; optionally only one reference family.
+    """Recent rating calls (summary only) for the audit timeline; optionally only one reference family: that
+    exact reference, or it followed by a space ("Q-2026-0001 v2", "SUB-0001 (expiring rates)"). CR-045: taken
+    literally, so SUB-1000 isn't SUB-10000 and % or _ match only themselves.
     UX-044: `since`/`until` are wall-clock timestamps in `tz`, so a day range chosen in the desktop's zone
     reaches rows older than the newest `limit`."""
     with pool.connection() as conn:
@@ -63,7 +67,7 @@ def list_ratings(reference_prefix: str | None = None, limit: int = 200,
             "SELECT r.id, r.created_at, r.requested_by, r.reference, v.label AS rate_version,"
             " r.request->>'class_code' AS class_code, r.result->>'premium' AS premium, r.result->>'total' AS total"
             " FROM rating_log r JOIN rate_versions v ON v.id = r.version_id"
-            " WHERE (%(p)s::text IS NULL OR r.reference LIKE %(p)s || '%%')"
+            " WHERE (%(p)s::text IS NULL OR r.reference = %(p)s OR starts_with(r.reference, %(p)s || ' '))"
             " AND (%(since)s::timestamp IS NULL OR r.created_at >= (%(since)s::timestamp AT TIME ZONE %(tz)s))"
             " AND (%(until)s::timestamp IS NULL OR r.created_at <= (%(until)s::timestamp AT TIME ZONE %(tz)s))"
             " ORDER BY r.created_at DESC LIMIT %(n)s",
@@ -84,11 +88,17 @@ class VersionNotEditable(Exception):
     """The version isn't a draft (active and retired versions are frozen)."""
 
 
+class VersionConflict(Exception):
+    """Another change got there first, so this one wasn't made (CR-036)."""
+
+
 @dataclass
 class Edit:
     kind: str                     # 'class' | 'factor' | 'parameter'
     ident: tuple[str, ...]        # (class_code,) | (factor, key) | (name,)
     values: dict[str, Decimal]    # column -> new value
+    # column -> what the user's page showed (CR-052). Empty for API edits, which name only what they change.
+    was: dict[str, Decimal] = field(default_factory=dict)
 
 
 # kind -> (table, identifying columns, editable columns)
@@ -96,6 +106,14 @@ EDITABLE = {
     "class": ("class_rates", ("class_code",), ("base_rate", "min_premium")),
     "factor": ("factors", ("factor", "key"), ("value",)),
     "parameter": ("parameters", ("name",), ("value",)),
+}
+
+# (kind, column) -> numeric(precision, scale) of that column, from migrations/001_schema.sql.
+COLUMN_SIZE = {
+    ("class", "base_rate"): (10, 4),
+    ("class", "min_premium"): (12, 2),
+    ("factor", "value"): (8, 4),
+    ("parameter", "value"): (12, 4),
 }
 
 
@@ -110,6 +128,48 @@ def _audit(conn, version_id: int, actor: str, action: str, entity=None, before=N
         (version_id, actor, action, entity, Jsonb(before) if before is not None else None,
          Jsonb(after) if after is not None else None, reason),
     )
+
+
+def _check_storable(edit: Edit, column: str, value: Decimal) -> None:
+    """Refuse a value its column can't hold exactly. Postgres would raise on one too large (CR-032) and
+    silently round one with too many decimals, leaving the audit naming a rate that never priced anything (CR-105)."""
+    precision, scale = COLUMN_SIZE[(edit.kind, column)]
+    what = f"{_entity(edit)}: {column.replace('_', ' ')}"
+    if not value.is_finite():
+        raise ValueError(f"{what} must be a number")
+    if value <= 0:
+        raise ValueError(f"{_entity(edit)}: values must be greater than zero")
+    limit = 10 ** (precision - scale)
+    if value >= limit:
+        raise ValueError(f"{what} must be below {limit:,}")
+    if round(value, scale) != value:
+        raise ValueError(f"{what} can have at most {scale} decimals")
+
+
+def _changes(edit: Edit, row: dict) -> dict[str, Decimal]:
+    """The columns this edit really changes. CR-052: a cell left as the page showed it is not an edit, whatever
+    the database holds now; a cell changed from a value that is no longer there is someone else's work."""
+    changes = {}
+    for column, value in edit.values.items():
+        was = edit.was.get(column)
+        if value == was or value == row[column]:
+            continue
+        if was is not None and was != row[column]:
+            raise ValueError(f"{_entity(edit)}: {column.replace('_', ' ')} was changed by someone else after this page"
+                             f" loaded (it is now {row[column]}). Nothing was saved: open the section again to see the"
+                             " current values.")
+        changes[column] = value
+    return changes
+
+
+@contextmanager
+def _transaction():
+    """One transaction. A value Postgres refuses as data (a NUL in a reason) is the caller's mistake, not a 500 (CR-032)."""
+    try:
+        with pool.connection() as conn:
+            yield conn
+    except psycopg.DataError as e:
+        raise ValueError(f"That can't be stored: {e}") from e
 
 
 def _lock_draft(conn, version_id: int) -> dict:
@@ -154,17 +214,19 @@ def create_draft(base_version_id: int, label: str, notes: str, actor: str) -> in
     """Copy every row of `base_version_id` into a new draft version."""
     if not LABEL_RE.match(label):
         raise ValueError("A version label is 1-32 letters, digits, dots, dashes or underscores (e.g. 2026.2)")
-    with pool.connection() as conn:
+    with _transaction() as conn:
         base = conn.execute("SELECT id, label FROM rate_versions WHERE id = %s", (base_version_id,)).fetchone()
         if base is None:
             raise LookupError(f"Rate version {base_version_id} not found")
-        if conn.execute("SELECT 1 FROM rate_versions WHERE label = %s", (label,)).fetchone():
-            raise ValueError(f"A version labelled {label} already exists")
-        new_id = conn.execute(
+        # CR-036: no check first, which two creates could both pass. The second waits here for the first to commit.
+        new = conn.execute(
             "INSERT INTO rate_versions (label, status, notes, created_by, based_on)"
-            " VALUES (%s, 'draft', %s, %s, %s) RETURNING id",
+            " VALUES (%s, 'draft', %s, %s, %s) ON CONFLICT (label) DO NOTHING RETURNING id",
             (label, notes, actor, base_version_id),
-        ).fetchone()["id"]
+        ).fetchone()
+        if new is None:
+            raise ValueError(f"A version labelled {label} already exists")
+        new_id = new["id"]
         conn.execute(
             "INSERT INTO class_rates (version_id, class_code, description, base_rate, min_premium)"
             " SELECT %s, class_code, description, base_rate, min_premium"
@@ -183,7 +245,7 @@ def create_draft(base_version_id: int, label: str, notes: str, actor: str) -> in
 
 def apply_edits(version_id: int, edits: list[Edit], actor: str, reason: str) -> int:
     """Apply edits to a draft in one transaction, auditing each changed row. Returns rows changed."""
-    with pool.connection() as conn:
+    with _transaction() as conn:
         _lock_draft(conn, version_id)
         changed = 0
         for edit in edits:
@@ -197,11 +259,11 @@ def apply_edits(version_id: int, edits: list[Edit], actor: str, reason: str) -> 
             ).fetchone()
             if row is None:
                 raise LookupError(f"No {_entity(edit)} in this version")
-            updates = {c: v for c, v in edit.values.items() if Decimal(v) != row[c]}
+            updates = _changes(edit, row)
             if not updates:
                 continue
-            if any(Decimal(v) <= 0 for v in updates.values()):
-                raise ValueError(f"{_entity(edit)}: values must be greater than zero")
+            for column, value in updates.items():
+                _check_storable(edit, column, value)
             if not reason.strip():
                 raise ValueError("A reason is required for rate changes")
             conn.execute(
@@ -209,7 +271,7 @@ def apply_edits(version_id: int, edits: list[Edit], actor: str, reason: str) -> 
                 (*updates.values(), version_id, *edit.ident),
             )
             _audit(conn, version_id, actor, f"update_{edit.kind}", _entity(edit),
-                   before={c: str(row[c]) for c in updates}, after={c: str(v) for c, v in updates.items()},
+                   before={c: str(row[c]) for c in updates}, after={c: f"{v:f}" for c, v in updates.items()},
                    reason=reason)
             changed += 1
     return changed
@@ -219,14 +281,20 @@ def activate(version_id: int, actor: str, reason: str) -> None:
     """Make a draft the active version and retire the previously active one."""
     if not reason.strip():
         raise ValueError("A reason is required to activate a version")
-    with pool.connection() as conn:
-        version = _lock_draft(conn, version_id)
-        previous = conn.execute(
-            "UPDATE rate_versions SET status = 'retired' WHERE status = 'active' RETURNING label").fetchone()
-        conn.execute("UPDATE rate_versions SET status = 'active', activated_at = now() WHERE id = %s", (version_id,))
-        _audit(conn, version_id, actor, "activate",
-               before={"active": previous["label"] if previous else None}, after={"active": version["label"]},
-               reason=reason)
+    try:
+        with _transaction() as conn:
+            version = _lock_draft(conn, version_id)
+            # CR-036: this waits for an activation in progress, and finds nothing to retire if that one commits.
+            # one_active_version then refuses ours below, so of two at once exactly one wins.
+            previous = conn.execute(
+                "UPDATE rate_versions SET status = 'retired' WHERE status = 'active' RETURNING label").fetchone()
+            conn.execute("UPDATE rate_versions SET status = 'active', activated_at = now() WHERE id = %s", (version_id,))
+            _audit(conn, version_id, actor, "activate",
+                   before={"active": previous["label"] if previous else None}, after={"active": version["label"]},
+                   reason=reason)
+    except psycopg.errors.UniqueViolation as e:
+        raise VersionConflict("Another version was activated at the same moment, so this one wasn't. "
+                              "Check which version is active, then activate this one again if it's still wanted.") from e
 
 
 def audit_trail(version_id: int | None = None, limit: int = 200,

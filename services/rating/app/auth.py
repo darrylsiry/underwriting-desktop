@@ -30,7 +30,8 @@ def trusted_caller(request: Request) -> bool:
     if not token:
         return not os.environ.get("FLY_APP_NAME")
     presented = _bearer(request)
-    return bool(presented) and secrets.compare_digest(presented, token)
+    # Bytes, because compare_digest raises TypeError on a non-ASCII str and a header can hold one (CR-110).
+    return bool(presented) and secrets.compare_digest(presented.encode(), token.encode())
 
 
 def acting_user(request: Request) -> str | None:
