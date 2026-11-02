@@ -28,7 +28,11 @@ ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 cd "$ROOT"
 
 step() { printf '\n==> %s\n' "$*"; }
-has_secret() { fly secrets list -a "$1" --json 2>/dev/null | grep -q "\"$2\""; }
+has_secret() {  # app name. Fly not answering must stop the deploy, never read as "not set" (CR-131). `exit` works here: no subshell.
+  local list
+  list="$(fly secrets list -a "$1" --json)" || { echo "Could not list secrets on $1; stopping" >&2; exit 1; }
+  grep -q "\"$2\"" <<<"$list"
+}
 cluster_id() {
   fly mpg list --org "$ORG" --json 2>/dev/null | python3 -c '
 import json, sys
@@ -102,6 +106,9 @@ if has_secret "$WEB" BASIC_AUTH_USERS || has_secret "$WEB" BASIC_AUTH_PASSWORD; 
 elif [ -n "${CI:-}" ]; then
   # A password generated on a CI runner would be lost with the runner; create it from your machine.
   echo "$WEB has no user logins. Run scripts/fly-deploy.sh locally once to create them."; exit 1
+elif [ -e .fly-credentials ]; then
+  # Logins were made from this machine, yet Fly lists none: don't replace them and lose the saved passwords (CR-131).
+  echo "$WEB lists no user logins, but .fly-credentials exists, so no new one was generated. Set them again from that file with scripts/fly-users.sh." >&2; exit 1
 else
   user="${BASIC_AUTH_USER:-underwriter1}"
   pass="$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)"
