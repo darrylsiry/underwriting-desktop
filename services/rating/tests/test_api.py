@@ -9,11 +9,12 @@ ELECTRICAL = {
     "residential_pct": 0, "subcontracted_pct": 10, "subcontractor_coi_required": True, "max_height_ft": 30,
     "reference": "sub-001",
 }
+ON_SEEDED_RATES = ELECTRICAL | {"rate_version_id": 1}   # 2026.1 whatever is active: test_rate_admin.py activates a newer version (CR-014)
 AS_TEST = {"x-uw-user": "test"}   # who is acting travels in a header (SEC-002)
 
 
 def test_rate_and_log(client):
-    res = client.post("/rate", json=ELECTRICAL, headers=AS_TEST)
+    res = client.post("/rate", json=ON_SEEDED_RATES, headers=AS_TEST)
     assert res.status_code == 200, res.text
     body = res.json()
     # 6.50 × 6,800 = 44,200 × 1.10 TX × 1.00 ILF × 0.93 ded × 1.10 height = 49,738.26
@@ -98,7 +99,7 @@ def test_bad_rating_id_is_422_not_500(client):
 
 
 def test_list_ratings_filters_by_reference(client):
-    client.post("/rate", json=ELECTRICAL | {"reference": "Q-2026-9999 v1"})
+    client.post("/rate", json=ON_SEEDED_RATES | {"reference": "Q-2026-9999 v1"})
     rows = client.get("/ratings", params={"reference_prefix": "Q-2026-9999"}).json()
     assert len(rows) == 1 and rows[0]["reference"] == "Q-2026-9999 v1" and rows[0]["total"]
     assert rows[0]["rate_version"] == "2026.1" and rows[0]["class_code"] == "92215"
