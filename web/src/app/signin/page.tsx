@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { loadUsers } from "@/lib/basic-auth";
+import { safeNextPath } from "@/lib/http";
 import { signedInUser } from "@/lib/user";
-import { safeNext, signInAction } from "./actions";
+import { signInAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ type Params = { next?: string; error?: string; username?: string; signedout?: st
 export default async function SignInPage({ searchParams }: { searchParams: Promise<Params> }) {
   const p = await searchParams;
   if (!loadUsers(process.env).size) redirect("/");          // no gate locally: nothing to sign in to
-  const next = await safeNext(p.next);
+  const next = safeNextPath(p.next);
   if (await signedInUser()) redirect(next);                   // already in
   return (
     <main className="flex min-h-[calc(100vh-1px)] items-center justify-center bg-slate-50 px-6 py-12">

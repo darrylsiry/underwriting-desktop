@@ -6,7 +6,25 @@
  */
 export function contentDisposition(filename: string, disposition: "inline" | "attachment"): string {
   const ascii = filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "") || "download";
-  return `${disposition}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+  // encodeURIComponent leaves these as they are, and RFC 8187 doesn't allow them in the value (CR-063).
+  const encoded = encodeURIComponent(filename).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `${disposition}; filename="${ascii}"; filename*=UTF-8''${encoded}`;
+}
+
+/**
+ * Where to go after signing in: a local path only, never another host or the sign-in page itself.
+ * Parsed, not prefix-checked, because a URL parser drops tabs and newlines and folds a backslash
+ * and "/./", so "/<tab>/evil.example" and "/.//evil.example" both end up as "//evil.example" (CR-116).
+ */
+export function safeNextPath(next: unknown): string {
+  const n = String(next ?? "");
+  if (!n.startsWith("/")) return "/";
+  try {
+    const u = new URL(n, "http://local");
+    return u.origin === "http://local" && !u.pathname.startsWith("//") && !u.pathname.startsWith("/signin") ? u.pathname + u.search + u.hash : "/";
+  } catch {
+    return "/";
+  }
 }
 
 /**

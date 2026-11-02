@@ -3,20 +3,14 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { checkPassword, loadUsers } from "@/lib/basic-auth";
-import { requestOrigin } from "@/lib/http";
+import { requestOrigin, safeNextPath } from "@/lib/http";
 import { recordLogin } from "@/lib/login-events";
 import { SESSION_COOKIE, SESSION_DAYS, sessionKey, signSession } from "@/lib/session";
-
-/** Where to go after signing in: a local path only ("/x", never "//x" or another host). */
-export async function safeNext(next: unknown): Promise<string> {
-  const n = String(next ?? "");
-  return n.startsWith("/") && !n.startsWith("//") && !n.startsWith("/\\") && !n.startsWith("/signin") ? n : "/";
-}
 
 export async function signInAction(form: FormData) {
   const name = String(form.get("username") ?? "").trim();
   const password = String(form.get("password") ?? "");
-  const next = await safeNext(form.get("next"));
+  const next = safeNextPath(form.get("next"));
   const users = loadUsers(process.env);
   if (!users.size) redirect("/");
   const h = await headers();
