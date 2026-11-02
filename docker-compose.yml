@@ -2,6 +2,7 @@
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: uw
       POSTGRES_PASSWORD: uw
@@ -10,12 +11,13 @@ services:
       - ./db/init:/docker-entrypoint-initdb.d:ro
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U uw"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U uw -d rating"]   # over TCP: the server the init scripts run under only listens on its socket
       interval: 2s
       retries: 30
 
   rating:
     build: ./services/rating
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://uw:uw@db:5432/rating
       DISPLAY_TZ: ${DISPLAY_TZ:-America/New_York}   # UX-006: the zone every on-screen timestamp is shown in
@@ -29,6 +31,7 @@ services:
 
   ingestion:
     build: ./services/ingestion
+    restart: unless-stopped
     environment:
       # The Claude Code cloud sandbox reserves ANTHROPIC_API_KEY; there the key is UW_ANTHROPIC_API_KEY.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-${UW_ANTHROPIC_API_KEY:-}}
@@ -42,6 +45,7 @@ services:
 
   web:
     build: ./web
+    restart: unless-stopped
     environment:
       CUSTOMER_DATABASE_URL: postgresql://uw:uw@db:5432/customer
       POLICY_DATABASE_URL: postgresql://uw:uw@db:5432/policy
