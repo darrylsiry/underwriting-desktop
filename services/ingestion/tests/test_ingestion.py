@@ -4,8 +4,8 @@ from email.message import EmailMessage
 import pytest
 from fastapi.testclient import TestClient
 
-from app import claude, pipeline
-from app.documents import load
+from app import acord, claude, pipeline
+from app.documents import Document, load
 from app.main import app
 from app.schema import FieldValue, NormalizeError, normalize
 from tests.conftest import SAMPLES, case_files, fillable_pdf
@@ -354,3 +354,30 @@ def test_document_method_says_who_actually_read_it(monkeypatch):
 
     monkeypatch.setattr(claude, "extract", fails)
     assert methods(pipeline.run(files, classes=[])) == ["form_field", "not_read"]
+
+
+def form_doc(**fields) -> Document:
+    return Document("app.pdf", "acord_application", "application/pdf", form_fields={"NamedInsured_FullName_A": "Acme LLC", **fields})
+
+
+def test_loss_row_without_a_date_is_named_in_a_warning():
+    """CR-123: a $150,000 open claim typed without a date used to vanish, firing no referral."""
+    _, losses, warnings = acord.extract(form_doc(
+        LossHistory_OccurrenceDescription_A="Scaffold fall", LossHistory_TotalIncurredAmount_A="$150,000",
+        LossHistory_ClaimStatusCode_A="Open"))
+    assert losses == []
+    assert warnings == ["app.pdf: loss row A has no date and was not read (Scaffold fall, $150,000)"]
+
+
+def test_loss_row_without_an_amount_is_kept_and_named_in_a_warning():
+    _, [loss], warnings = acord.extract(form_doc(
+        LossHistory_OccurrenceDate_B="03/18/2024", LossHistory_OccurrenceDescription_B="Trip"))
+    assert (loss.date, loss.incurred) == ("2024-03-18", 0)
+    assert warnings == ["app.pdf: loss row B has no amount and was read as $0 (03/18/2024, Trip)"]
+
+
+def test_blank_and_complete_loss_rows_warn_about_nothing():
+    _, [loss], warnings = acord.extract(form_doc(
+        LossHistory_OccurrenceDate_A="03/18/2024", LossHistory_OccurrenceDescription_A="Trip",
+        LossHistory_TotalIncurredAmount_A="$8,200", LossHistory_ClaimStatusCode_A="Closed"))
+    assert loss.incurred == 8200 and warnings == []
