@@ -69,6 +69,14 @@ test("inferred class and missing loss runs warn", () => {
   assert.deepEqual(codes({ ...c, inputs: { ...inputs, class_code: "91342" } }), ["warn:NO_LOSS_RUNS"]);
 });
 
+test("on a bound file any clearance counts; only a flag never cleared is since bind (CR-138)", () => {
+  const flag = { code: "HEIGHT", severity: "refer" as const, title: "Work at height", detail: "Maximum working height 85 ft (limit 50 ft)" };
+  const later = { by: "pat", at: "2026-11-02T00:00:00Z", note: "Cleared again at the new height", detail: "Maximum working height 95 ft (limit 50 ft)" };
+  assert.equal(clearanceStatus(flag, later), "stale");
+  assert.equal(clearanceStatus(flag, later, true), "cleared");
+  assert.equal(clearanceStatus(flag, undefined, true), "open");
+});
+
 test("a loss run nobody read is not a loss run on file (CR-147)", () => {
   const unread = ctx({ extraction: { fields: {}, documents: [{ filename: "losses.pdf", doc_type: "loss_run" as const, parent: null, method: "not_read" as const }] } });
   assert.deepEqual(codes(unread), ["warn:NO_LOSS_RUNS"]);

@@ -217,7 +217,7 @@ export async function clearReferral(sub: SubmissionRow, code: string, note: stri
     const flag = flagsFor(sub, ws).find((f) => f.code === code);
     if (!flag) throw new Error(`No ${code} flag applies to ${sub.reference}`);
     if (shownDetail && shownDetail !== flag.detail) {
-      throw new StaleWorksheetError(`${sub.reference} changed since you opened it, and "${flag.title}" now reads: ${flag.detail} Nothing was cleared: reload to see it, then clear it if it's still acceptable.`);
+      throw new StaleWorksheetError(`${sub.reference} changed since you opened it: "${flag.title}" now reads "${flag.detail}". Nothing was cleared. Reload to see it, then clear it if it's still acceptable.`);
     }
     if (note.trim().length < 10) throw new Error("Write a note explaining why this is acceptable");
     const clearance: Clearance = { by: actor, at: (at ?? new Date()).toISOString(), note: note.trim(), detail: flag.detail };

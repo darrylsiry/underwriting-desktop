@@ -47,9 +47,13 @@ export function isOpenLoss(status: string | null | undefined): boolean {
  * A clearance only covers the facts it was given for: if the flag's detail changed since
  * (height 55 ft -> 150 ft, receipts $15M -> $80M), the referral is open again.
  */
-export function clearanceStatus(flag: Flag, clearance: Clearance | undefined): "cleared" | "stale" | "open" {
+/**
+ * On a bound file any clearance counts. The quote couldn't be issued with the flag open, so one given for other
+ * facts means the worksheet moved on after that quote and was cleared again, replacing the note it was issued under (CR-138).
+ */
+export function clearanceStatus(flag: Flag, clearance: Clearance | undefined, bound = false): "cleared" | "stale" | "open" {
   if (!clearance) return "open";
-  return clearance.detail === flag.detail ? "cleared" : "stale";
+  return bound || clearance.detail === flag.detail ? "cleared" : "stale";
 }
 
 const ASSUMED_LABELS: { key: keyof typeof ASSUMED_INPUTS; text: string }[] = [

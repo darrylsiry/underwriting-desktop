@@ -96,7 +96,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
   // CR-138: a bound file's panel judges the terms that were bound, like the inputs beside it, not a worksheet edited after the quote.
   const panelFlags = boundQuote ? flagsFor(sub, { ...ws, rating_inputs: boundQuote.rating_inputs, schedule: boundQuote.schedule }) : flags;
   const refers = panelFlags.filter((f) => f.severity === "refer");
-  const openRefers = refers.filter((f) => clearanceStatus(f, ws.referral_clearances[f.code]) !== "cleared").length;
+  const openRefers = refers.filter((f) => clearanceStatus(f, ws.referral_clearances[f.code], !!policy) !== "cleared").length;
   const warns = panelFlags.length - refers.length;
   // A file can't bind with a referral open, so one that is unresolved on a bound file comes from a rule added or changed since.
   const unresolved = policy ? "since bind" : "open";
@@ -335,7 +335,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
               <ul className="divide-y divide-slate-100">
                 {panelFlags.map((f) => {
                   const clearance = ws.referral_clearances[f.code];
-                  const status = clearanceStatus(f, clearance);
+                  const status = clearanceStatus(f, clearance, !!policy);
                   return (
                     <li key={f.code} className="p-4 text-sm">
                       <div className="flex items-center gap-2">
@@ -349,6 +349,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                         // UX-017: who, when and why on one line.
                         <p className="mt-2 text-xs text-slate-500">
                           <span className="font-medium text-slate-700">{clearance.by}</span> · {when(clearance.at)}: “{clearance.note}”
+                          {clearance.detail && clearance.detail !== f.detail && <> That note is for “{clearance.detail}”. The worksheet history has the clearance this quote was issued under.</>}
                         </p>
                       )}
                       {status !== "cleared" && f.severity === "refer" && policy && (
