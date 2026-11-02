@@ -18,7 +18,7 @@
     <table>
       {% for n in nav %}
       <tr><td {% if n.key == section %}style="background:#eef2ff"{% endif %}>
-        <a href="?section={{ n.key }}" style="{% if n.key == section %}font-weight:600{% endif %}">{{ n.title }}</a>
+        <a href="/admin/versions/{{ version.id }}?section={{ n.key }}" style="{% if n.key == section %}font-weight:600{% endif %}">{{ n.title }}</a>
         {% if n.changes %}<span class="badge draft" style="float:right">{{ n.changes }} changed</span>{% endif %}
       </td></tr>
       {% endfor %}
@@ -47,6 +47,8 @@
               <input class="num {% if c.changed %}changed{% endif %}" name="{{ c.field }}" value="{{ c.value | num(c.fmt) }}"
                      aria-label="{{ r.label }} {{ {'base_rate': 'rate per $1,000', 'min_premium': 'minimum premium', 'value': 'factor'}.get(c.column, c.column) }}"
                      type="number" min="0.0001" step="any" inputmode="decimal" required>
+              {# CR-052: the save skips a cell left as it was, and refuses one changed from a value that has since moved #}
+              <input type="hidden" name="{{ c.field }}|was" value="{{ c.was }}">
             {% else %}{{ c.value | num(c.fmt) }}{% endif %}
             {% if c.changed %}<span class="was">was {{ c.base | num(c.fmt) }}</span>{% endif %}
           </td>

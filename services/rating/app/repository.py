@@ -1,8 +1,10 @@
 """Loads rate tables from the rating DB, records rating calls, and administers rate versions."""
 import re
-from dataclasses import dataclass
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from decimal import Decimal
 
+import psycopg
 from psycopg.types.json import Jsonb
 
 from app.db import pool
@@ -89,6 +91,8 @@ class Edit:
     kind: str                     # 'class' | 'factor' | 'parameter'
     ident: tuple[str, ...]        # (class_code,) | (factor, key) | (name,)
     values: dict[str, Decimal]    # column -> new value
+    # column -> what the user's page showed (CR-052). Empty for API edits, which name only what they change.
+    was: dict[str, Decimal] = field(default_factory=dict)
 
 
 # kind -> (table, identifying columns, editable columns)
@@ -96,6 +100,14 @@ EDITABLE = {
     "class": ("class_rates", ("class_code",), ("base_rate", "min_premium")),
     "factor": ("factors", ("factor", "key"), ("value",)),
     "parameter": ("parameters", ("name",), ("value",)),
+}
+
+# (kind, column) -> numeric(precision, scale) of that column, from migrations/001_schema.sql.
+COLUMN_SIZE = {
+    ("class", "base_rate"): (10, 4),
+    ("class", "min_premium"): (12, 2),
+    ("factor", "value"): (8, 4),
+    ("parameter", "value"): (12, 4),
 }
 
 
@@ -110,6 +122,48 @@ def _audit(conn, version_id: int, actor: str, action: str, entity=None, before=N
         (version_id, actor, action, entity, Jsonb(before) if before is not None else None,
          Jsonb(after) if after is not None else None, reason),
     )
+
+
+def _check_storable(edit: Edit, column: str, value: Decimal) -> None:
+    """Refuse a value its column can't hold exactly. Postgres would raise on one too large (CR-032) and
+    silently round one with too many decimals, leaving the audit naming a rate that never priced anything (CR-105)."""
+    precision, scale = COLUMN_SIZE[(edit.kind, column)]
+    what = f"{_entity(edit)}: {column.replace('_', ' ')}"
+    if not value.is_finite():
+        raise ValueError(f"{what} must be a number")
+    if value <= 0:
+        raise ValueError(f"{_entity(edit)}: values must be greater than zero")
+    limit = 10 ** (precision - scale)
+    if value >= limit:
+        raise ValueError(f"{what} must be below {limit:,}")
+    if round(value, scale) != value:
+        raise ValueError(f"{what} can have at most {scale} decimals")
+
+
+def _changes(edit: Edit, row: dict) -> dict[str, Decimal]:
+    """The columns this edit really changes. CR-052: a cell left as the page showed it is not an edit, whatever
+    the database holds now; a cell changed from a value that is no longer there is someone else's work."""
+    changes = {}
+    for column, value in edit.values.items():
+        was = edit.was.get(column)
+        if value == was or value == row[column]:
+            continue
+        if was is not None and was != row[column]:
+            raise ValueError(f"{_entity(edit)}: {column.replace('_', ' ')} was changed by someone else after this page"
+                             f" loaded (it is now {row[column]}). Nothing was saved: open the section again to see the"
+                             " current values.")
+        changes[column] = value
+    return changes
+
+
+@contextmanager
+def _transaction():
+    """One transaction. A value Postgres refuses as data (a NUL in a reason) is the caller's mistake, not a 500 (CR-032)."""
+    try:
+        with pool.connection() as conn:
+            yield conn
+    except psycopg.DataError as e:
+        raise ValueError(f"That can't be stored: {e}") from e
 
 
 def _lock_draft(conn, version_id: int) -> dict:
@@ -183,7 +237,7 @@ def create_draft(base_version_id: int, label: str, notes: str, actor: str) -> in
 
 def apply_edits(version_id: int, edits: list[Edit], actor: str, reason: str) -> int:
     """Apply edits to a draft in one transaction, auditing each changed row. Returns rows changed."""
-    with pool.connection() as conn:
+    with _transaction() as conn:
         _lock_draft(conn, version_id)
         changed = 0
         for edit in edits:
@@ -197,11 +251,11 @@ def apply_edits(version_id: int, edits: list[Edit], actor: str, reason: str) -> 
             ).fetchone()
             if row is None:
                 raise LookupError(f"No {_entity(edit)} in this version")
-            updates = {c: v for c, v in edit.values.items() if Decimal(v) != row[c]}
+            updates = _changes(edit, row)
             if not updates:
                 continue
-            if any(Decimal(v) <= 0 for v in updates.values()):
-                raise ValueError(f"{_entity(edit)}: values must be greater than zero")
+            for column, value in updates.items():
+                _check_storable(edit, column, value)
             if not reason.strip():
                 raise ValueError("A reason is required for rate changes")
             conn.execute(
@@ -209,7 +263,7 @@ def apply_edits(version_id: int, edits: list[Edit], actor: str, reason: str) -> 
                 (*updates.values(), version_id, *edit.ident),
             )
             _audit(conn, version_id, actor, f"update_{edit.kind}", _entity(edit),
-                   before={c: str(row[c]) for c in updates}, after={c: str(v) for c, v in updates.items()},
+                   before={c: str(row[c]) for c in updates}, after={c: f"{v:f}" for c, v in updates.items()},
                    reason=reason)
             changed += 1
     return changed

@@ -314,6 +314,11 @@ def version_context(request: Request, version_id: int, section: str, msg: str = 
     current = section_rows(rows, section)
     if compare_rows:
         with_base(current, section_rows(compare_rows, section))
+    for r in current:
+        for c in r["cells"]:
+            # CR-052: what the page shows now, sent back with the save. A failed save keeps the original,
+            # so retrying it can't turn a colleague's change in the meantime into an edit of ours.
+            c["was"] = (posted or {}).get(f"{c['field']}|was", c["value"])
     if posted:   # UX-001: show what was typed, flagged against the comparison version when it parses
         for r in current:
             for c in r["cells"]:
@@ -363,7 +368,7 @@ async def save_section(request: Request, version_id: int, section: str):
     edits: dict[tuple, repository.Edit] = {}
     try:
         for name, raw in posted.items():
-            kind, *ident, column = name.split("|")
+            kind, *ident, column = name.removesuffix("|was").split("|")
             if kind not in repository.EDITABLE:
                 continue
             if len(ident) != len(repository.EDITABLE[kind][1]):  # e.g. "class|a|b|base_rate"
@@ -372,7 +377,7 @@ async def save_section(request: Request, version_id: int, section: str):
             value = Decimal(raw.strip())
             if not value.is_finite():   # "Infinity"/"NaN" parse as Decimals but aren't rates
                 raise InvalidOperation
-            edit.values[column] = value
+            (edit.was if name.endswith("|was") else edit.values)[column] = value
         changed = await run_in_threadpool(repository.apply_edits, version_id, list(edits.values()), actor, reason)
     except InvalidOperation:
         return await again("Every value must be a number")
