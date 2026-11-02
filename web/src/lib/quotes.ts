@@ -1,3 +1,4 @@
+import { isUuid, paddedSeq } from "./text.ts";
 import { audit } from "./audit";
 import { policyDb } from "./db";
 import { renderQuotePdf } from "./quote-pdf";
@@ -44,14 +45,14 @@ export async function listQuotes(f: QuoteFilter = {}): Promise<QuoteRow[]> {
 }
 
 export async function getQuoteMemo(id: string) {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  if (!isUuid(id)) return null;
   const { rows } = await policyDb.query<{ quote_number: string; version: number; pdf: Buffer | null }>(
     "SELECT quote_number, version, memo_pdf AS pdf FROM quotes WHERE id = $1", [id]);
   return rows[0]?.pdf ? rows[0] as { quote_number: string; version: number; pdf: Buffer } : null;
 }
 
 export async function getQuotePdf(id: string) {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  if (!isUuid(id)) return null;
   const { rows } = await policyDb.query<{ quote_number: string; version: number; pdf: Buffer }>(
     "SELECT quote_number, version, pdf FROM quotes WHERE id = $1", [id]);
   return rows[0] ?? null;
@@ -84,7 +85,7 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
   if (previous?.status === "bound") throw new Error(`${previous.quote_number} is already bound; changes now need a policy endorsement`);
   const issuedAt = at ?? new Date();
   const quoteNumber = previous?.quote_number ?? (await policyDb.query<{ n: string }>(
-    "SELECT 'Q-' || $1 || '-' || lpad(nextval('quote_number_seq')::text, 4, '0') AS n", [String(issuedAt.getUTCFullYear())])).rows[0].n;
+    `SELECT 'Q-' || $1 || '-' || ${paddedSeq("quote_number_seq", 4)} AS n`, [String(issuedAt.getUTCFullYear())])).rows[0].n;
   const version = (previous?.version ?? 0) + 1;
 
   // Re-rated pinned to the rate version the worksheet shows, so the quote is exactly what the underwriter saw.
@@ -198,7 +199,7 @@ export type QuoteDetail = QuoteRow & {
 
 /** Everything frozen on a quote except the PDF bytes. */
 export async function getQuote(id: string): Promise<QuoteDetail | null> {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  if (!isUuid(id)) return null;
   const { rows } = await policyDb.query<QuoteDetail>(
     `SELECT ${COLUMNS}, rating_inputs, schedule, rating, terms, renewal_summary FROM quotes WHERE id = $1`, [id]);
   return rows[0] ?? null;

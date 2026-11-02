@@ -1,4 +1,4 @@
-import { plural } from "./text.ts";
+import { isUuid, paddedSeq, plural } from "./text.ts";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import { audit } from "./audit";
@@ -43,7 +43,7 @@ export async function listSubmissions(): Promise<SubmissionRow[]> {
 }
 
 export async function getSubmission(id: string): Promise<SubmissionRow | null> {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  if (!isUuid(id)) return null;
   const { rows } = await customerDb.query<SubmissionRow>("SELECT * FROM submissions WHERE id = $1", [id]);
   return rows[0] ?? null;
 }
@@ -56,11 +56,9 @@ export async function listDocuments(submissionId: string): Promise<DocumentRow[]
   return rows;
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export async function getDocument(submissionId: string, documentId: string) {
   // Both ids are path segments; anything that isn't a uuid is a 404, not a Postgres cast error.
-  if (!UUID.test(submissionId) || !UUID.test(documentId)) return null;
+  if (!isUuid(submissionId) || !isUuid(documentId)) return null;
   const { rows } = await customerDb.query<{ filename: string; content_type: string; content: Buffer }>(
     "SELECT filename, content_type, content FROM submission_documents WHERE submission_id = $1 AND id = $2",
     [submissionId, documentId],
@@ -104,7 +102,7 @@ export async function storeSubmission(
     await client.query("BEGIN");
     const { rows } = await client.query<{ id: string; reference: string }>(
       `INSERT INTO submissions (reference, applicant_name, data, extraction, received_by, inbox_folder, received_at)
-       VALUES ('SUB-' || lpad(nextval('submission_reference_seq')::text, 4, '0'), $1, $2, $3, $4, $5, coalesce($6, now()))
+       VALUES ('SUB-' || ${paddedSeq("submission_reference_seq", 4)}, $1, $2, $3, $4, $5, coalesce($6, now()))
        RETURNING id, reference`,
       [extraction.submission.applicant?.name ?? "", extraction.submission, extraction, actor, inboxFolder, at],
     );

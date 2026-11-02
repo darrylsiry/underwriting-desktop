@@ -1,4 +1,5 @@
 import { customerDb, policyDb } from "./db";
+import { isUuid } from "./text.ts";
 
 export type InsuredRow = { id: string; name: string; fein: string; state: string; created_at: Date };
 export type InsuredSummary = InsuredRow & { submissions: number; policies: number; written: number; open_subjectivities: number };
@@ -22,7 +23,7 @@ export async function listInsureds(): Promise<InsuredSummary[]> {
 }
 
 export async function getInsured(id: string): Promise<InsuredRow | null> {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  if (!isUuid(id)) return null;
   const { rows } = await customerDb.query<InsuredRow>("SELECT * FROM insureds WHERE id = $1", [id]);
   return rows[0] ?? null;
 }

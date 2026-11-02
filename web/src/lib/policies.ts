@@ -1,3 +1,4 @@
+import { isUuid } from "./text.ts";
 import { whenDate } from "./time.ts";
 import { audit } from "./audit";
 import { bindBlockers, policyNumbers, subjectivityStatus, type SubjectivityStatus } from "./bind-rules";
@@ -36,7 +37,7 @@ export type PolicyTerms = {
 };
 
 export async function getPolicy(id: string): Promise<(PolicyRow & PolicyTerms) | null> {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  if (!isUuid(id)) return null;
   const { rows } = await policyDb.query<PolicyRow & PolicyTerms>(
     `SELECT ${COLUMNS}, q.terms, q.rating_inputs FROM policies p JOIN quotes q ON q.id = p.quote_id WHERE p.id = $1`, [id]);
   return rows[0] ?? null;
@@ -55,7 +56,7 @@ export async function listPolicies(f: PolicyFilter = {}): Promise<PolicyRow[]> {
 }
 
 export async function getPolicyDocument(id: string, kind: "binder" | "policy") {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  if (!isUuid(id)) return null;
   const { rows } = await policyDb.query<{ filename: string; pdf: Buffer }>(
     kind === "binder"
       ? "SELECT binder_number || '.pdf' AS filename, binder_pdf AS pdf FROM policies WHERE id = $1"

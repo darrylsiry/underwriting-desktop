@@ -1,3 +1,4 @@
+import { isUuid, paddedSeq } from "./text.ts";
 import { whenDate } from "./time.ts";
 import { audit } from "./audit";
 import { customerDb, policyDb } from "./db";
@@ -25,7 +26,7 @@ export type BookPolicyRow = {
 };
 
 export async function getBookPolicy(id: string): Promise<BookPolicyRow | null> {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  if (!isUuid(id)) return null;
   const { rows } = await policyDb.query<BookPolicyRow>(
     `SELECT id, policy_number, insured_name, underwriter, class_code, class_description, states, home_state, producer,
             effective_date::text, expiration_date::text, premium, claims, incurred, open_claims, renewal_status,
@@ -68,7 +69,7 @@ type DesktopPolicyForRenewal = {
 };
 
 async function desktopPolicyForRenewal(id: string): Promise<DesktopPolicyForRenewal | null> {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  if (!isUuid(id)) return null;
   const { rows } = await policyDb.query<DesktopPolicyForRenewal>(
     `SELECT p.id, p.policy_number, p.insured_name, p.insured_id, p.submission_id, p.effective_date::text, p.expiration_date::text,
             p.premium, p.policy_fee, p.surplus_lines_tax, p.total, p.renewal_status, p.renewal_submission_id,
@@ -190,7 +191,7 @@ export async function startRenewal(source: "book" | "desktop", policyId: string,
     }
     reference = (await client.query<{ reference: string }>(
       `INSERT INTO submissions (id, reference, kind, renewal_of, status, applicant_name, data, extraction, received_by, insured_id, reviewed_by, reviewed_at)
-       VALUES ($1, 'SUB-' || lpad(nextval('submission_reference_seq')::text, 4, '0'), 'renewal', $2, 'accepted', $3, $4, $5, $6, $7, $6, now())
+       VALUES ($1, 'SUB-' || ${paddedSeq("submission_reference_seq", 4)}, 'renewal', $2, 'accepted', $3, $4, $5, $6, $7, $6, now())
        RETURNING reference`,
       [submissionId, exp!, exp!.insured_name, data, EMPTY_EXTRACTION(data), actor, insuredId],
     )).rows[0].reference;
