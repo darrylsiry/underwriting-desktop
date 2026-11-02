@@ -1,20 +1,25 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { AUTH_USER_HEADER, authenticate, loadUsers } from "@/lib/basic-auth";
-import { SESSION_COOKIE, sessionKey, verifySession } from "@/lib/session";
+import { loadUsers } from "@/lib/basic-auth";
+import { forwardedHeaders, PUBLIC_PATH, requestUser } from "@/lib/gate";
+import { SESSION_COOKIE, sessionKey } from "@/lib/session";
 
 // The sign-in gate for the public deployment, on when BASIC_AUTH_USERS (or BASIC_AUTH_PASSWORD) is
 // set as a Fly secret; off locally. A browser signs in on /signin and carries a signed session
 // cookie; other systems and agents send the same logins with HTTP Basic (the API and the MCP
 // endpoint document that). Node runtime so secrets are read at runtime and compared in constant time.
-export const config = { runtime: "nodejs", matcher: "/((?!_next/static|_next/image|favicon.ico|api/live|signin|signout|request-access).*)" };
+// Runs on every path but static files: the public pages stay open (lib/gate.ts), but only here can
+// a client-sent identity header be removed (CR-099).
+export const config = { runtime: "nodejs", matcher: "/((?!_next/static|_next/image|favicon.ico).*)" };
 
 const CHALLENGE = { "WWW-Authenticate": 'Basic realm="Underwriting Desktop", charset="UTF-8"' };
 
 export function middleware(req: NextRequest) {
-  // Only this middleware may say who is signed in: drop anything the client sent under that name.
-  const headers = new Headers(req.headers);
-  headers.delete(AUTH_USER_HEADER);
   const users = loadUsers(process.env);
+  const name = users.size ? requestUser(req.cookies.get(SESSION_COOKIE)?.value, req.headers.get("authorization"), users, sessionKey(process.env)) : null;
+  // Only this middleware may say who is signed in: anything the client sent under that name is dropped.
+  const headers = forwardedHeaders(req.headers, name);
+  const path = req.nextUrl.pathname;
+  if (PUBLIC_PATH.test(path)) return NextResponse.next({ request: { headers } });
   if (!users.size) {
     // Fail closed on the public deployment (SEC-001): with no logins configured, Fly would otherwise
     // serve the whole desk to anyone. Locally (no FLY_APP_NAME) the gate stays off as before;
@@ -26,14 +31,8 @@ export function middleware(req: NextRequest) {
     return NextResponse.next({ request: { headers } });
   }
 
-  const name = verifySession(req.cookies.get(SESSION_COOKIE)?.value, sessionKey(process.env))
-    ?? authenticate(req.headers.get("authorization"), users);
-  if (name) {
-    headers.set(AUTH_USER_HEADER, name);
-    return NextResponse.next({ request: { headers } });
-  }
+  if (name) return NextResponse.next({ request: { headers } });
 
-  const path = req.nextUrl.pathname;
   if (path.startsWith("/api/")) {
     // API and MCP callers: a JSON error and the Basic challenge their clients understand.
     return NextResponse.json(

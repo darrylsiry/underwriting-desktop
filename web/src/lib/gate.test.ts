@@ -1,0 +1,40 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { test } from "node:test";
+import { AUTH_USER_HEADER, loadUsers } from "./basic-auth.ts";
+import { forwardedHeaders, PUBLIC_PATH, requestUser } from "./gate.ts";
+import { signSession } from "./session.ts";
+
+const KEY = "test-signing-key";
+const users = loadUsers({ BASIC_AUTH_USERS: "underwriter1:one,underwriter2:two" });
+const cookie = (name: string) => signSession(name, KEY, new Date(Date.now() + 60_000));
+const basic = (s: string) => `Basic ${Buffer.from(s).toString("base64")}`;
+
+test("the public paths are exact: a look-alike route is gated (CR-099)", () => {
+  for (const p of ["/signin", "/signin/", "/signout", "/request-access", "/request-access/", "/api/live"]) assert.ok(PUBLIC_PATH.test(p), p);
+  for (const p of ["/", "/signin-help", "/signinx", "/signout2", "/request-access-admin", "/api/live2", "/api/livestock", "/api/gl", "/x/signin", "/SIGNIN"]) assert.ok(!PUBLIC_PATH.test(p), p);
+});
+
+test("the middleware runs on every path except static files, so it can strip the identity header there (CR-099)", () => {
+  const matcher = /matcher:\s*"([^"]+)"/.exec(readFileSync("src/middleware.ts", "utf8"))?.[1] ?? "";
+  assert.ok(matcher);
+  for (const word of ["signin", "signout", "request-access", "api/live"]) assert.ok(!matcher.includes(word), `the matcher must not skip ${word}`);
+});
+
+test("a client can't name itself: only a verified user reaches the app (CR-099)", () => {
+  const spoofed = new Headers({ [AUTH_USER_HEADER]: "underwriter1", accept: "text/html" });
+  assert.equal(forwardedHeaders(spoofed, null).get(AUTH_USER_HEADER), null);
+  assert.equal(forwardedHeaders(spoofed, null).get("accept"), "text/html");
+  assert.equal(forwardedHeaders(spoofed, "underwriter2").get(AUTH_USER_HEADER), "underwriter2");
+  assert.equal(spoofed.get(AUTH_USER_HEADER), "underwriter1", "the original is left alone");
+});
+
+test("a session counts only while its login exists (CR-083)", () => {
+  assert.equal(requestUser(cookie("underwriter1"), null, users, KEY), "underwriter1");
+  assert.equal(requestUser(cookie("removed"), null, users, KEY), null);
+  assert.equal(requestUser(cookie("removed"), basic("underwriter2:two"), users, KEY), "underwriter2", "Basic still works beside a stale cookie");
+  assert.equal(requestUser(undefined, basic("underwriter1:one"), users, KEY), "underwriter1");
+  assert.equal(requestUser(undefined, basic("underwriter1:wrong"), users, KEY), null);
+  assert.equal(requestUser("tampered.value", null, users, KEY), null);
+  assert.equal(requestUser(cookie("underwriter1"), null, users, "another-key"), null);
+});
