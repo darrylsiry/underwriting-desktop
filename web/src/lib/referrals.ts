@@ -1,6 +1,7 @@
 // Referral rules: deterministic checks an underwriter's authority depends on.
 // "refer" flags must be cleared with a written note before quoting; "warn" flags
 // are things to look at. Pure module (no database) so node:test can load it.
+import { moneyExact as money } from "./format.ts";   // exact: a flag's detail must stay as it was, or its clearance lapses
 import type { ExpiringPolicy } from "./renewal-compare";
 import type { Extraction, Loss, SubmissionData } from "./submission";
 import { ASSUMED_INPUTS, type Clearance, type RatingInputs, type ScheduleItem } from "./worksheet.ts";   // .ts: worksheet.ts is pure too
@@ -17,7 +18,6 @@ export type ReferralContext = {
   expiringLosses?: ExpiringPolicy["losses"];
 };
 
-const money = (n: number) => `$${n.toLocaleString("en-US")}`;
 
 /** Class codes that are roofing: the referral below, the quote's endorsement and the synthetic book all read this (CR-061). */
 export const ROOFING_CLASSES: readonly string[] = ["98677"];

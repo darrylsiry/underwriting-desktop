@@ -1,3 +1,4 @@
+import { moneyExact as money } from "./format";
 import { audit } from "./audit";
 import { customerDb, policyDb } from "./db";
 import { memoFor } from "./memo-for";
@@ -225,5 +226,5 @@ async function bridgeRating(sub: SubmissionRow, inputs: RatingInputs, schedule: 
   }
 }
 
-export const money = (v: string | number) => `$${Number(v).toLocaleString("en-US")}`;
+export { money };
 const formatPct = (n: number) => `${n > 0 ? "+" : ""}${n}%`;

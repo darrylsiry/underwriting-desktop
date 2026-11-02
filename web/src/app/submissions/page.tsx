@@ -1,3 +1,4 @@
+import { moneyExact } from "@/lib/format";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { when } from "@/components/ui";
@@ -80,7 +81,7 @@ export default async function SubmissionsPage({ searchParams }: { searchParams: 
                 <td className="px-4 py-2 font-medium">{s.applicant_name || <span className="text-slate-500">unnamed</span>}</td>
                 <td className="px-4 py-2 font-mono text-xs">{String(getPath(s.data, "operations.class_code") ?? "") || "—"}</td>
                 <td className="px-4 py-2">{(getPath(s.data, "operations.states") as string[] | null)?.join(", ") || "—"}</td>
-                <td className="px-4 py-2 text-right tabular-nums">{receipts ? `$${Number(receipts).toLocaleString("en-US")}` : "—"}</td>
+                <td className="px-4 py-2 text-right tabular-nums">{receipts ? moneyExact(receipts as string | number) : "—"}</td>
                 <td className="px-4 py-2 text-xs">
                   {/* UX-038: the next step follows the stage; a bound file's next step is its policy. */}
                   {st.key === "bound" && st.href ? <Link href={st.href} className="text-indigo-600 hover:underline">Policy →</Link>

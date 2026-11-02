@@ -1,4 +1,5 @@
 // Where a submission stands, in the words the workbench and the desk use (UX-005). Pure module for node:test.
+import { money as usd } from "./format.ts";
 
 export type StageKey = "review" | "unrated" | "referred" | "ready" | "quoted" | "bound";
 
@@ -12,7 +13,6 @@ export type StageInput = {
   policy: { id?: string; policy_number: string } | null;
 };
 
-const usd = (v: number | string) => `$${Math.round(Number(v)).toLocaleString("en-US")}`;
 
 export function stageOf(x: StageInput): Stage {
   if (x.policy) return { key: "bound", label: `Bound ${x.policy.policy_number}`, tone: "emerald", ...(x.policy.id ? { href: `/policies/${x.policy.id}` } : {}) };

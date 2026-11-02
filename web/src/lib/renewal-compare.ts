@@ -2,6 +2,7 @@ import { whenDate } from "./time.ts";
 // Comparing an expiring policy with its renewing terms: which rating variables changed, which rate
 // factors changed, and how the premium change splits between the two. Pure module (type-only
 // imports) so node:test can load it; the memo PDF and the comparison page both render from this.
+import { money, moneySigned as signed } from "./format.ts";
 import type { ProducerFields } from "./quote-terms";
 import type { RatingInputs, ScheduleItem } from "./worksheet";
 import type { Rating } from "./worksheets";
@@ -55,8 +56,7 @@ export type Comparison = {
   reasons: { terms: string[]; schedule: string[]; rates: string[] };
 };
 
-export const money = (n: number) => `${n < 0 ? "-" : ""}$${Math.round(Math.abs(n)).toLocaleString("en-US")}`;
-export const signed = (n: number) => `${n >= 0 ? "+" : "-"}$${Math.round(Math.abs(n)).toLocaleString("en-US")}`;
+export { money, signed };
 export const pct = (from: number, to: number): number | null => (from ? Math.round(((to - from) / from) * 1000) / 10 : null);
 export const pctText = (p: number | null) => (p === null ? "" : `${p >= 0 ? "+" : ""}${p}%`);
 

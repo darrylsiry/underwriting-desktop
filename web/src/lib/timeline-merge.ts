@@ -1,5 +1,6 @@
 // One audit timeline from three sources: UW Desktop events (policy.audit_events), rate-table
 // changes (rating service) and rating calls (rating service). Pure module for node:test.
+import { money as dollars } from "./format.ts";
 import { DISPLAY_TIME_ZONE, when, whenDate } from "./time.ts";
 
 export type Source = "desktop" | "rate_admin" | "rating";
@@ -34,7 +35,7 @@ export type RatingRow = {
 };
 
 const iso = (d: Date | string) => (d instanceof Date ? d.toISOString() : new Date(d).toISOString());
-const money = (v: string | null) => (v == null ? "?" : `$${Math.round(Number(v)).toLocaleString("en-US")}`);
+const money = (v: string | null) => (v == null ? "?" : dollars(v));
 
 /**
  * CR-074: when the database wrote a row, if that isn't when the row says it happened (a minute's

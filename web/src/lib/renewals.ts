@@ -1,3 +1,4 @@
+import { money } from "./format";
 import { isUuid, paddedSeq } from "./text.ts";
 import { whenDate } from "./time.ts";
 import type { PoolClient } from "pg";
@@ -199,7 +200,7 @@ export async function startRenewal(source: "book" | "desktop", policyId: string,
     }
 
     const correlationId = crypto.randomUUID();
-    const premium = `$${Math.round(exp!.premium).toLocaleString("en-US")}`;
+    const premium = money(exp!.premium);
     const events: AuditEvent[] = [
       ...(insuredCreated ? [{
         actor, action: "insured.created", entityType: "insured" as const, entityId: insuredId,

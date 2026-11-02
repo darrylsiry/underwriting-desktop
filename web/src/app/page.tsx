@@ -1,3 +1,4 @@
+import { money as usd, moneyShort as usdShort } from "@/lib/format";
 import Link from "next/link";
 import { Suspense } from "react";
 import { DaysChip, when, whenDate } from "@/components/ui";
@@ -9,8 +10,6 @@ import { currentUser } from "@/lib/user";
 
 export const dynamic = "force-dynamic";
 
-const usd = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
-const usdShort = (n: number) => (n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)}M` : n >= 10_000 ? `$${Math.round(n / 1000)}K` : usd(n));
 const pct = (x: number | null) => (x === null ? "—" : `${Math.round(x * 100)}%`);
 
 const TASK_KIND: Record<Task["kind"], string> = {

@@ -1,3 +1,4 @@
+import { money } from "@/lib/format";
 import type { Chip } from "@/lib/worksheet";
 
 // UX-003: one look for the commercial / worksheet chip pair on the workbench and the renewal comparison.
@@ -23,7 +24,6 @@ export function StatusChips({ chips }: { chips: { commercial: Chip | null; works
 export function QuoteDriftNotice({ quote, changes, newTotal }: {
   quote: { quote_number: string; version: number; total: string | number }; changes: { label: string; from: string; to: string }[]; newTotal: string | number | null;
 }) {
-  const money = (v: string | number) => `$${Math.round(Number(v)).toLocaleString("en-US")}`;
   const v = `${quote.quote_number} v${quote.version}`;
   return (
     <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" role="status">

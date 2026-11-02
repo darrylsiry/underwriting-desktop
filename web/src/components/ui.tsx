@@ -32,7 +32,7 @@ export function RowLink({ href, children }: { href: string; children: React.Reac
   return <Link href={href} className="text-indigo-600 hover:underline">{children}</Link>;
 }
 
-export const money = (v: string | number) => `$${Math.round(Number(v)).toLocaleString("en-US")}`;
+export { money } from "@/lib/format";
 
 /** Days-left chip: the number always carries the meaning, color only reinforces it. */
 export function DaysChip({ days }: { days: number }) {

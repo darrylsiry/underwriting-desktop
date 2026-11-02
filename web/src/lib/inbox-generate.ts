@@ -3,6 +3,7 @@
 // loss run, a cover email, a supplemental questionnaire) in the same mix as the curated samples,
 // so an audience never finds the inbox empty. Filesystem and pdf-lib only, no database, so
 // node:test can drive it against a temp folder.
+import { money as dollars } from "./format.ts";
 import fs from "node:fs";
 import path from "node:path";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFForm, type PDFPage } from "pdf-lib";
@@ -21,7 +22,7 @@ type Case = {
 
 // ---- value formatting (how a broker types them; what ingestion's ACORD reader parses) ----------
 
-const money = (v: unknown) => (v === null || v === undefined || v === "" ? "" : `$${Math.round(Number(v)).toLocaleString("en-US")}`);
+const money = (v: unknown) => (v === null || v === undefined || v === "" ? "" : dollars(v as string | number));
 const usDate = (iso: unknown) => { if (!iso) return ""; const [y, m, d] = String(iso).split("-"); return `${m}/${d}/${y}`; };
 const yn = (v: unknown) => (v === null || v === undefined ? "" : v ? "Y" : "N");
 const pct = (v: unknown) => (v === null || v === undefined ? "" : `${v}%`);

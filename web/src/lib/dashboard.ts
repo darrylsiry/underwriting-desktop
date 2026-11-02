@@ -1,3 +1,4 @@
+import { money } from "./format.ts";
 import { plural } from "./text.ts";
 export { plural };
 import { RENEWAL_WINDOW_DAYS, daysUntil, summarizeBook } from "./book-metrics.ts";
@@ -135,7 +136,7 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     if (q.status !== "issued") continue;
     const left = daysUntil(q.valid_until, today);
     tasks.push({ kind: "bind", title: `${left < 0 ? "Expired quote" : "Chase bind order"}: ${q.insured_name}`,
-      detail: `${q.quote_number} v${q.version} · $${Math.round(q.total).toLocaleString("en-US")} · ${left < 0 ? `expired ${plural(-left, "day")} ago` : `valid for ${left} more day${left === 1 ? "" : "s"}`}`,
+      detail: `${q.quote_number} v${q.version} · ${money(q.total)} · ${left < 0 ? `expired ${plural(-left, "day")} ago` : `valid for ${left} more day${left === 1 ? "" : "s"}`}`,
       href: `/quotes/${q.id}`, due: q.valid_until, urgency: left });
   }
   for (const p of policies.rows) {

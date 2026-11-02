@@ -1,3 +1,4 @@
+import { moneyCents as money } from "@/lib/format";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AutoDownload } from "@/components/auto-download";
@@ -27,7 +28,6 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
   return { title: `Accounting · ${q.batch ? `batch ${q.batch}` : month}` };
 }
 
-const money = (n: number | string) => `$${Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const amount = (n: number | string) => (Number(n) === 0 ? "" : money(n));
 // UX-006: clock times through the shared `when` (one display zone, zone named); posting dates and periods stay on GL_TIME_ZONE.
 const TYPES = Object.keys(TRANSACTION_LABEL) as TransactionType[];

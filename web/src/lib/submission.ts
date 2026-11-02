@@ -1,5 +1,6 @@
 // The canonical submission schema (see samples/README.md and the ingestion
 // service's app/schema.py) plus helpers for the intake review screen.
+import { moneyExact } from "./format.ts";
 import { isIsoDate } from "./time.ts";
 
 export type FieldType = "str" | "state" | "states" | "int" | "money" | "pct" | "bool" | "date";
@@ -183,7 +184,7 @@ export function openAttention(path: string, value: Value, meta: FieldMeta | unde
 
 export function formatValue(type: FieldType, v: Value): string {
   if (isEmpty(v)) return "—";
-  if (type === "money") return `$${Number(v).toLocaleString("en-US")}`;
+  if (type === "money") return moneyExact(v as string | number);
   if (type === "pct") return `${v}%`;
   return toInput(type, v);
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { moneyExact } from "@/lib/format";
 import { useEffect, useRef, useState } from "react";
 import { FIELD_DEFS } from "@/lib/submission";
 
@@ -35,7 +36,7 @@ const STAGES: Record<string, string> = {
 /** Money gets thousands separators; ZIPs, class codes and years stay as written. */
 const fmtValue = (path: string | undefined, v: unknown) => {
   const s = Array.isArray(v) ? v.join(", ") : String(v ?? "");
-  return TYPES[path ?? ""] === "money" && /^\d+$/.test(s) ? `$${Number(s).toLocaleString("en-US")}` : s;
+  return TYPES[path ?? ""] === "money" && /^\d+$/.test(s) ? moneyExact(s) : s;
 };
 
 function confidenceClass(c: number) {

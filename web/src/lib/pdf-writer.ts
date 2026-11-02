@@ -2,6 +2,7 @@
 // pdf-lib's standard Helvetica: headings, label/value rows, wrapped paragraphs,
 // page breaks with a footer on every page.
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { money } from "./format.ts";
 
 export const PAGE = { w: 612, h: 792, margin: 54 };
 export const INK = rgb(0.06, 0.09, 0.16);
@@ -9,7 +10,7 @@ export const MUTED = rgb(0.39, 0.45, 0.55);
 export const RULE = rgb(0.85, 0.88, 0.92);
 export const ACCENT = rgb(0.31, 0.27, 0.9);
 
-export const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
+export { money };
 export const usDate = (iso: string) => {
   const [y, m, d] = iso.split("-");
   return `${m}/${d}/${y}`;

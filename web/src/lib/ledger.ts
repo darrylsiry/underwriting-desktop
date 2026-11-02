@@ -1,3 +1,4 @@
+import { money } from "./format";
 import { paddedSeq, plural } from "./text.ts";
 import type { PoolClient } from "pg";
 import { audit } from "./audit";
@@ -226,7 +227,7 @@ export async function pushLedger(f: LedgerFilter, format: ExportFormat, actor: s
     await audit([{
       actor, action: "gl.exported", entityType: "ledger", entityId: batch,
       summary: `Sub-ledger pushed to the GL as ${format.toUpperCase()} (${batch}): ${rows.length} lines in ${t.journals} journals, `
-        + `$${Math.round(t.debit).toLocaleString("en-US")} debits, ${range}${f.type ? `, ${TRANSACTION_LABEL[f.type]} only` : ""}; ${plural(fresh, "line")} newly marked as pushed`,
+        + `${money(t.debit)} debits, ${range}${f.type ? `, ${TRANSACTION_LABEL[f.type]} only` : ""}; ${plural(fresh, "line")} newly marked as pushed`,
       after: { format, from: f.from, to: f.to, type: f.type || null, lines: rows.length, journals: t.journals, debit: t.debit, credit: t.credit, newly_stamped: fresh },
     }], client);
     await client.query("COMMIT");
