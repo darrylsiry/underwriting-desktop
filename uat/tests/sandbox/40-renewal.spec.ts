@@ -61,7 +61,8 @@ test.describe.serial("renewal", () => {
 
   test("a prior-system policy renews too, from its underwriter's book", async ({ browser, baseURL }) => {
     // The book is per underwriter: sign in as one who owns prior-system policies (a sandbox-only login).
-    const ctx = await browser.newContext({ baseURL });
+    // Signed out first: a signed-in visitor to /signin goes straight on to the desk (CR-099).
+    const ctx = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
     const page = await ctx.newPage();
     await signIn(page, "underwriter2", "uat-sandbox-pass-uw2");
     await page.goto("/book?due=120");
