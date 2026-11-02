@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { DaysChip, when, whenDate } from "@/components/ui";
 import { LOSS_RATIO_BASIS, lossRatio } from "@/lib/book-metrics";
 import { daysUntil, loadDashboard, plural, RENEWAL_WINDOW_DAYS, type Task } from "@/lib/dashboard";
@@ -40,9 +41,27 @@ function Tile({ label, value, sub, href }: { label: string; value: string; sub: 
   );
 }
 
+/** Live probes, behind Suspense: the desk shows at once, and a stopped service only leaves this panel waiting, briefly (CR-085). */
+const DESK_PROBE_MS = 3_000;
+
+async function SystemStatus() {
+  const components = await systemHealth({ serviceTimeoutMs: DESK_PROBE_MS });
+  return (
+    <ul className="divide-y divide-slate-100 text-sm">
+      {components.map((c) => (
+        <li key={c.name} className="flex items-center gap-2 px-4 py-2" title={c.detail}>
+          <span className={`h-2 w-2 shrink-0 rounded-full ${c.ok ? "bg-emerald-500" : c.timedOut ? "bg-amber-500" : "bg-rose-500"}`} />
+          <span className="font-medium">{c.name}</span>
+          <span className="ml-auto truncate text-xs text-slate-500">{c.ok ? "ok" : c.timedOut ? "no answer" : "down"}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default async function Home() {
   const user = await currentUser();
-  const [d, components] = await Promise.all([loadDashboard(user), systemHealth()]);
+  const d = await loadDashboard(user);
   const k = d.kpis;
   const maxClass = Math.max(1, ...d.premiumByClass.map((c) => c.premium));
   const todayLabel = new Date(`${d.today}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
@@ -203,15 +222,9 @@ export default async function Home() {
             <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">System status</h2>
             <a href="/api/health" className="text-xs text-slate-500 hover:underline">JSON</a>
           </div>
-          <ul className="divide-y divide-slate-100 text-sm">
-            {components.map((c) => (
-              <li key={c.name} className="flex items-center gap-2 px-4 py-2" title={c.detail}>
-                <span className={`h-2 w-2 shrink-0 rounded-full ${c.ok ? "bg-emerald-500" : "bg-rose-500"}`} />
-                <span className="font-medium">{c.name}</span>
-                <span className="ml-auto truncate text-xs text-slate-500">{c.ok ? "ok" : "down"}</span>
-              </li>
-            ))}
-          </ul>
+          <Suspense fallback={<p className="px-4 py-3 text-sm text-slate-500">Checking…</p>}>
+            <SystemStatus />
+          </Suspense>
         </section>
       </div>
     </main>

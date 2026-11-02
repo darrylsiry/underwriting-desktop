@@ -7,7 +7,7 @@ import { listInbox } from "./inbox";
 import { missingForRating, type SubmissionRow } from "./submissions";
 import { stageOf, type Stage } from "./stage";
 import { todayIso, whenDate } from "./time";
-import { activeRateVersion, readiness, type WorksheetRow } from "./worksheets";
+import { readiness, recentRateVersion, type WorksheetRow } from "./worksheets";
 
 // Everything the home page shows for one underwriter. An underwriter owns the submissions they
 // picked up (received_by), and through them the quotes and policies written in the UW Desktop;
@@ -77,7 +77,7 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     policyDb.query<{ occurred_at: Date; action: string; summary: string }>(
       "SELECT occurred_at, action, summary FROM audit_events WHERE actor = $1 ORDER BY occurred_at DESC, id DESC LIMIT 8", [user]),
     listInbox(),
-    activeRateVersion(),
+    recentRateVersion(),
   ]);
 
   // Every unexpired policy: prior-system ones plus those written here, in force or still to start.
@@ -193,7 +193,7 @@ export async function submissionStages(subs: SubmissionRow[]): Promise<Map<strin
     policyDb.query<{ submission_id: string; version: number; total: string; status: string }>(
       "SELECT DISTINCT ON (submission_id) submission_id, version, total, status FROM quotes WHERE submission_id = ANY($1) ORDER BY submission_id, version DESC", [ids]),
     policyDb.query<{ id: string; submission_id: string; policy_number: string }>("SELECT id, submission_id, policy_number FROM policies WHERE submission_id = ANY($1)", [ids]),
-    activeRateVersion(),
+    recentRateVersion(),
   ]);
   const ws = new Map(worksheets.rows.map((w) => [w.submission_id, w]));
   const quote = new Map(quotes.rows.map((q) => [q.submission_id, q]));
