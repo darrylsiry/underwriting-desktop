@@ -1,4 +1,5 @@
 import json
+from email.message import EmailMessage
 
 import pytest
 from fastapi.testclient import TestClient
@@ -245,3 +246,48 @@ def test_claim_status_is_normalized_for_the_referral_rules(raw, expected):
     from app.schema import Loss, normalize_status
     assert normalize_status(raw) == expected
     assert Loss("2025-01-01", "x", 1, raw, "lr.pdf").status == expected
+
+
+def broker_email(*attachments) -> bytes:
+    """A broker email with a text body and the given (filename, bytes) or EmailMessage attachments."""
+    msg = EmailMessage()
+    msg["From"], msg["Subject"] = "broker@example.com", "New submission"
+    msg.set_content("Gross receipts are $650,000.")
+    for item in attachments:
+        if isinstance(item, EmailMessage):
+            msg.add_attachment(item)
+        else:
+            msg.add_attachment(item[1], maintype="application", subtype="octet-stream", filename=item[0])
+    return msg.as_bytes()
+
+
+def test_forwarded_and_corrupt_attachments_cost_only_themselves():
+    """CR-029: the body and the good attachment survive a forwarded part and a corrupt PDF, each named in a warning."""
+    forwarded = EmailMessage()
+    forwarded["Subject"] = "Fwd: older thread"
+    forwarded.set_content("see below")
+    good = fillable_pdf("LOSS RUN", {})
+    eml = broker_email(("loss-run.pdf", good), forwarded, ("broken.pdf", b"%PDF-1.4 not really"))
+
+    result = pipeline.run([("broker.eml", eml)], classes=[], use_claude=False)
+
+    assert [(d["filename"], d["doc_type"]) for d in result["documents"]] == [
+        ("broker.eml", "broker_email"), ("loss-run.pdf", "loss_run")]
+    assert any(w.startswith("broker.eml: attachment message/rfc822 was not read") for w in result["warnings"])
+    assert any(w.startswith("broker.eml: attachment broken.pdf could not be read") for w in result["warnings"])
+    body = load("broker.eml", eml)[0]
+    assert "$650,000" in body.text
+
+
+def test_unsupported_email_attachment_is_named_in_a_warning():
+    """CR-117: an Excel loss run on an email used to vanish silently; uploaded directly it always warned."""
+    eml = broker_email(("losses.xlsx", b"PK\x03\x04"))
+    result = pipeline.run([("broker.eml", eml)], classes=[], use_claude=False)
+    assert "broker.eml: attachment losses.xlsx was not read (unsupported file type)" in result["warnings"]
+    assert [d["doc_type"] for d in result["documents"]] == ["broker_email"]
+
+
+def test_clean_email_has_no_attachment_warnings():
+    [(name, data)] = case_files("04")
+    result = pipeline.run([(name, data)], classes=[], use_claude=False)
+    assert not any("attachment" in w for w in result["warnings"])

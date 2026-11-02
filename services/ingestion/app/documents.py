@@ -27,6 +27,7 @@ class Document:
     text: str = ""               # plain text (emails, Word files)
     form_fields: dict[str, str] = field(default_factory=dict)
     parent: str | None = None    # email this came attached to
+    skipped: list[str] = field(default_factory=list)  # an email's attachments that weren't read, as warnings
 
     @property
     def has_form_fields(self) -> bool:
@@ -76,14 +77,21 @@ def _email(filename: str, data: bytes) -> list[Document]:
     msg = email.message_from_bytes(data, policy=policy.default)
     body = msg.get_body(preferencelist=("plain", "html"))
     header = "\n".join(f"{h}: {msg[h]}" for h in ("From", "To", "Date", "Subject") if msg[h])
-    docs = [Document(filename, "broker_email", "text/plain",
-                     text=f"{header}\n\n{body.get_content() if body else ''}")]
+    main = Document(filename, "broker_email", "text/plain", text=f"{header}\n\n{body.get_content() if body else ''}")
+    docs = [main]
     for part in msg.iter_attachments():
         name = part.get_filename() or "attachment"
         try:
-            docs += load(name, part.get_payload(decode=True), parent=filename)
+            payload = part.get_payload(decode=True)
+            if payload is None:  # a forwarded message (message/rfc822) holds parts, not bytes
+                main.skipped.append(f"{filename}: attachment {part.get_filename() or part.get_content_type()} "
+                                    "was not read (a forwarded message); ask the broker to send its files directly")
+                continue
+            docs += load(name, payload, parent=filename)
         except UnsupportedDocument:
-            continue
+            main.skipped.append(f"{filename}: attachment {name} was not read (unsupported file type)")
+        except Exception as e:  # corrupt attachment: report it, keep the body and the other attachments
+            main.skipped.append(f"{filename}: attachment {name} could not be read ({e})")
     return docs
 
 

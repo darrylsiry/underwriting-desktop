@@ -28,6 +28,7 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
                        else "no form fields, Claude will read it")
                 where = f" (attached to {d.parent})" if d.parent else ""
                 step("classify", f"{d.filename}{where}: {DOC_TYPE_LABELS.get(d.doc_type, d.doc_type)}; {how}")
+                warnings += d.skipped
         except UnsupportedDocument as e:
             warnings.append(str(e))
         except Exception as e:  # corrupt file: report it, keep going with the rest
