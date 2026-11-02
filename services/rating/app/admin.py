@@ -393,6 +393,6 @@ async def activate_version(request: Request, version_id: int):
     actor = form_actor(request, form)
     try:
         await run_in_threadpool(repository.activate, version_id, actor, str(form.get("reason", "")))
-    except (LookupError, ValueError, repository.VersionNotEditable) as e:
+    except (LookupError, ValueError, repository.VersionNotEditable, repository.VersionConflict) as e:
         return redirect(f"/admin/versions/{version_id}", error=str(e))
     return remember_actor(request, redirect(f"/admin/versions/{version_id}", msg="Activated. New ratings now use this version."), actor)

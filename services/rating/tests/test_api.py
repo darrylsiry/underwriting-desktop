@@ -86,6 +86,19 @@ def test_list_ratings_filters_by_reference(client):
     assert client.get("/ratings", params={"limit": 0}).status_code == 422
 
 
+def test_reference_prefix_is_one_reference_and_not_its_lookalikes(client):
+    """CR-045: SUB-7000 also matched SUB-70001, and % and _ acted as wildcards."""
+    for reference in ("SUB-7000", "SUB-7000 (expiring rates)", "SUB-70001", "SUBX7000"):
+        client.post("/rate", json=ELECTRICAL | {"reference": reference})
+
+    def found(prefix):
+        return {r["reference"] for r in client.get("/ratings", params={"reference_prefix": prefix}).json()}
+
+    assert found("SUB-7000") == {"SUB-7000", "SUB-7000 (expiring rates)"}
+    assert found("SUB-700") == set()
+    assert found("SUB_7000") == set() and found("SUB-70%") == set()
+
+
 def test_ratings_feed_honours_a_day_range(client):
     """UX-044: since/until are wall-clock bounds in the given zone; a range in the future returns nothing,
     an open range returns the rows, and a malformed bound is refused."""

@@ -4,6 +4,12 @@ Runs after test_rate_admin.py, whose tests count versions, and makes its own dra
 2026.1 (territory FL 1.25, TX 1.10).
 """
 import itertools
+import os
+import re
+import threading
+import time
+
+import psycopg
 
 from tests.test_rate_admin import AS_PAT, edit
 
@@ -148,3 +154,95 @@ def test_a_name_outside_latin1_saves_and_is_remembered(client):
         assert 'name="actor" value="Łukasz"' in client.get(f"/admin/versions/{vid}").text
     finally:
         client.cookies.clear()
+
+
+def wait_until_blocked(sessions: int) -> None:
+    """Wait for `sessions` database sessions to be waiting on a lock, so a race is run rather than hoped for."""
+    with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as conn:
+        for _ in range(200):
+            waiting = conn.execute("SELECT count(*) FROM pg_stat_activity"
+                                   " WHERE datname = current_database() AND wait_event_type = 'Lock'").fetchone()[0]
+            if waiting >= sessions:
+                return
+            time.sleep(0.05)
+    raise AssertionError(f"Expected {sessions} blocked sessions, saw {waiting}")
+
+
+def test_parallel_activations_give_one_winner_and_one_conflict(client):
+    """CR-036: two drafts activated together: one 200, one 409, one active version."""
+    drafts = [new_draft(client), new_draft(client)]
+    statuses = {}
+
+    def activate(version_id):
+        statuses[version_id] = client.post(f"/rate-versions/{version_id}/activate", json={"reason": "race"}).status_code
+
+    threads = [threading.Thread(target=activate, args=(d,)) for d in drafts]
+    with psycopg.connect(os.environ["DATABASE_URL"]) as blocker:
+        blocker.execute("SELECT 1 FROM rate_versions WHERE status = 'active' FOR UPDATE")   # both get this far together
+        for t in threads:
+            t.start()
+        wait_until_blocked(2)
+    for t in threads:
+        t.join(10)
+
+    assert sorted(statuses.values()) == [200, 409]
+    versions = {v["id"]: v["status"] for v in client.get("/rate-versions").json()}
+    assert sum(s == "active" for s in versions.values()) == 1
+    loser = next(d for d in drafts if statuses[d] == 409)
+    assert versions[loser] == "draft"   # still there to activate on purpose
+
+
+def test_the_loser_of_an_activation_race_sees_a_message(client, monkeypatch):
+    """CR-036, the form's path: a lost race comes back as the page's error, not a 500."""
+    from app import repository
+
+    def lost(*_):
+        raise repository.VersionConflict("Another version was activated at the same moment.")
+    monkeypatch.setattr(repository, "activate", lost)
+    res = client.post(f"/admin/versions/{new_draft(client)}/activate", data={"reason": "race", "actor": "sam"}, follow_redirects=False)
+    assert res.status_code == 303 and "error=Another+version" in res.headers["location"]
+
+
+def test_parallel_drafts_with_one_label_are_a_duplicate_not_a_500(client):
+    """CR-036: the second create waits for the first to commit, then gets the ordinary duplicate answer."""
+    answer = []
+    thread = threading.Thread(target=lambda: answer.append(
+        client.post("/rate-versions", json={"label": "race.label", "based_on": 1}, headers=AS_PAT)))
+    with psycopg.connect(os.environ["DATABASE_URL"]) as other:
+        other.execute("INSERT INTO rate_versions (label, status, created_by) VALUES ('race.label', 'draft', 'other')")
+        thread.start()
+        wait_until_blocked(1)
+    thread.join(10)
+    assert answer[0].status_code == 422 and "already exists" in answer[0].json()["detail"]
+
+
+def test_read_endpoints_declare_what_they_return(client):
+    """CR-064: the web tier reads these shapes, so a renamed column fails here rather than as `undefined` on a page."""
+    paths = client.get("/openapi.json").json()["paths"]
+    for route in ("/health", "/ratings/{rating_id}", "/ratings", "/rate-versions", "/rate-versions/{version_id}", "/rate-table-audit"):
+        assert paths[route]["get"]["responses"]["200"]["content"]["application/json"]["schema"], route
+
+    health = client.get("/health").json()
+    assert set(health) == {"service", "status", "database", "active_rate_version"}
+
+    version = client.get("/rate-versions").json()[0]
+    assert set(version) == {"id", "label", "status", "notes", "created_by", "created_at", "activated_at", "based_on"}
+
+    tables = client.get("/rate-versions/1").json()
+    assert set(tables) == set(version) | {"classes", "factors", "parameters"}
+    assert set(tables["classes"][0]) == {"class_code", "description", "base_rate", "min_premium"}
+    assert set(tables["factors"][0]) == {"factor", "kind", "key", "value", "label"}
+    assert set(tables["parameters"][0]) == {"name", "value", "label"}
+    assert all(isinstance(r["value"], float) for r in tables["factors"] + tables["parameters"])   # numbers, as before
+    assert isinstance(tables["classes"][0]["base_rate"], float) and isinstance(tables["classes"][0]["min_premium"], float)
+
+    audit = client.get("/rate-table-audit", params={"limit": 1}).json()[0]
+    assert set(audit) == {"id", "version_id", "version_label", "actor", "action", "entity", "before", "after", "reason", "created_at"}
+
+    summary = client.get("/ratings", params={"limit": 1}).json()[0]
+    assert set(summary) == {"id", "created_at", "requested_by", "reference", "rate_version", "class_code", "premium", "total"}
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T.+", summary["created_at"])
+
+    entry = client.get(f"/ratings/{summary['id']}").json()
+    assert set(entry) == {"id", "version_id", "reference", "requested_by", "request", "result", "created_at"}
+    assert entry["request"]["class_code"] == summary["class_code"]

@@ -57,7 +57,9 @@ def get_rating(rating_id: str) -> dict | None:
 
 def list_ratings(reference_prefix: str | None = None, limit: int = 200,
                  since: str | None = None, until: str | None = None, tz: str = "UTC") -> list[dict]:
-    """Recent rating calls (summary only) for the audit timeline; optionally only one reference family.
+    """Recent rating calls (summary only) for the audit timeline; optionally only one reference family: that
+    exact reference, or it followed by a space ("Q-2026-0001 v2", "SUB-0001 (expiring rates)"). CR-045: taken
+    literally, so SUB-1000 isn't SUB-10000 and % or _ match only themselves.
     UX-044: `since`/`until` are wall-clock timestamps in `tz`, so a day range chosen in the desktop's zone
     reaches rows older than the newest `limit`."""
     with pool.connection() as conn:
@@ -65,7 +67,7 @@ def list_ratings(reference_prefix: str | None = None, limit: int = 200,
             "SELECT r.id, r.created_at, r.requested_by, r.reference, v.label AS rate_version,"
             " r.request->>'class_code' AS class_code, r.result->>'premium' AS premium, r.result->>'total' AS total"
             " FROM rating_log r JOIN rate_versions v ON v.id = r.version_id"
-            " WHERE (%(p)s::text IS NULL OR r.reference LIKE %(p)s || '%%')"
+            " WHERE (%(p)s::text IS NULL OR r.reference = %(p)s OR starts_with(r.reference, %(p)s || ' '))"
             " AND (%(since)s::timestamp IS NULL OR r.created_at >= (%(since)s::timestamp AT TIME ZONE %(tz)s))"
             " AND (%(until)s::timestamp IS NULL OR r.created_at <= (%(until)s::timestamp AT TIME ZONE %(tz)s))"
             " ORDER BY r.created_at DESC LIMIT %(n)s",
@@ -84,6 +86,10 @@ def list_versions() -> list[dict]:
 
 class VersionNotEditable(Exception):
     """The version isn't a draft (active and retired versions are frozen)."""
+
+
+class VersionConflict(Exception):
+    """Another change got there first, so this one wasn't made (CR-036)."""
 
 
 @dataclass
@@ -208,17 +214,19 @@ def create_draft(base_version_id: int, label: str, notes: str, actor: str) -> in
     """Copy every row of `base_version_id` into a new draft version."""
     if not LABEL_RE.match(label):
         raise ValueError("A version label is 1-32 letters, digits, dots, dashes or underscores (e.g. 2026.2)")
-    with pool.connection() as conn:
+    with _transaction() as conn:
         base = conn.execute("SELECT id, label FROM rate_versions WHERE id = %s", (base_version_id,)).fetchone()
         if base is None:
             raise LookupError(f"Rate version {base_version_id} not found")
-        if conn.execute("SELECT 1 FROM rate_versions WHERE label = %s", (label,)).fetchone():
-            raise ValueError(f"A version labelled {label} already exists")
-        new_id = conn.execute(
+        # CR-036: no check first, which two creates could both pass. The second waits here for the first to commit.
+        new = conn.execute(
             "INSERT INTO rate_versions (label, status, notes, created_by, based_on)"
-            " VALUES (%s, 'draft', %s, %s, %s) RETURNING id",
+            " VALUES (%s, 'draft', %s, %s, %s) ON CONFLICT (label) DO NOTHING RETURNING id",
             (label, notes, actor, base_version_id),
-        ).fetchone()["id"]
+        ).fetchone()
+        if new is None:
+            raise ValueError(f"A version labelled {label} already exists")
+        new_id = new["id"]
         conn.execute(
             "INSERT INTO class_rates (version_id, class_code, description, base_rate, min_premium)"
             " SELECT %s, class_code, description, base_rate, min_premium"
@@ -273,14 +281,20 @@ def activate(version_id: int, actor: str, reason: str) -> None:
     """Make a draft the active version and retire the previously active one."""
     if not reason.strip():
         raise ValueError("A reason is required to activate a version")
-    with pool.connection() as conn:
-        version = _lock_draft(conn, version_id)
-        previous = conn.execute(
-            "UPDATE rate_versions SET status = 'retired' WHERE status = 'active' RETURNING label").fetchone()
-        conn.execute("UPDATE rate_versions SET status = 'active', activated_at = now() WHERE id = %s", (version_id,))
-        _audit(conn, version_id, actor, "activate",
-               before={"active": previous["label"] if previous else None}, after={"active": version["label"]},
-               reason=reason)
+    try:
+        with _transaction() as conn:
+            version = _lock_draft(conn, version_id)
+            # CR-036: this waits for an activation in progress, and finds nothing to retire if that one commits.
+            # one_active_version then refuses ours below, so of two at once exactly one wins.
+            previous = conn.execute(
+                "UPDATE rate_versions SET status = 'retired' WHERE status = 'active' RETURNING label").fetchone()
+            conn.execute("UPDATE rate_versions SET status = 'active', activated_at = now() WHERE id = %s", (version_id,))
+            _audit(conn, version_id, actor, "activate",
+                   before={"active": previous["label"] if previous else None}, after={"active": version["label"]},
+                   reason=reason)
+    except psycopg.errors.UniqueViolation as e:
+        raise VersionConflict("Another version was activated at the same moment, so this one wasn't. "
+                              "Check which version is active, then activate this one again if it's still wanted.") from e
 
 
 def audit_trail(version_id: int | None = None, limit: int = 200,
