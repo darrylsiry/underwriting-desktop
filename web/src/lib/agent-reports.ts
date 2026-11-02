@@ -37,6 +37,13 @@ export function agentOfId(id: string): AgentKey | null {
   return AGENTS.find((a) => a.prefix === prefix)?.key ?? null;
 }
 
+/** Which agent wrote a report, from its title ("# Code review: …"), or null when it isn't one. */
+export function agentOfReport(markdown: string): AgentKey | null {
+  const title = /^# (.+)$/m.exec(markdown)?.[1] ?? "";
+  return /^code review\b/i.test(title) ? "code" : /^security review\b/i.test(title) ? "security"
+    : /^ux review\b/i.test(title) ? "ux" : /^uat report\b/i.test(title) ? "uat" : null;
+}
+
 export type ItemStatus = "open" | "resolved" | "declined" | "accepted";
 
 export type ReportItem = {

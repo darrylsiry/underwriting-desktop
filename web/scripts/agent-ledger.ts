@@ -1,21 +1,24 @@
 // Build docs/AGENT_LEDGER.json: the review agents' history for the App Tests page (step 26).
 //
-//   node web/scripts/agent-ledger.ts           rebuild from git plus the reports on disk, write if changed
-//   node web/scripts/agent-ledger.ts --check   print the totals, write nothing
+//   node web/scripts/agent-ledger.ts              rebuild from git plus the reports on disk, write if changed
+//   node web/scripts/agent-ledger.ts --check      print the totals, write nothing
+//   node web/scripts/agent-ledger.ts report.md …  also fold earlier reports kept elsewhere: a run that
+//                                                 was overwritten before the ledger saw it
 //
 // Each agent's report is overwritten by its next run, so history is folded together here in time
 // order: every committed version of each report, every commit whose message cites a finding ID,
 // then the reports on disk. It starts from the stored ledger, which remembers runs that were never
-// committed. scripts/agent-ledger-hook.sh runs it whenever a review command writes its report
+// committed. scripts/agent-ledger-hook.sh runs it as soon as a report is newer than the ledger
 // (the PostToolUse hook in .claude/settings.json), so no run is lost. Rebuilding is idempotent.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { foldCommit, foldReport, readLedger, type CommitInfo, type Ledger } from "../src/lib/agent-ledger.ts";
-import { AGENTS, parseReport } from "../src/lib/agent-reports.ts";
+import { AGENTS, agentOfReport, parseReport } from "../src/lib/agent-reports.ts";
 
 const check = process.argv.includes("--check");
+const earlierReports = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
 const docs = path.join(root, "docs");
@@ -48,6 +51,19 @@ for (const rec of git("log", "--reverse", `--format=%H${US}%aI${US}%s${US}%b${RS
   events.push({ at: c.date, order: 0, apply: (l) => foldCommit(l, c) });
 }
 
+// Earlier reports named on the command line, dated by the run each records.
+for (const file of earlierReports) {
+  const text = readFileSync(file, "utf8");
+  const agent = agentOfReport(text);
+  const r = agent && parseReport(agent, text, timeZone);
+  if (!r?.runAt) {
+    console.error(`agent ledger: ${file} is not a review report with a Run line; nothing written`);
+    process.exit(1);
+  }
+  const at = r.runAt;
+  events.push({ at, order: 1, apply: (l) => foldReport(l, r, at) });
+}
+
 // The reports on disk, usually newer than anything committed.
 for (const a of AGENTS) {
   const file = path.join(docs, a.file);
@@ -77,6 +93,9 @@ const summary = `${items.length} findings (${count("open")} open, ${count("resol
 
 if (check) console.log(`agent ledger: ${summary}${changed ? " (would update)" : " (no change)"}`);
 else if (changed) {
-  writeFileSync(ledgerPath, body(new Date().toISOString()));
+  // Whole or not at all: the page reads this file on every request, and two sessions may rebuild at once.
+  const tmp = `${ledgerPath}.${process.pid}.tmp`;
+  writeFileSync(tmp, body(new Date().toISOString()));
+  renameSync(tmp, ledgerPath);
   console.log(`agent ledger: ${summary} → docs/AGENT_LEDGER.json`);
 } else console.log(`agent ledger: ${summary} (no change)`);

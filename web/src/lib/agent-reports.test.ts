@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { activityView, emptyLedger, foldCommit, foldReport, readLedger } from "./agent-ledger.ts";
-import { agentOfId, citedIds, commitTitles, localDate, parseReport, zonedInstant } from "./agent-reports.ts";
+import { agentOfId, agentOfReport, citedIds, commitTitles, localDate, parseReport, zonedInstant } from "./agent-reports.ts";
 
 // Fixtures in the shapes the agents write (trimmed from real runs).
 const codeRun = (run: string, body: string) => `# Code review: Underwriting Desktop
@@ -150,6 +150,14 @@ test("unrecognised or empty reports read as empty, never throw", () => {
   assert.equal(r.run, null);
   assert.equal(r.items.length, 0);
   assert.equal(parseReport("code", "").runAt, null);
+});
+
+test("a report says which agent wrote it, even with a harness note above its title", () => {
+  assert.deepEqual([CODE_1, UX, UAT].map(agentOfReport), ["code", "ux", "uat"]);
+  assert.equal(agentOfReport("# Security review: Underwriting Desktop\n"), "security");
+  assert.equal(agentOfReport("[harness: note]\n\n# Code review: Underwriting Desktop\n"), "code");
+  assert.equal(agentOfReport("# Something else\n"), null);
+  assert.equal(agentOfReport("no title"), null);
 });
 
 test("wall-clock times convert in the display zone, either side of the DST change", () => {
