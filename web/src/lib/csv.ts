@@ -8,8 +8,8 @@ function cell(v: Cell): string {
   if (v instanceof Date) return v.toISOString();
   if (typeof v === "number") return Number.isInteger(v) ? String(v) : v.toFixed(2);
   if (typeof v === "boolean") return v ? "true" : "false";
-  // A leading =, + or @ would be run as a formula by some spreadsheets; neutralize it.
-  const s = /^[=+@]/.test(v) ? `'${v}` : v;
+  // A leading =, +, -, @, tab or CR can be run as a formula by spreadsheets; neutralize it (CR-071). Numbers don't come through here.
+  const s = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
