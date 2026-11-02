@@ -386,6 +386,13 @@ def test_loss_row_without_an_amount_is_kept_and_named_in_a_warning():
     assert warnings == ["app.pdf: loss row B has no amount and was read as $0 (03/18/2024, Trip)"]
 
 
+def test_blank_and_complete_loss_rows_warn_about_nothing():
+    _, [loss], warnings = acord.extract(form_doc(
+        LossHistory_OccurrenceDate_A="03/18/2024", LossHistory_OccurrenceDescription_A="Trip",
+        LossHistory_TotalIncurredAmount_A="$8,200", LossHistory_ClaimStatusCode_A="Closed"))
+    assert loss.incurred == 8200 and warnings == []
+
+
 def app_and_loss_run() -> list[Document]:
     return [Document("app.pdf", "acord_application", "application/pdf"), Document("lr.pdf", "loss_run", "application/pdf")]
 
@@ -418,7 +425,7 @@ def test_without_a_loss_run_rows_at_different_amounts_all_survive():
 
 def test_differing_claim_amounts_reach_the_result_and_the_live_feed(monkeypatch):
     fake_claude(monkeypatch, losses=[Loss("2024-03-18", "Trip", 11846, "Closed", "lone-star-electric-loss-run.pdf")])
-    files = [(name, data) for name, data in case_files("01")]
+    files = case_files("01")
     events = []
     result = pipeline.run(files, classes=[], emit=events.append)
     assert [l["incurred"] for l in result["submission"]["loss_history"]] == [11846]
@@ -701,10 +708,3 @@ def test_sample_generator_writes_every_form_field_the_reader_reads():
     source = (SAMPLES / "generate.py").read_text()
     names = [*acord.FIELD_MAP, *(f"LossHistory_{column}_" for column in acord.LOSS_COLUMNS)]
     assert [name for name in names if name not in source] == []
-
-
-def test_blank_and_complete_loss_rows_warn_about_nothing():
-    _, [loss], warnings = acord.extract(form_doc(
-        LossHistory_OccurrenceDate_A="03/18/2024", LossHistory_OccurrenceDescription_A="Trip",
-        LossHistory_TotalIncurredAmount_A="$8,200", LossHistory_ClaimStatusCode_A="Closed"))
-    assert loss.incurred == 8200 and warnings == []
