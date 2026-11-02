@@ -1,11 +1,11 @@
 import { audit } from "./audit";
-import { customerDb } from "./db";
-import { clearanceStatus, referralFlags, type Flag } from "./referrals";
+import { customerDb, policyDb } from "./db";
+import { clearanceAudit, clearanceStatus, referralFlags, type Flag } from "./referrals";
 import { RATING_TIMEOUT_MS, RatingServiceError, rateOn, rateVersionId } from "./rating-api";
 import { RATING_SERVICE_URL } from "./services";
 import type { SubmissionRow } from "./submissions";
 import {
-  INPUT_DEFS, inputsFromSubmission, inputsHash, parseInputs, parseSchedule, scheduleKey, scheduleMod, scheduleTotal,
+  INPUT_DEFS, StaleWorksheetError, inputsFromSubmission, inputsHash, parseInputs, parseSchedule, scheduleKey, scheduleMod, scheduleTotal, worksheetFingerprint,
   type Clearance, type RatingInputs, type ScheduleItem,
 } from "./worksheet";
 
@@ -56,7 +56,7 @@ export async function openWorksheet(sub: SubmissionRow, actor: string, at: Date 
 export function flagsFor(sub: SubmissionRow, ws: WorksheetRow): Flag[] {
   return referralFlags({
     data: sub.data, extraction: sub.extraction, correctedFields: sub.corrected_fields,
-    inputs: ws.rating_inputs, schedule: ws.schedule,
+    inputs: ws.rating_inputs, schedule: ws.schedule, expiringLosses: sub.renewal_of?.losses,
   });
 }
 
@@ -89,40 +89,68 @@ function rate(sub: SubmissionRow, inputs: RatingInputs, schedule: ScheduleItem[]
   return rateOn(inputs, schedule, null, sub.reference, actor, at);
 }
 
-/** Save inputs and schedule (auditing each change), then rate. Inputs stay saved even if rating fails. `at` back-dates it (seeded history). */
+/** UX-037 / CR-100: a bound file's worksheet is the rating that was bound. Every change to it stops here, stale tabs included. */
+async function refuseIfBound(sub: SubmissionRow): Promise<void> {
+  const { rows } = await policyDb.query<{ policy_number: string }>("SELECT policy_number FROM policies WHERE submission_id = $1 LIMIT 1", [sub.id]);
+  if (rows[0]) throw new Error(`Bound as ${rows[0].policy_number}; the worksheet can't change. Changes to a bound policy need an endorsement.`);
+}
+
+/**
+ * Save inputs and schedule (auditing each change), then rate. Inputs stay saved even if rating fails. `at` back-dates it (seeded history).
+ * `form._fingerprint` is the worksheet the form showed: if someone saved since, refuse rather than revert their edits (CR-017).
+ */
 export async function saveAndRate(sub: SubmissionRow, form: Record<string, string>, actor: string, at: Date | null = null): Promise<Rating> {
-  const ws = await openWorksheet(sub, actor, at);
+  await refuseIfBound(sub);
+  await openWorksheet(sub, actor, at);
   const inputs = parseInputs(form);
   const schedule = parseSchedule(form);
   const correlationId = crypto.randomUUID();
 
-  const changed = INPUT_DEFS.filter((d) => JSON.stringify(ws.rating_inputs[d.key]) !== JSON.stringify(inputs[d.key]));
-  const scheduleChanged = scheduleKey(ws.schedule) !== scheduleKey(schedule);
-  await customerDb.query(
-    "UPDATE worksheets SET rating_inputs = $2, schedule = $3, updated_by = $4, updated_at = coalesce($5, now()) WHERE submission_id = $1",
-    [sub.id, inputs, JSON.stringify(schedule), actor, at],
-  );
-  await audit(
-    ...changed.map((d) => ({
-      actor, action: "worksheet.input_changed", entityType: "submission" as const, entityId: sub.id,
-      summary: `${sub.reference}: ${d.label} changed`,
-      before: { [d.key]: ws.rating_inputs[d.key] }, after: { [d.key]: inputs[d.key] }, correlationId, occurredAt: at ?? undefined,
-    })),
-    ...(scheduleChanged ? [{
-      actor, action: "worksheet.schedule_changed", entityType: "submission" as const, entityId: sub.id,
-      // UX-045: say what changed; a reason-only edit is not a percentage change.
-      summary: scheduleTotal(ws.schedule) === scheduleTotal(schedule) && scheduleKey(ws.schedule.map((i) => ({ ...i, rationale: "" }))) === scheduleKey(schedule.map((i) => ({ ...i, rationale: "" })))
-        ? `${sub.reference}: schedule reasons updated (total ${formatPct(scheduleTotal(schedule))})`
-        : `${sub.reference}: schedule ${formatPct(scheduleTotal(ws.schedule))} → ${formatPct(scheduleTotal(schedule))}`,
-      before: ws.schedule, after: schedule, correlationId, occurredAt: at ?? undefined,
-    }] : []),
-  );
+  const client = await customerDb.connect();
+  try {
+    await client.query("BEGIN");
+    const ws = (await client.query<Pick<WorksheetRow, "rating_inputs" | "schedule">>(
+      "SELECT rating_inputs, schedule FROM worksheets WHERE submission_id = $1 FOR UPDATE", [sub.id])).rows[0];
+    if (form._fingerprint && form._fingerprint !== worksheetFingerprint(ws.rating_inputs, ws.schedule)) {
+      throw new StaleWorksheetError(`${sub.reference} was changed by someone else since you opened it. Nothing was saved: reload to see their edits, then save again.`);
+    }
+    const changed = INPUT_DEFS.filter((d) => JSON.stringify(ws.rating_inputs[d.key]) !== JSON.stringify(inputs[d.key]));
+    const scheduleChanged = scheduleKey(ws.schedule) !== scheduleKey(schedule);
+    await client.query(
+      "UPDATE worksheets SET rating_inputs = $2, schedule = $3, updated_by = $4, updated_at = coalesce($5, now()) WHERE submission_id = $1",
+      [sub.id, inputs, JSON.stringify(schedule), actor, at],
+    );
+    // The audit trail is in the other database, so it can't share this transaction. Written under the lock and
+    // before COMMIT: its "before" values are the ones replaced, and a failure leaves no unaudited change.
+    await audit(
+      ...changed.map((d) => ({
+        actor, action: "worksheet.input_changed", entityType: "submission" as const, entityId: sub.id,
+        summary: `${sub.reference}: ${d.label} changed`,
+        before: { [d.key]: ws.rating_inputs[d.key] }, after: { [d.key]: inputs[d.key] }, correlationId, occurredAt: at ?? undefined,
+      })),
+      ...(scheduleChanged ? [{
+        actor, action: "worksheet.schedule_changed", entityType: "submission" as const, entityId: sub.id,
+        // UX-045: say what changed; a reason-only edit is not a percentage change.
+        summary: scheduleTotal(ws.schedule) === scheduleTotal(schedule) && scheduleKey(ws.schedule.map((i) => ({ ...i, rationale: "" }))) === scheduleKey(schedule.map((i) => ({ ...i, rationale: "" })))
+          ? `${sub.reference}: schedule reasons updated (total ${formatPct(scheduleTotal(schedule))})`
+          : `${sub.reference}: schedule ${formatPct(scheduleTotal(ws.schedule))} → ${formatPct(scheduleTotal(schedule))}`,
+        before: ws.schedule, after: schedule, correlationId, occurredAt: at ?? undefined,
+      }] : []),
+    );
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 
   return rateAndStore(sub, inputs, schedule, actor, correlationId, at);
 }
 
 /** Rate the worksheet as saved (no input changes): used when rate tables moved or from the renewal comparison. */
 export async function rerateWorksheet(sub: SubmissionRow, actor: string): Promise<Rating> {
+  await refuseIfBound(sub);
   const ws = await openWorksheet(sub, actor);
   return rateAndStore(sub, ws.rating_inputs, ws.schedule, actor, crypto.randomUUID());
 }
@@ -154,6 +182,7 @@ async function rateAndStore(sub: SubmissionRow, inputs: RatingInputs, schedule: 
 
 /** Record why a referral is acceptable. Only flags that currently apply can be cleared. `at` back-dates it (seeded history). */
 export async function clearReferral(sub: SubmissionRow, code: string, note: string, actor: string, at: Date | null = null): Promise<void> {
+  await refuseIfBound(sub);
   const ws = await openWorksheet(sub, actor, at);
   const flag = flagsFor(sub, ws).find((f) => f.code === code);
   if (!flag) throw new Error(`No ${code} flag applies to ${sub.reference}`);
@@ -165,7 +194,7 @@ export async function clearReferral(sub: SubmissionRow, code: string, note: stri
   );
   await audit({
     actor, action: "referral.cleared", entityType: "submission", entityId: sub.id,
-    summary: `${sub.reference}: referral "${flag.title}" cleared`, before: flag, after: clearance, occurredAt: at ?? undefined,
+    summary: `${sub.reference}: referral "${flag.title}" cleared`, ...clearanceAudit(flag, clearance), occurredAt: at ?? undefined,
   });
 }
 
@@ -180,8 +209,11 @@ async function bridgeRating(sub: SubmissionRow, inputs: RatingInputs, schedule: 
   try {
     const versionId = await rateVersionId(exp.rate_version);
     return versionId ? await rateOn(inputs, schedule, versionId, `${sub.reference} (expiring rates)`   /* UX-031: the summary adds "on <version>" itself */, actor) : null;
-  } catch {
-    return null;
+  } catch (err) {
+    // Only the inputs being refused on that version means it "couldn't be rated on". A service that is down
+    // says nothing about the version, and that explanation would be frozen into the memo (CR-067).
+    if (err instanceof RatingServiceError && err.rejectedInputs) return null;
+    throw err;
   }
 }
 

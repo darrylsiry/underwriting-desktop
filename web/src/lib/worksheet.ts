@@ -52,6 +52,14 @@ export const INPUT_DEFS: { key: keyof RatingInputs; label: string; kind: "text" 
 
 const num = (v: unknown, fallback: number) => (typeof v === "number" && Number.isFinite(v) ? v : fallback);
 
+/** The worksheet changed since this form was rendered. */
+export class StaleWorksheetError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StaleWorksheetError";
+  }
+}
+
 /** A validation error that names the form field it is about, so the form can show it under that input (UX-001). */
 export class FieldError extends Error {
   readonly field: string;   // a plain property: node's strip-only TS mode (the tests) has no parameter properties
@@ -62,7 +70,13 @@ export class FieldError extends Error {
   }
 }
 
-/** Seed rating inputs from the reviewed submission; unknowns get neutral defaults. */
+/**
+ * What the worksheet assumes for an operations input the broker never stated. Each is the
+ * lowest-rated band rather than a neutral value, so `referralFlags` warns while one is in use (CR-112).
+ */
+export const ASSUMED_INPUTS = { max_height_ft: 0, subcontracted_pct: 0, residential_pct: 0, subcontractor_coi_required: true } as const;
+
+/** Seed rating inputs from the reviewed submission; unknowns get the assumptions above. */
 export function inputsFromSubmission(data: SubmissionData): RatingInputs {
   const ops = data.operations ?? {};
   const pol = data.policy ?? {};
@@ -74,13 +88,16 @@ export function inputsFromSubmission(data: SubmissionData): RatingInputs {
     occurrence_limit: num(pol.occurrence_limit, 1_000_000),
     aggregate_limit: num(pol.aggregate_limit, 2_000_000),
     deductible: num(pol.deductible, 0),
-    residential_pct: num(ops.residential_pct, 0),
-    subcontracted_pct: num(ops.subcontracted_pct, 0),
-    subcontractor_coi_required: typeof ops.subcontractor_coi_required === "boolean" ? ops.subcontractor_coi_required : true,
-    max_height_ft: num(ops.max_height_ft, 0),
+    residential_pct: num(ops.residential_pct, ASSUMED_INPUTS.residential_pct),
+    subcontracted_pct: num(ops.subcontracted_pct, ASSUMED_INPUTS.subcontracted_pct),
+    subcontractor_coi_required: typeof ops.subcontractor_coi_required === "boolean" ? ops.subcontractor_coi_required : ASSUMED_INPUTS.subcontractor_coi_required,
+    max_height_ft: num(ops.max_height_ft, ASSUMED_INPUTS.max_height_ft),
     experience_mod: 1,
   };
 }
+
+/** A factor with at most two decimals: 1, 0.95, .9, 1.10. */
+const MOD_PATTERN = /^\d*\.?\d{0,2}$/;
 
 export function parseInputs(form: Record<string, string>): RatingInputs {
   const out = {} as Record<string, unknown>;
@@ -106,8 +123,9 @@ export function parseInputs(form: Record<string, string>): RatingInputs {
         out[def.key] = raw === "yes";
         break;
       case "mod": {
+        // Two decimals everywhere: what's shown is what's rated, so a later save can't round it and move the premium (CR-104).
         const n = Number(raw);
-        if (!Number.isFinite(n) || n <= 0) throw new FieldError(`${label}: enter a factor like 0.95 or 1.10`, def.key);
+        if (!MOD_PATTERN.test(raw) || !Number.isFinite(n) || n <= 0) throw new FieldError(`${label}: enter a factor with up to two decimals, like 0.95 or 1.10`, def.key);
         out[def.key] = n;
         break;
       }
@@ -117,6 +135,8 @@ export function parseInputs(form: Record<string, string>): RatingInputs {
         if (!raw || !Number.isFinite(n) || n < 0) throw new FieldError(`${label}: "${raw}" is not a number`, def.key);
         if (def.kind === "pct" && n > 100) throw new FieldError(`${label}: must be 0–100`, def.key);
         out[def.key] = Math.round(n);
+        // Checked here so it lands under the field; the rating service would refuse it with a banner of raw validation (CR-130).
+        if (def.key === "gross_receipts" && out[def.key] === 0) throw new FieldError(`${label} must be more than zero`, def.key);
       }
     }
   }
@@ -145,6 +165,14 @@ export const scheduleMod = (items: ScheduleItem[]) => Math.round((1 + scheduleTo
 /** Schedule in a fixed key order, for comparing a stored (jsonb, keys reordered) schedule with a parsed one. */
 export function scheduleKey(schedule: ScheduleItem[]): string {
   return JSON.stringify(schedule.map((s) => [s.category, s.pct, s.rationale]));
+}
+
+/**
+ * Fingerprint of what a Save & rate form was rendered from: inputs and schedule with its reasons, in
+ * a fixed key order. A save from an older form is refused rather than reverting someone's edits (CR-017).
+ */
+export function worksheetFingerprint(inputs: RatingInputs, schedule: ScheduleItem[]): string {
+  return JSON.stringify([INPUT_DEFS.map((d) => inputs[d.key]), scheduleKey(schedule)]);
 }
 
 /** Fingerprint of what a rating used. Fixed key order: jsonb doesn't preserve object key order. */

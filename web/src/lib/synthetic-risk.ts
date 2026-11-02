@@ -1,6 +1,8 @@
 // Fictitious E&S contractors GL risks, built deterministically from a seed: the vocabulary the
 // prior-system book, the seeded history and the generated inbox submissions all share, so the demo's
 // insureds, producers and trades read as one portfolio. Pure module (type-only imports) for node:test.
+import { addYears } from "./quote-terms.ts";
+import { ROOFING_CLASSES } from "./referrals.ts";
 import type { Loss, SubmissionData } from "./submission";
 
 export type Rng = () => number;
@@ -94,9 +96,9 @@ export function buildSyntheticCase(r: Rng, o: { effective: string; referrals: Re
   if (o.referrals === "clearable" && r() < 0.06) trips = "HEIGHT";
   if (o.referrals === "any" && r() < 0.35) trips = pick(r, ["NY_LABOR_LAW", "HIGH_LIMITS", "UNINSURED_SUBS", "LARGE_ACCOUNT", "LOSS_FREQUENCY", "HEIGHT", "ROOFING"]);
 
-  const code = trips === "ROOFING" ? "98677" : weighted(r, CLASS_WEIGHTS);
+  const code = trips === "ROOFING" ? ROOFING_CLASSES[0] : weighted(r, CLASS_WEIGHTS);
   const c = CLASSES[code];
-  if (trips === null && code === "98677" && o.referrals !== "none") trips = "ROOFING";
+  if (trips === null && ROOFING_CLASSES.includes(code) && o.referrals !== "none") trips = "ROOFING";
   const home = trips === "NY_LABOR_LAW" ? "NY" : weighted(r, Object.entries(STATE_WEIGHTS));
   let name = "";
   for (let tries = 0; tries < 20 && (!name || taken.has(name)); tries++) {
@@ -128,8 +130,7 @@ export function buildSyntheticCase(r: Rng, o: { effective: string; referrals: Re
   });
   const priorPremium = roundTo((receipts / 1000) * BASE_RATE[code] * (0.9 + r() * 0.25), 100);
   const slug = slugify(name);
-  const [y, m, d] = o.effective.split("-").map(Number);
-  const expiration = `${y + 1}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const expiration = addYears(o.effective, 1);
 
   const data = {
     applicant: { name, dba: "", street: `${between(r, 100, 9800)} ${pick(r, STREETS)}`, city, state: home, zip: `${zipPrefix}${String(between(r, 10, 99))}`, fein, entity_type: entityType, years_in_business: years, website: r() < 0.6 ? `www.${slug.replace(/-(llc|inc|corp|co)$/, "")}.example` : "" },

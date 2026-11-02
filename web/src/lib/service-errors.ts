@@ -18,6 +18,14 @@ export function errorDetailOf(body: string): string | null {
     const j = JSON.parse(body);
     const d = j?.detail ?? j?.error?.message ?? j?.error;
     if (typeof d === "string" && d.trim()) return d.trim();
+    // FastAPI's validation reply is a list: say what each entry means rather than printing the JSON (CR-130).
+    if (Array.isArray(d)) {
+      const messages = d.filter((e) => typeof e?.msg === "string").map((e) => {
+        const field = Array.isArray(e.loc) ? e.loc[e.loc.length - 1] : null;
+        return typeof field === "string" ? `${field}: ${e.msg}` : e.msg;
+      });
+      if (messages.length) return messages.join("; ");
+    }
     if (d && typeof d === "object") return JSON.stringify(d);
   } catch { /* not JSON */ }
   const text = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();

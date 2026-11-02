@@ -1,3 +1,4 @@
+import { errorDetailOf } from "./service-errors";
 import { RATING_SERVICE_URL, ratingAuthHeaders } from "./services";
 import { scheduleMod, type RatingInputs, type ScheduleItem } from "./worksheet";
 import type { Rating } from "./worksheets";
@@ -21,16 +22,6 @@ export class RatingServiceError extends Error {
   }
 }
 
-/** The error text of a rating-service reply: FastAPI's `detail` when the body is JSON, else a trimmed snippet (a proxy's HTML 502). */
-function errorDetail(text: string): string {
-  try {
-    const detail = JSON.parse(text).detail;
-    return typeof detail === "string" ? detail : JSON.stringify(detail);
-  } catch {
-    return text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160) || "no details";
-  }
-}
-
 /**
  * POST to the rating service and return the parsed JSON. The body is read as text first so a
  * non-JSON reply (an HTML 502 from the proxy while the machine starts) becomes a readable error
@@ -51,7 +42,7 @@ async function ratingPost<T>(path: string, body: unknown, actor?: string): Promi
   }
   const text = await res.text();
   if (!res.ok) {
-    const detail = errorDetail(text);
+    const detail = errorDetailOf(text) ?? "no details";
     throw new RatingServiceError(res.status < 500 ? `Rating: ${detail}` : `Rating service error ${res.status}: ${detail}`, res.status);
   }
   return JSON.parse(text) as T;
@@ -59,8 +50,14 @@ async function ratingPost<T>(path: string, body: unknown, actor?: string): Promi
 
 /** The rating service's id for a rate version label ("2026.1"), or null if it has no such version. */
 export async function rateVersionId(label: string): Promise<number | null> {
-  const res = await fetch(`${RATING_SERVICE_URL}/rate-versions`, { cache: "no-store", signal: AbortSignal.timeout(RATING_TIMEOUT_MS) });
-  if (!res.ok) throw new Error(`Rating service returned ${res.status} listing rate versions`);
+  let res: Response;
+  try {
+    res = await fetch(`${RATING_SERVICE_URL}/rate-versions`, { cache: "no-store", signal: AbortSignal.timeout(RATING_TIMEOUT_MS) });
+  } catch (err) {
+    throw new RatingServiceError(`Rating service unreachable (${(err as Error).message}). Try again shortly.`, null);
+  }
+  // Status null below 500: a refused listing says nothing about the inputs, so it must not read as `rejectedInputs`.
+  if (!res.ok) throw new RatingServiceError(`Rating service returned ${res.status} listing rate versions`, res.status >= 500 ? res.status : null);
   const versions: { id: number; label: string }[] = await res.json();
   return versions.find((v) => v.label === label)?.id ?? null;
 }

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clearanceStatus, isOpenLoss, lossRunYears, referralFlags, type ReferralContext } from "./referrals.ts";
-import { inputsHash, parseSchedule, scheduleKey, scheduleMod } from "./worksheet.ts";
+import { ROOFING_CLASSES, clearanceAudit, clearanceStatus, isOpenLoss, lossRunYears, referralFlags, type ReferralContext } from "./referrals.ts";
+import { formsFor, suggestedSubjectivities } from "./quote-terms.ts";
+import { changes } from "./timeline-merge.ts";
+import { inputsFromSubmission, inputsHash, parseSchedule, scheduleKey, scheduleMod } from "./worksheet.ts";
 import type { SubmissionData } from "./submission.ts";
 
 const inputs = {
@@ -12,7 +14,8 @@ const inputs = {
 
 function ctx(overrides: Partial<ReferralContext> = {}): ReferralContext {
   const data = {
-    applicant: { years_in_business: 14 }, operations: {}, policy: {}, producer: {}, prior: {},
+    applicant: { years_in_business: 14 }, policy: {}, producer: {}, prior: {},
+    operations: { max_height_ft: 30, subcontracted_pct: 10, residential_pct: 0, subcontractor_coi_required: true },
     loss_history: [{ date: "2024-03-18", description: "Trip", incurred: 8200, status: "Closed" }],
   } as unknown as SubmissionData;
   return {
@@ -121,4 +124,62 @@ test("a clearance stops covering a flag whose facts changed (CR-005)", () => {
   const at120 = referralFlags(ctx({ inputs: { ...inputs, max_height_ft: 120 } })).find((f) => f.code === "HEIGHT")!;
   assert.equal(clearanceStatus(at120, clearance), "stale");
   assert.equal(clearanceStatus(at120, undefined), "open");
+});
+
+test("every roofing class refers and gets the endorsement; the wording existing clearances hold is unchanged (CR-061)", () => {
+  for (const class_code of ROOFING_CLASSES) {
+    assert.deepEqual(codes(ctx({ inputs: { ...inputs, class_code } })), ["refer:ROOFING"]);
+    assert.ok(formsFor({ ...inputs, class_code }).some((f) => f.startsWith("Roofing Operations Endorsement")));
+  }
+  assert.equal(referralFlags(ctx({ inputs: { ...inputs, class_code: "98677" } }))[0].detail, "Roofing (98677) is written only with manager approval");
+});
+
+test("inputs the broker never stated warn, name themselves and suggest a subjectivity, without blocking the quote (CR-112)", () => {
+  const stated = { class_code: "98304", gross_receipts: 900_000, states: ["AZ"], residential_pct: 100, max_height_ft: null, subcontracted_pct: null, subcontractor_coi_required: null };
+  const data = { ...ctx().data, operations: stated, policy: { occurrence_limit: 1_000_000, aggregate_limit: 2_000_000 }, applicant: { state: "AZ", years_in_business: 14 } } as unknown as SubmissionData;
+  const c = ctx({ data, inputs: inputsFromSubmission(data) });
+  assert.deepEqual(codes(c), ["warn:ASSUMED_INPUTS"]);
+  const flag = referralFlags(c)[0];
+  assert.match(flag.detail, /max height 0 ft, subcontracted 0%, COIs required from subs/);
+  assert.doesNotMatch(flag.detail, /residential/);   // the broker stated that one
+  assert.ok(suggestedSubjectivities([flag], data).includes("Confirmation of working height, subcontracted share and subcontractor certificates"));
+  // A real value on the worksheet drops that input from the list, and the warning goes once none are left.
+  const height = referralFlags({ ...c, inputs: { ...c.inputs, max_height_ft: 30 } })[0];
+  assert.doesNotMatch(height.detail, /max height/);
+  assert.deepEqual(codes({ ...c, inputs: { ...c.inputs, max_height_ft: 30, subcontracted_pct: 10, subcontractor_coi_required: false } }), []);
+});
+
+test("a renewal with only the expiring policy's claim totals still refers (CR-101)", () => {
+  const none = { ...ctx().data, loss_history: [] } as unknown as SubmissionData;
+  const c = ctx({ data: none, expiringLosses: { claims: 3, incurred: 3400, open_claims: 0 } });
+  assert.deepEqual(codes(c), ["refer:LOSS_FREQUENCY"]);
+  assert.equal(referralFlags(c)[0].detail, "3 claims on the expiring policy, $3,400 incurred");
+  assert.deepEqual(codes(ctx({ data: none, expiringLosses: { claims: 2, incurred: 3400, open_claims: 0 } })), []);
+  const open = ctx({ data: none, expiringLosses: { claims: 1, incurred: 9000, open_claims: 1 } });
+  assert.deepEqual(codes(open), ["refer:OPEN_CLAIMS_NO_DETAIL"]);
+  assert.ok(suggestedSubjectivities(referralFlags(open), none).includes("Current adjuster's status report on open claims"));
+});
+
+test("a renewal whose loss rows match its totals keeps the wording its clearances were given for (CR-101)", () => {
+  const losses = [
+    { date: "2023-01-01", description: "a", incurred: 20000, status: "Closed" },
+    { date: "2024-01-01", description: "b", incurred: 5000, status: "Open" },
+    { date: "2025-01-01", description: "c", incurred: 5000, status: "Closed" },
+  ];
+  const data = { ...ctx().data, loss_history: losses } as SubmissionData;
+  const before = referralFlags(ctx({ data }));
+  const after = referralFlags(ctx({ data, expiringLosses: { claims: 3, incurred: 30000, open_claims: 1 } }));
+  assert.deepEqual(after, before);
+  assert.equal(after[0].detail, "3 claims in the loss history, $30,000 incurred");
+  assert.equal(clearanceStatus(after[0], { by: "pat", at: "2026-10-23", note: "Reviewed with the manager", detail: before[0].detail }), "cleared");
+});
+
+test("a clearance reads as one change, keyed by the rule code (CR-053)", () => {
+  const flag = referralFlags(ctx({ inputs: { ...inputs, max_height_ft: 55 } })).find((f) => f.code === "HEIGHT")!;
+  const { before, after } = clearanceAudit(flag, { by: "pat", at: "2026-10-23T12:00:00Z", note: "Rope access certified", detail: flag.detail });
+  const diff = changes(before, after);
+  assert.equal(diff.length, 1);
+  assert.equal(diff[0].field, "HEIGHT");
+  assert.deepEqual(diff[0].before, { status: "open" });
+  assert.deepEqual(diff[0].after, { status: "cleared", by: "pat", note: "Rope access certified", detail: flag.detail });
 });

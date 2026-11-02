@@ -1,9 +1,10 @@
+import { isUuid, paddedSeq } from "./text.ts";
 import { audit } from "./audit";
 import { policyDb } from "./db";
 import { renderQuotePdf } from "./quote-pdf";
 import { changeSummary, compareRenewal, type Comparison } from "./renewal-compare";
 import { renderRenewalMemoPdf } from "./renewal-memo-pdf";
-import { QUOTE_VALID_DAYS, addDays, addYears, formsFor, parseSubjectivities } from "./quote-terms";
+import { QUOTE_VALID_DAYS, addDays, formsFor, parseSubjectivities, producerFields, producerLines, quoteLimits, quotePeriod, type ProducerFields } from "./quote-terms";
 import { rateOn } from "./rating-api";
 import type { SubmissionRow } from "./submissions";
 import type { RatingInputs, ScheduleItem } from "./worksheet";
@@ -44,14 +45,14 @@ export async function listQuotes(f: QuoteFilter = {}): Promise<QuoteRow[]> {
 }
 
 export async function getQuoteMemo(id: string) {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  if (!isUuid(id)) return null;
   const { rows } = await policyDb.query<{ quote_number: string; version: number; pdf: Buffer | null }>(
     "SELECT quote_number, version, memo_pdf AS pdf FROM quotes WHERE id = $1", [id]);
   return rows[0]?.pdf ? rows[0] as { quote_number: string; version: number; pdf: Buffer } : null;
 }
 
 export async function getQuotePdf(id: string) {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  if (!isUuid(id)) return null;
   const { rows } = await policyDb.query<{ quote_number: string; version: number; pdf: Buffer }>(
     "SELECT quote_number, version, pdf FROM quotes WHERE id = $1", [id]);
   return rows[0] ?? null;
@@ -67,6 +68,7 @@ export type QuoteForm = { effective_date: string; expiration_date: string; subje
 export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: string, at: Date | null = null): Promise<QuoteRow> {
   const ws = await getWorksheet(sub.id);
   if (!ws) throw new Error("Open the workbench and rate first");
+  const { effective, expiration } = quotePeriod(form);
   const active = await activeRateVersion();
   if (!active) throw new Error("The rating service isn't reachable, so the rate version can't be confirmed. Try again shortly.");
   const { ready, openReferrals, rated, staleRates } = readiness(sub, ws, active);
@@ -75,16 +77,11 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
   if (!ready) throw new Error(`Clear open referrals first: ${openReferrals.map((f) => f.title).join(", ")}`);
   const seen = ws.last_rating!;
 
-  const effective = form.effective_date.trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(effective)) throw new Error("Effective date: use YYYY-MM-DD");
-  const expiration = form.expiration_date.trim() || addYears(effective, 1);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(expiration) || expiration <= effective) throw new Error("Expiration must be a date after the effective date");
-
   const previous = (await quotesForSubmission(sub.id))[0];
   if (previous?.status === "bound") throw new Error(`${previous.quote_number} is already bound; changes now need a policy endorsement`);
   const issuedAt = at ?? new Date();
   const quoteNumber = previous?.quote_number ?? (await policyDb.query<{ n: string }>(
-    "SELECT 'Q-' || $1 || '-' || lpad(nextval('quote_number_seq')::text, 4, '0') AS n", [String(issuedAt.getUTCFullYear())])).rows[0].n;
+    `SELECT 'Q-' || $1 || '-' || ${paddedSeq("quote_number_seq", 4)} AS n`, [String(issuedAt.getUTCFullYear())])).rows[0].n;
   const version = (previous?.version ?? 0) + 1;
 
   // Re-rated pinned to the rate version the worksheet shows, so the quote is exactly what the underwriter saw.
@@ -94,16 +91,13 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
   }
 
   const a = sub.data.applicant ?? {};
-  const p = sub.data.producer ?? {};
+  const producer = producerFields(sub.data.producer ?? {});
   const inputs = ws.rating_inputs;
   const terms = {
     insured_address: [String(a.street ?? ""), [a.city, a.state].filter(Boolean).join(", ") + (a.zip ? ` ${a.zip}` : "")].filter((l) => l.trim()),
-    producer: [String(p.agency ?? ""), String(p.contact ?? ""), [p.email, p.phone].filter(Boolean).join("  ·  ")].filter((l) => l.trim()),
-    limits: [
-      { label: "Each occurrence", amount: inputs.occurrence_limit },
-      { label: "General aggregate", amount: inputs.aggregate_limit },
-      { label: "Products-completed operations aggregate", amount: Number(sub.data.policy?.products_aggregate_limit ?? inputs.aggregate_limit) },
-    ],
+    producer: producerLines(producer),
+    producer_fields: producer,
+    limits: quoteLimits(inputs),
     deductible: inputs.deductible,
     class_code: inputs.class_code,
     class_description: rating.class_description,
@@ -150,7 +144,18 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
   let quote: QuoteRow;
   try {
     await client.query("BEGIN");
-    if (previous) await client.query("UPDATE quotes SET status = 'superseded' WHERE submission_id = $1 AND status = 'issued'", [sub.id]);
+    // What the rating and PDF above were built on was read without a lock, so check it still holds. The row locks
+    // keep a bind out (CR-050). A file's first quote has no row to lock, hence the per-submission lock too (CR-019).
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [sub.id]);
+    const current = (await client.query<{ quote_number: string; version: number; status: QuoteRow["status"] }>(
+      "SELECT quote_number, version, status FROM quotes WHERE submission_id = $1 ORDER BY version DESC FOR UPDATE", [sub.id])).rows;
+    const bound = current.find((c) => c.status === "bound");
+    if (bound) throw new Error(`${bound.quote_number} is already bound; changes now need a policy endorsement`);
+    if ((current[0]?.version ?? 0) !== (previous?.version ?? 0)) {
+      throw new Error(`${current[0].quote_number} v${current[0].version} was issued on this file just now. Reload to see it before issuing another.`);
+    }
+    const superseded = (await client.query<{ id: string; version: number }>(
+      "UPDATE quotes SET status = 'superseded' WHERE submission_id = $1 AND status = 'issued' RETURNING id, version", [sub.id])).rows;
     quote = (await client.query<QuoteRow>(
       `INSERT INTO quotes (quote_number, version, status, submission_id, submission_ref, insured_id, insured_name,
          effective_date, expiration_date, valid_until, rating_id, rate_version, rating_inputs, schedule, rating,
@@ -162,6 +167,24 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
        rating.premium, rating.policy_fee, rating.surplus_lines_tax, rating.total, subjectivities, terms,
        Buffer.from(pdf), actor, issuedAt, memo ? Buffer.from(memo) : null, comparison],
     )).rows[0];
+    const correlationId = crypto.randomUUID();
+    // In the transaction, so a quote can't exist without its trail (CR-034); one event per version actually superseded (CR-050).
+    await audit([
+      ...superseded.map((s) => ({
+        actor, action: "quote.superseded", entityType: "quote" as const, entityId: s.id,
+        summary: `${quoteNumber} v${s.version} superseded by v${version}`, correlationId, occurredAt: at ?? undefined,
+      })),
+      {
+        actor, action: "quote.issued", entityType: "quote", entityId: quote.id,
+        summary: `${quoteNumber} v${version} issued to ${sub.applicant_name}: ${money(rating.total)} total (${sub.reference})${exp ? `, renewal of ${exp.policy_number}${comparison ? `, premium ${changeSummary(comparison.bridge)}` : ""}` : ""}`,
+        after: { submission_id: sub.id, rating_id: rating.rating_id, rate_version: rating.rate_version, premium: rating.premium,
+          total: rating.total, effective_date: effective, subjectivities }, correlationId, occurredAt: at ?? undefined,
+      },
+      {
+        actor, action: "quote.issued", entityType: "submission", entityId: sub.id,
+        summary: `${sub.reference}: quote ${quoteNumber} v${version} issued, ${money(rating.total)} total`, correlationId, occurredAt: at ?? undefined,
+      },
+    ], client);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -169,36 +192,18 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
   } finally {
     client.release();
   }
-
-  const correlationId = crypto.randomUUID();
-  await audit(
-    ...(previous ? [{
-      actor, action: "quote.superseded", entityType: "quote" as const, entityId: previous.id,
-      summary: `${quoteNumber} v${previous.version} superseded by v${version}`, correlationId, occurredAt: at ?? undefined,
-    }] : []),
-    {
-      actor, action: "quote.issued", entityType: "quote", entityId: quote.id,
-      summary: `${quoteNumber} v${version} issued to ${sub.applicant_name}: ${money(rating.total)} total (${sub.reference})${exp ? `, renewal of ${exp.policy_number}${comparison ? `, premium ${changeSummary(comparison.bridge)}` : ""}` : ""}`,
-      after: { submission_id: sub.id, rating_id: rating.rating_id, rate_version: rating.rate_version, premium: rating.premium,
-        total: rating.total, effective_date: effective, subjectivities }, correlationId, occurredAt: at ?? undefined,
-    },
-    {
-      actor, action: "quote.issued", entityType: "submission", entityId: sub.id,
-      summary: `${sub.reference}: quote ${quoteNumber} v${version} issued, ${money(rating.total)} total`, correlationId, occurredAt: at ?? undefined,
-    },
-  );
   return quote;
 }
 
 export type QuoteDetail = QuoteRow & {
   rating_inputs: RatingInputs; schedule: ScheduleItem[]; rating: Rating; renewal_summary: Comparison | null;
-  terms: { insured_address: string[]; producer: string[]; limits: { label: string; amount: number }[]; deductible: number;
+  terms: { insured_address: string[]; producer: string[]; producer_fields?: ProducerFields; limits: { label: string; amount: number }[]; deductible: number;
     class_code: string; class_description: string; operations: string; forms: string[] };
 };
 
 /** Everything frozen on a quote except the PDF bytes. */
 export async function getQuote(id: string): Promise<QuoteDetail | null> {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  if (!isUuid(id)) return null;
   const { rows } = await policyDb.query<QuoteDetail>(
     `SELECT ${COLUMNS}, rating_inputs, schedule, rating, terms, renewal_summary FROM quotes WHERE id = $1`, [id]);
   return rows[0] ?? null;

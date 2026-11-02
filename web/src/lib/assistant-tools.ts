@@ -16,6 +16,7 @@ import { search } from "./search";
 import { parseQuery } from "./search-terms";
 import { RATING_SERVICE_URL } from "./services";
 import { getSubmission, submissionIdsReceivedBy } from "./submissions";
+import { isUuid } from "./text.ts";
 import { loadTimeline } from "./timeline";
 import { applyFilters } from "./timeline-merge";
 import { activeRateVersion, flagsFor, getWorksheet, readiness } from "./worksheets";
@@ -29,7 +30,6 @@ export type AppTool = {
   run: (input: Record<string, unknown>, ctx: AssistantContext) => Promise<unknown>;
 };
 
-const isUuid = (s: string) => /^[0-9a-f-]{36}$/i.test(s);
 const str = (v: unknown) => (v === undefined || v === null ? "" : String(v).trim());
 const int = (v: unknown, d: number, max = 200) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), max) : d; };
 const money = (v: unknown) => Math.round(Number(v ?? 0) * 100) / 100;
@@ -201,7 +201,7 @@ export const APP_TOOLS: AppTool[] = [
       const ref = str(a.quote);
       let id: string | null = isUuid(ref) ? ref : null;
       if (!id) {
-        const m = ref.toUpperCase().match(/^(Q-\d{4}-\d{4})(?:\s*V(\d+))?$/);
+        const m = ref.toUpperCase().match(/^(Q-\d{4}-\d+)(?:\s*V(\d+))?$/);
         const versions = m ? await quoteVersions(m[1]) : [];
         id = (m?.[2] ? versions.find((v) => v.version === Number(m[2])) : versions[0])?.id ?? null;
       }

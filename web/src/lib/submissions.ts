@@ -1,4 +1,4 @@
-import { plural } from "./text.ts";
+import { isUuid, paddedSeq, plural } from "./text.ts";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import { audit } from "./audit";
@@ -7,9 +7,11 @@ import type { ExpiringPolicy } from "./renewal-compare";
 import { INGESTION_SERVICE_URL } from "./services";
 import { ServiceError, describeServiceError, errorDetailOf } from "./service-errors";
 import {
-  FIELD_DEFS, REQUIRED_FOR_RATING, fromInput, getPath, isEmpty, sameValue, setPath,
+  FIELD_DEFS, fromInput, getPath, missingForRating, normalizeFein, sameValue, setPath,
   type Extraction, type SubmissionData, type Value,
 } from "./submission";
+
+export { missingForRating };
 
 export type SubmissionRow = {
   id: string;
@@ -43,7 +45,7 @@ export async function listSubmissions(): Promise<SubmissionRow[]> {
 }
 
 export async function getSubmission(id: string): Promise<SubmissionRow | null> {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  if (!isUuid(id)) return null;
   const { rows } = await customerDb.query<SubmissionRow>("SELECT * FROM submissions WHERE id = $1", [id]);
   return rows[0] ?? null;
 }
@@ -56,11 +58,9 @@ export async function listDocuments(submissionId: string): Promise<DocumentRow[]
   return rows;
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export async function getDocument(submissionId: string, documentId: string) {
   // Both ids are path segments; anything that isn't a uuid is a 404, not a Postgres cast error.
-  if (!UUID.test(submissionId) || !UUID.test(documentId)) return null;
+  if (!isUuid(submissionId) || !isUuid(documentId)) return null;
   const { rows } = await customerDb.query<{ filename: string; content_type: string; content: Buffer }>(
     "SELECT filename, content_type, content FROM submission_documents WHERE submission_id = $1 AND id = $2",
     [submissionId, documentId],
@@ -100,30 +100,23 @@ export async function storeSubmission(
   files: File[], extraction: Extraction, actor: string, inboxFolder: string | null, at: Date | null = null,
 ): Promise<{ id: string; reference: string }> {
   const client = await customerDb.connect();
+  let stored: { id: string; reference: string };
   try {
     await client.query("BEGIN");
     const { rows } = await client.query<{ id: string; reference: string }>(
       `INSERT INTO submissions (reference, applicant_name, data, extraction, received_by, inbox_folder, received_at)
-       VALUES ('SUB-' || lpad(nextval('submission_reference_seq')::text, 4, '0'), $1, $2, $3, $4, $5, coalesce($6, now()))
+       VALUES ('SUB-' || ${paddedSeq("submission_reference_seq", 4)}, $1, $2, $3, $4, $5, coalesce($6, now()))
        RETURNING id, reference`,
       [extraction.submission.applicant?.name ?? "", extraction.submission, extraction, actor, inboxFolder, at],
     );
-    const { id, reference } = rows[0];
+    stored = rows[0];
     for (const f of files) {
       await client.query(
         "INSERT INTO submission_documents (submission_id, filename, content_type, content) VALUES ($1, $2, $3, $4)",
-        [id, f.name, f.type || "application/octet-stream", Buffer.from(await f.arrayBuffer())],
+        [stored.id, f.name, f.type || "application/octet-stream", Buffer.from(await f.arrayBuffer())],
       );
     }
     await client.query("COMMIT");
-    const name = (extraction.submission.applicant?.name as string) || "unnamed applicant";
-    await audit({
-      actor, action: "submission.received", entityType: "submission", entityId: id,
-      summary: `${reference} received for ${name}${inboxFolder ? ` from inbox folder ${inboxFolder}` : ""}: ${plural(files.length, "document")}, ${plural(Object.keys(extraction.fields).length, "field")} extracted`,
-      after: { inbox_folder: inboxFolder, documents: extraction.documents, missing_for_rating: extraction.missing_for_rating, claude: extraction.claude },
-      occurredAt: at ?? undefined,
-    });
-    return { id, reference };
   } catch (err) {
     await client.query("ROLLBACK");
     if ((err as { code?: string }).code === "23505" && inboxFolder) {
@@ -133,6 +126,21 @@ export async function storeSubmission(
   } finally {
     client.release();
   }
+
+  // The submission is safely in. The audit trail is in the other database, so a failure there is logged, not
+  // reported as a failed upload: that would invite a retry and a second reference for the same file (CR-049).
+  const name = (extraction.submission.applicant?.name as string) || "unnamed applicant";
+  try {
+    await audit({
+      actor, action: "submission.received", entityType: "submission", entityId: stored.id,
+      summary: `${stored.reference} received for ${name}${inboxFolder ? ` from inbox folder ${inboxFolder}` : ""}: ${plural(files.length, "document")}, ${plural(Object.keys(extraction.fields).length, "field")} extracted`,
+      after: { inbox_folder: inboxFolder, documents: extraction.documents, missing_for_rating: extraction.missing_for_rating, claude: extraction.claude },
+      occurredAt: at ?? undefined,
+    });
+  } catch (err) {
+    console.error(`[audit] submission.received not recorded for ${stored.reference}:`, err);
+  }
+  return stored;
 }
 
 /**
@@ -204,10 +212,6 @@ export async function saveReview(id: string, inputs: Record<string, string>, act
   return changes.length;
 }
 
-export function missingForRating(data: SubmissionData): string[] {
-  return REQUIRED_FOR_RATING.filter((p) => isEmpty(getPath(data, p)));
-}
-
 /** Accept the intake: link (or create) the insured and lock the extracted data for underwriting. `at` back-dates it (seeded history). */
 export async function acceptSubmission(id: string, actor: string, at: Date | null = null): Promise<void> {
   const r = await withReviewLock(id, async (client, sub) => {
@@ -216,21 +220,22 @@ export async function acceptSubmission(id: string, actor: string, at: Date | nul
     const a = sub.data.applicant;
     const name = String(a.name ?? "").trim();
     if (!name) throw new Error("Fill in the named insured before accepting");
-    const fein = String(a.fein ?? "").trim();
+    const fein = normalizeFein(String(a.fein ?? ""));
     const state = String(a.state ?? "");
 
-    const existing = fein
-      ? (await client.query<{ id: string }>("SELECT id FROM insureds WHERE fein = $1", [fein])).rows[0]
-      : undefined;
-    const insuredId = existing?.id ?? (await client.query<{ id: string }>(
-      "INSERT INTO insureds (name, fein, state, created_at) VALUES ($1, $2, $3, coalesce($4, now())) RETURNING id", [name, fein, state, at],
-    )).rows[0].id;
+    // One statement, so two accepts of one FEIN can't both insert: the loser waits, inserts nothing, and finds the winner's row (CR-036).
+    // A blank FEIN isn't covered by the unique index, so it always makes a new insured.
+    const made = (await client.query<{ id: string }>(
+      `INSERT INTO insureds (name, fein, state, created_at) VALUES ($1, $2, $3, coalesce($4, now()))
+       ON CONFLICT (fein) WHERE fein <> '' DO NOTHING RETURNING id`, [name, fein, state, at],
+    )).rows[0];
+    const insuredId = made?.id ?? (await client.query<{ id: string }>("SELECT id FROM insureds WHERE fein = $1", [fein])).rows[0].id;
     await client.query(
       `UPDATE submissions SET status = 'accepted', insured_id = $2, reviewed_by = $3, reviewed_at = coalesce($4, now())
        WHERE id = $1 AND status = 'needs_review'`,
       [id, insuredId, actor, at],
     );
-    return { sub, insuredId, created: !existing, name, fein, state };
+    return { sub, insuredId, created: !!made, name, fein, state };
   });
 
   const correlationId = crypto.randomUUID();

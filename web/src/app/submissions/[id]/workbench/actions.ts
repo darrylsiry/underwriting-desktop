@@ -7,7 +7,7 @@ import { getSubmission } from "@/lib/submissions";
 import { currentUser } from "@/lib/user";
 import { bindQuote } from "@/lib/policies";
 import { issueQuote, issuedQuoteHref, type QuoteRow } from "@/lib/quotes";
-import { FieldError } from "@/lib/worksheet";
+import { FieldError, StaleWorksheetError } from "@/lib/worksheet";
 import { clearReferral, money, saveAndRate } from "@/lib/worksheets";
 import type { FormState } from "../action-form";
 
@@ -37,6 +37,7 @@ export async function saveAndRateAction(id: string, _prev: FormState, form: Form
     msg = `Rated: ${money(rating.premium)} premium, ${money(rating.total)} total`;
   } catch (err) {
     if (err instanceof FieldError) return { error: err.message, field: err.field, values };
+    if (err instanceof StaleWorksheetError) return { error: err.message, values };   // CR-017: what they typed stays on screen
     back(id, { error: (err as Error).message });
   }
   revalidatePath(`/submissions/${id}/workbench`);

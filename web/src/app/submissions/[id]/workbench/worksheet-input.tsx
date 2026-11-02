@@ -17,7 +17,7 @@ export function WorksheetInput({ def, saved, unit }: { def: Def; saved: string; 
   const numeric = NUMERIC.has(def.kind);
   const constraints = def.kind === "state" ? { pattern: "[A-Za-z]{2}", maxLength: 2, title: "2-letter state code" }
     : def.kind === "states" ? { pattern: "[A-Za-z]{2}([ ,;]+[A-Za-z]{2})*[ ,;]*", title: "2-letter state codes, e.g. TX, OK" }
-    : def.kind === "mod" ? { inputMode: "decimal" as const, pattern: "[0-9]*[.]?[0-9]*", title: "A factor like 0.95 or 1.10" }
+    : def.kind === "mod" ? { inputMode: "decimal" as const, pattern: "[0-9]*[.]?[0-9]{0,2}", title: "A factor with up to two decimals, like 0.95 or 1.10" }
     : numeric ? { inputMode: "numeric" as const, pattern: "[0-9$,.% ]*", title: "Digits; $ , % and spaces are fine" } : {};
   return (
     <span className={`flex items-center rounded border bg-white text-sm text-slate-900 focus-within:ring-2 focus-within:ring-indigo-200 ${bad ? "border-rose-400 bg-rose-50" : "border-slate-300"}`}>

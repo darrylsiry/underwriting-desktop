@@ -2,6 +2,7 @@ import { whenDate } from "./time.ts";
 // Comparing an expiring policy with its renewing terms: which rating variables changed, which rate
 // factors changed, and how the premium change splits between the two. Pure module (type-only
 // imports) so node:test can load it; the memo PDF and the comparison page both render from this.
+import type { ProducerFields } from "./quote-terms";
 import type { RatingInputs, ScheduleItem } from "./worksheet";
 import type { Rating } from "./worksheets";
 // Explicit .ts extension so node:test can load this module directly (worksheet.ts is itself pure).
@@ -14,6 +15,7 @@ export type ExpiringPolicy = {
   policy_number: string;
   insured_name: string;
   producer: string[];
+  producer_fields?: ProducerFields;   // the producer by name; a policy from before CR-125 has only the lines above
   effective_date: string;
   expiration_date: string;
   rate_version: string;
@@ -64,7 +66,11 @@ export function inputText(key: keyof RatingInputs, v: RatingInputs[keyof RatingI
   if (typeof v === "boolean") return v ? "yes" : "no";
   if (def.kind === "money") return money(Number(v));
   if (def.kind === "pct") return `${v}%`;
-  if (def.kind === "mod") return Number(v).toFixed(2);
+  if (def.kind === "mod") {
+    // Saves allow two decimals (CR-104). A longer value saved before that shows in full, so the input can't quietly round it.
+    const n = Number(v);
+    return Math.round(n * 100) / 100 === n ? n.toFixed(2) : String(n);
+  }
   return String(v);
 }
 
