@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { EXPORT_FORMATS, GL_API_VERSION, PERIOD_PRESETS, TRANSACTION_LABEL } from "./gl-journal.ts";
-import { glOpenApi } from "./gl-openapi.ts";
+import { API_ERROR_CODES, glOpenApi } from "./gl-openapi.ts";
 
 test("the OpenAPI document names this instance, secures every path with basic auth and enumerates the same values the routes accept", () => {
   const doc = glOpenApi("https://uwdesk-web.fly.dev");
@@ -32,6 +32,18 @@ test("the OpenAPI document names this instance, secures every path with basic au
   const refs = JSON.stringify(doc).match(/#\/components\/schemas\/\w+/g) ?? [];
   for (const r of refs) assert.ok(r.split("/").pop()! in doc.components.schemas, `${r} resolves`);
   assert.doesNotThrow(() => JSON.parse(JSON.stringify(doc)));
+});
+
+test("every error code the API can answer with is published, and a push documents its filter (CR-133)", () => {
+  const doc = glOpenApi("https://uw.example") as unknown as {
+    paths: Record<string, { post?: { responses: Record<string, unknown>; parameters?: { name: string }[] } }>;
+    components: { schemas: { Error: { properties: { error: { properties: { code: { enum: readonly string[] } } } } }; ExportRequest: { properties: Record<string, unknown> } } };
+  };
+  assert.deepEqual([...doc.components.schemas.Error.properties.error.properties.code.enum], [...API_ERROR_CODES]);
+  const push = doc.paths["/api/gl/exports"].post;
+  assert.ok(push?.responses["403"]);
+  assert.ok(doc.components.schemas.ExportRequest.properties.batch);
+  assert.deepEqual(push?.parameters?.map((p) => p.name), ["period", "from", "to", "type", "batch", "format"]);
 });
 
 test("a push with nothing to send is documented as a 409 (CR-119)", () => {

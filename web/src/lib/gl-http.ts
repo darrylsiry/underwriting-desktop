@@ -1,4 +1,5 @@
 import { glDate } from "./gl-journal";
+import type { ApiErrorCode } from "./gl-openapi";
 import { parseLedgerQuery, type LedgerQuery } from "./gl-query";
 import type { GlContext } from "./gl-service";
 import { contentDisposition, requestOrigin } from "./http";
@@ -23,7 +24,7 @@ export const searchParamsOf = (req: Request): Record<string, string> => Object.f
 
 export const jsonResponse = (doc: unknown, status = 200) => Response.json(doc, { status, headers: NO_STORE });
 
-export function apiError(status: number, code: string, message: string, details?: string[]) {
+export function apiError(status: number, code: ApiErrorCode, message: string, details?: string[]) {
   return Response.json({ error: { code, message, ...(details?.length ? { details } : {}) } }, { status, headers: NO_STORE });
 }
 

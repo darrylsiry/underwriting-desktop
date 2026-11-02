@@ -3,6 +3,10 @@
 // enums can't drift. Pure module for node:test.
 import { ACCOUNTS, EXPORT_FORMATS, GL_API_VERSION, GL_TIME_ZONE, PERIOD_PRESETS, PRESET_LABEL, TRANSACTION_LABEL } from "./gl-journal.ts";
 
+/** Every `error.code` the GL API answers with. `apiError` accepts only these, so the document can't fall behind the routes (CR-133). */
+export const API_ERROR_CODES = ["bad_request", "forbidden", "not_found", "nothing_to_push", "unauthorized"] as const;
+export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
+
 export type Parameter = {
   name: string; in: "query" | "path"; required?: boolean; description: string;
   schema: { type: string; enum?: readonly string[]; format?: string; pattern?: string; default?: string; example?: string };
@@ -54,7 +58,7 @@ const DOWNLOAD_PARAM: Parameter = {
 const money = { type: "number", description: "USD, two decimals" };
 const SCHEMAS: Record<string, unknown> = {
   Error: { type: "object", required: ["error"], properties: { error: { type: "object", required: ["code", "message"], properties: {
-    code: { type: "string", enum: ["bad_request", "not_found", "unauthorized", "nothing_to_push"] }, message: { type: "string" }, details: { type: "array", items: { type: "string" } } } } } },
+    code: { type: "string", enum: API_ERROR_CODES }, message: { type: "string" }, details: { type: "array", items: { type: "string" } } } } } },
   Filter: { type: "object", properties: {
     period: { type: ["string", "null"], enum: [...PERIOD_PRESETS, null] }, period_label: { type: "string" },
     posting_date_from: { type: ["string", "null"], format: "date" }, posting_date_to: { type: ["string", "null"], format: "date" },
@@ -100,7 +104,8 @@ const SCHEMAS: Record<string, unknown> = {
     transaction_types: { type: "array", items: { type: "object", properties: { code: { type: "string" }, label: { type: "string" }, in_use: { type: "boolean" } } } } } },
   ExportRequest: { type: "object", description: "The same filter as GET /api/gl/postings, plus the file format.", properties: {
     period: { type: "string", enum: PERIOD_PRESETS }, from: { type: "string", format: "date" }, to: { type: "string", format: "date" },
-    type: { type: "string", enum: Object.keys(TRANSACTION_LABEL) }, format: { type: "string", enum: EXPORT_FORMATS, default: "json" } } },
+    type: { type: "string", enum: Object.keys(TRANSACTION_LABEL) }, batch: { type: "string", description: "Only the lines stamped with this GL export batch" },
+    format: { type: "string", enum: EXPORT_FORMATS, default: "json" } } },
   Push: { type: "object", properties: { batch: { type: "string", example: "GLX-20261030-004" }, format: { type: "string", enum: EXPORT_FORMATS }, filename: { type: "string" },
     pushed_at: { type: "string", format: "date-time" }, pushed_by: { type: "string" }, filter: ref("Filter"), lines: { type: "integer" }, journals: { type: "integer" },
     newly_stamped_lines: { type: "integer", description: "Lines pushed for the first time in this batch; the others keep their earlier batch" }, note: { type: "string" },
@@ -157,12 +162,14 @@ export function glOpenApi(origin: string): OpenApiDocument {
       "/api/gl/accounts": { get: { operationId: "chartOfAccounts", tags: ["Reference"], summary: "Chart of accounts", description: "The four accounts the sub-ledger posts to, the rule a bind posts by, and the transaction types.",
         responses: { "200": { description: "OK", content: json(ref("Accounts")) }, "401": errorResponse("Missing or wrong credentials") }, "x-try": "" } },
       "/api/gl/exports": { post: { operationId: "pushToGl", tags: ["Push"], summary: "Push a period to the GL", description: "Does what the Accounting page's push button does: renders the filter's lines, stamps the lines not pushed before with a new batch (`GLX-YYYYMMDD-NNN`), and records the push in the audit trail. Lines pushed earlier keep their batch and the file shows which. With `format: json` the answer is the push record plus the ledger document; with `csv` or `xlsx` it is the file, with the batch in the `X-GL-Export-Batch` header. Not idempotent: every call opens a new batch, except a filter with no lines, which is refused with a 409 and opens none.",
+        parameters: [...FILTER_PARAMS, FORMAT_PARAM],
         requestBody: { required: false, description: "The filter and format, as JSON (or the same names as query parameters).", content: json(ref("ExportRequest"), { period: "last_month", format: "json" }) },
         responses: {
           "201": { description: "Pushed (JSON format)", content: json(ref("PushResult")) },
           "200": { description: "Pushed (CSV or Excel file)", headers: { "X-GL-Export-Batch": { description: "The batch this push opened", schema: { type: "string" } }, "X-GL-Newly-Stamped-Lines": { description: "Lines pushed for the first time", schema: { type: "integer" } } },
             content: { "text/csv": { schema: { type: "string" } }, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { schema: { type: "string", format: "binary" } } } },
           "400": errorResponse("A parameter is invalid"), "401": errorResponse("Missing or wrong credentials"),
+          "403": errorResponse("A browser form on another site (`forbidden`): nothing was pushed"),
           "409": errorResponse("No lines match the filter (`nothing_to_push`): no batch was opened and nothing was audited") } } },
       "/api/gl/openapi.json": { get: { operationId: "openapi", tags: ["Meta"], summary: "This specification", description: "The OpenAPI 3.1 document, with this instance as the server. Import it into Postman, Insomnia, Bruno or a client generator.",
         responses: { "200": { description: "OK", content: json({ type: "object" }) } }, "x-try": "" } },

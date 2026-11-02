@@ -101,12 +101,18 @@ class NormalizeError(ValueError):
     pass
 
 
+# Pasted into a PDF form, these would travel through to every document and export built from the field (CR-134).
+CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
+
 def normalize(path: str, raw) -> object:
     """Convert a raw extracted value to the schema type for `path`; None for blank."""
     kind = FIELDS[path]
     if raw is None or (isinstance(raw, str) and not raw.strip()):
         return None
-    text = str(raw).strip()
+    text = CONTROL_CHARS.sub("", str(raw)).strip()
+    if not text:
+        return None
     if kind == "str":
         return text
     if kind == "state":

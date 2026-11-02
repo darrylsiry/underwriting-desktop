@@ -4,7 +4,10 @@
 
 export type XlsxCell = string | number | null | undefined;
 
-const XML = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+// XML 1.0 has no way to write most control characters, even escaped: one would leave the part not well-formed and
+// the workbook unreadable, and a pushed line can't be changed afterwards (CR-134).
+const NOT_XML = /[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]/g;
+const XML = (s: string) => s.replace(NOT_XML, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 function colName(i: number): string {   // 0 -> A, 25 -> Z, 26 -> AA
   let s = "";

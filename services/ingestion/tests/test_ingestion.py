@@ -52,6 +52,9 @@ def test_email_attachment_records_parent():
     ("policy.effective_date", "12/01/2026", "2026-12-01"),
     ("applicant.state", "tx", "TX"),
     ("applicant.dba", "  ", None),
+    ("applicant.name", "Acme\x0b Roofing\x01", "Acme Roofing"),  # CR-134
+    ("applicant.dba", "\x0b\x01", None),
+    ("operations.description", "Line one\nLine\ttwo", "Line one\nLine\ttwo"),
 ])
 def test_normalize(path, raw, value):
     assert normalize(path, raw) == value

@@ -3,6 +3,12 @@ import { test } from "node:test";
 import { toCsv } from "./csv.ts";
 import { crc32, toXlsx, zipStored } from "./xlsx.ts";
 
+test("a control character can't make the workbook unreadable (CR-134)", () => {
+  const sheet = new TextDecoder().decode(toXlsx("S", ["a"], [["x\x0by\x01 & z"]]));
+  assert.ok(sheet.includes(">xy &amp; z</t>"));
+  assert.ok(!/[\x0b\x01]/.test(sheet.slice(sheet.indexOf("<sheetData>"), sheet.indexOf("</sheetData>"))));
+});
+
 test("csv quotes what needs quoting and neutralizes formulas", () => {
   const csv = toCsv(["a", "b"], [["plain", 1234.5], ['say "hi", now', "=SUM(1)"], [null, new Date("2026-10-30T12:00:00Z")]]);
   assert.equal(csv, "﻿" + 'a,b\r\nplain,1234.50\r\n"say ""hi"", now",\'=SUM(1)\r\n,2026-10-30T12:00:00.000Z\r\n');
