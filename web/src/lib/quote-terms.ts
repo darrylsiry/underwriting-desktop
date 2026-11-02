@@ -1,7 +1,8 @@
 // Quote terms that don't need the database: suggested subjectivities and dates.
 // Pure module (type-only imports) so node:test can load it.
 import { ROOFING_CLASSES, lossRunYears, type Flag } from "./referrals.ts";   // .ts so node:test can load this pure module too
-import type { SubmissionData } from "./submission";
+import { isIsoDate, type SubmissionData } from "./submission.ts";
+import { whenDate } from "./time.ts";
 import type { RatingInputs } from "./worksheet";
 
 export const QUOTE_VALID_DAYS = 30;
@@ -38,6 +39,48 @@ export function addYears(isoDate: string, years: number): string {
   const d = new Date(`${isoDate}T00:00:00Z`);
   d.setUTCFullYear(d.getUTCFullYear() + years);
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * The policy period from a quote form, or an error starting with the field's name (the forms put it
+ * under that input). Rating has no term input and nothing pro-rates, so a quote's premium is for
+ * twelve months and the period must be one year (CR-113). Runs before anything is rated (CR-019).
+ */
+export function quotePeriod(form: { effective_date: string; expiration_date: string }): { effective: string; expiration: string } {
+  const effective = form.effective_date.trim();
+  if (!isIsoDate(effective)) throw new Error("Effective date: use YYYY-MM-DD");
+  const oneYear = addYears(effective, 1);
+  const expiration = form.expiration_date.trim() || oneYear;
+  if (!isIsoDate(expiration)) throw new Error("Expiration: use YYYY-MM-DD");
+  if (expiration !== oneYear) throw new Error(`Expiration must be ${whenDate(oneYear)}: policies are written for one year from the effective date`);
+  return { effective, expiration };
+}
+
+/** The limits a quote prints. All of them come from the worksheet: the underwriter sees and rates these, not the broker's request (CR-024). */
+export function quoteLimits(inputs: Pick<RatingInputs, "occurrence_limit" | "aggregate_limit">): { label: string; amount: number }[] {
+  return [
+    { label: "Each occurrence", amount: inputs.occurrence_limit },
+    { label: "General aggregate", amount: inputs.aggregate_limit },
+    { label: "Products-completed operations aggregate", amount: inputs.aggregate_limit },
+  ];
+}
+
+/** Who the producer is, by name. Stored beside the display lines, which drop blanks and so can't be read by position (CR-125). */
+export type ProducerFields = { agency: string; contact: string; email: string; phone: string };
+
+export function producerFields(p: Record<string, unknown>): ProducerFields {
+  const text = (v: unknown) => String(v ?? "").trim();
+  return { agency: text(p.agency), contact: text(p.contact), email: text(p.email), phone: text(p.phone) };
+}
+
+/** The producer block as a PDF prints it. */
+export function producerLines(f: ProducerFields): string[] {
+  return [f.agency, f.contact, [f.email, f.phone].filter(Boolean).join("  ·  ")].filter(Boolean);
+}
+
+/** The named producer on a frozen quote or expiring policy. Rows from before CR-125 have only the display lines, read by position. */
+export function producerOf(t: { producer?: string[]; producer_fields?: ProducerFields }): ProducerFields {
+  return t.producer_fields ?? { agency: t.producer?.[0] ?? "", contact: t.producer?.[1] ?? "", email: "", phone: "" };
 }
 
 export function parseSubjectivities(text: string): string[] {

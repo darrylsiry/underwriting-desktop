@@ -6,6 +6,7 @@ import { customerDb, policyDb } from "./db";
 import { accountingPeriod } from "./gl-journal";
 import { postPolicyBound } from "./ledger";
 import { renderBinderPdf, renderPolicyPdf, type PolicyDocument } from "./policy-pdf";
+import { producerOf, type ProducerFields } from "./quote-terms";
 import type { ExpiringPolicy } from "./renewal-compare";
 import type { RatingInputs } from "./worksheet";
 import { money, type Rating } from "./worksheets";
@@ -71,7 +72,7 @@ type QuoteForBinding = {
   insured_id: string | null; insured_name: string; effective_date: string; expiration_date: string; valid_until: string;
   rating_inputs: RatingInputs; rating: Rating; premium: string; policy_fee: string; surplus_lines_tax: string; total: string;
   subjectivities: string[];
-  terms: { insured_address: string[]; producer: string[]; limits: { label: string; amount: number }[]; deductible: number;
+  terms: { insured_address: string[]; producer: string[]; producer_fields?: ProducerFields; limits: { label: string; amount: number }[]; deductible: number;
     class_code: string; class_description: string; operations: string; forms: string[] };
 };
 
@@ -86,10 +87,7 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
   const correlationId = crypto.randomUUID();   // shared by the bind's audit events and its ledger journal
   const client = await policyDb.connect();
   let policyId: string;
-  let journal: { journal_no: string; lines: { account_code: string; debit: number; credit: number }[] };
-  let doc: PolicyDocument;
   let q: QuoteForBinding;
-  let renewedFrom: ExpiringPolicy | null = null;
   try {
     await client.query("BEGIN");
     // Lock the quote so two clicks can't bind it twice.
@@ -100,7 +98,7 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
        FROM quotes WHERE id = $1 FOR UPDATE`, [quoteId])).rows[0];
     if (!found) throw new Error("Quote not found");
     q = found;
-    renewedFrom = (await customerDb.query<{ renewal_of: ExpiringPolicy | null }>(
+    const renewedFrom = (await customerDb.query<{ renewal_of: ExpiringPolicy | null }>(
       "SELECT renewal_of FROM submissions WHERE id = $1 AND kind = 'renewal'", [q.submission_id])).rows[0]?.renewal_of ?? null;
     const blockers = bindBlockers(q, today);
     if (blockers.length) throw new Error(blockers.join("; "));
@@ -108,7 +106,7 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
     const seq = Number((await client.query<{ n: string }>("SELECT nextval('policy_number_seq') AS n")).rows[0].n);
     const numbers = policyNumbers(seq, Number(q.effective_date.slice(0, 4)));
     const subjectivities = subjectivityStatus(q.subjectivities, received, today);
-    doc = {
+    const doc: PolicyDocument = {
       policyNumber: numbers.policy, binderNumber: numbers.binder, quoteNumber: q.quote_number, quoteVersion: q.version,
       boundAt, boundBy: actor, insuredName: q.insured_name, insuredAddress: q.terms.insured_address, producer: q.terms.producer,
       effectiveDate: q.effective_date, expirationDate: q.expiration_date, limits: q.terms.limits, deductible: q.terms.deductible,
@@ -136,12 +134,36 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
         `UPDATE ${renewedFrom.source === "book" ? "book_policies" : "policies"} SET renewal_status = 'renewed' WHERE id = $1`, [renewedFrom.policy_id]);
     }
     // Book the premium to the sub-ledger in the same transaction: no bound policy without its journal.
-    journal = await postPolicyBound(client, {
+    const journal = await postPolicyBound(client, {
       policyId, policyNumber: numbers.policy, insuredName: q.insured_name, effectiveDate: q.effective_date, expirationDate: q.expiration_date,
       quoteRef: `${q.quote_number} v${q.version}`, submissionId: q.submission_id, submissionRef: q.submission_ref,
-      underwriter: actor, producer: q.terms.producer[0] ?? "", transactionType: renewedFrom ? "renewal" : "new_business",
+      underwriter: actor, producer: producerOf(q.terms).agency, transactionType: renewedFrom ? "renewal" : "new_business",
       amounts: q, postedAt: boundAt, correlationId,
     });
+    const open = doc.subjectivities.filter((s) => s.status === "open");
+    // In the transaction, so a policy and its journal can't exist without their trail (CR-034).
+    await audit([
+      {
+        actor, action: "quote.bound", entityType: "quote", entityId: q.id,
+        summary: `${q.quote_number} v${q.version} bound as ${doc.policyNumber}`, before: { status: "issued" }, after: { status: "bound" },
+        correlationId, occurredAt: at ?? undefined,
+      },
+      {
+        actor, action: "policy.bound", entityType: "policy", entityId: policyId,
+        summary: `${doc.policyNumber} bound for ${q.insured_name}: ${money(q.total)}, effective ${whenDate(q.effective_date)}`
+          + (open.length ? `, ${open.length} open subjectivit${open.length === 1 ? "y" : "ies"}` : ""),
+        after: { quote_id: q.id, binder_number: doc.binderNumber, total: q.total, subjectivities: doc.subjectivities }, correlationId, occurredAt: at ?? undefined,
+      },
+      {
+        actor, action: "policy.bound", entityType: "submission", entityId: q.submission_id,
+        summary: `${q.submission_ref}: bound as ${doc.policyNumber} (${q.quote_number} v${q.version}, ${money(q.total)})${renewedFrom ? `, renewing ${renewedFrom.policy_number}` : ""}`, correlationId, occurredAt: at ?? undefined,
+      },
+      {
+        actor, action: "gl.posted", entityType: "policy", entityId: policyId,
+        summary: `${journal.journal_no}: ${money(q.total)} booked to the premium sub-ledger for ${doc.policyNumber} (${renewedFrom ? "renewal" : "new business"}, period ${accountingPeriod(boundAt)})`,
+        after: { journal_no: journal.journal_no, lines: journal.lines.map((l) => ({ account: l.account_code, debit: l.debit, credit: l.credit })) }, correlationId, occurredAt: at ?? undefined,
+      },
+    ], client);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -149,29 +171,5 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
   } finally {
     client.release();
   }
-
-  const open = doc.subjectivities.filter((s) => s.status === "open");
-  await audit(
-    {
-      actor, action: "quote.bound", entityType: "quote", entityId: q.id,
-      summary: `${q.quote_number} v${q.version} bound as ${doc.policyNumber}`, before: { status: "issued" }, after: { status: "bound" },
-      correlationId, occurredAt: at ?? undefined,
-    },
-    {
-      actor, action: "policy.bound", entityType: "policy", entityId: policyId,
-      summary: `${doc.policyNumber} bound for ${q.insured_name}: ${money(q.total)}, effective ${whenDate(q.effective_date)}`
-        + (open.length ? `, ${open.length} open subjectivit${open.length === 1 ? "y" : "ies"}` : ""),
-      after: { quote_id: q.id, binder_number: doc.binderNumber, total: q.total, subjectivities: doc.subjectivities }, correlationId, occurredAt: at ?? undefined,
-    },
-    {
-      actor, action: "policy.bound", entityType: "submission", entityId: q.submission_id,
-      summary: `${q.submission_ref}: bound as ${doc.policyNumber} (${q.quote_number} v${q.version}, ${money(q.total)})${renewedFrom ? `, renewing ${renewedFrom.policy_number}` : ""}`, correlationId, occurredAt: at ?? undefined,
-    },
-    {
-      actor, action: "gl.posted", entityType: "policy", entityId: policyId,
-      summary: `${journal.journal_no}: ${money(q.total)} booked to the premium sub-ledger for ${doc.policyNumber} (${renewedFrom ? "renewal" : "new business"}, period ${accountingPeriod(boundAt)})`,
-      after: { journal_no: journal.journal_no, lines: journal.lines.map((l) => ({ account: l.account_code, debit: l.debit, credit: l.credit })) }, correlationId, occurredAt: at ?? undefined,
-    },
-  );
   return (await policiesForSubmission(q.submission_id)).find((p) => p.id === policyId)!;
 }

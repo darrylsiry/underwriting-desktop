@@ -5,7 +5,7 @@ import { Fragment } from "react";
 import { SubmitButton } from "@/components/submit-button";
 import { Pill, RowLink, Section, money, when, whenDate } from "@/components/ui";
 import { policiesForSubmission } from "@/lib/policies";
-import { addYears, suggestedSubjectivities } from "@/lib/quote-terms";
+import { addYears, producerOf, suggestedSubjectivities } from "@/lib/quote-terms";
 import { getQuote, quotesForSubmission } from "@/lib/quotes";
 import { changeSummary, compareRenewal, inputText, pctText, signed, type Comparison, type Side } from "@/lib/renewal-compare";
 import { expiringOf } from "@/lib/renewals";
@@ -257,7 +257,7 @@ export default async function RenewalPage({ params, searchParams }: Props) {
             <dl className="grid grid-cols-2 gap-y-1 p-4 text-sm">
               <dt className="text-slate-500">Policy</dt><dd className="text-right"><RowLink href={expiringHref}>{exp.policy_number}</RowLink></dd>
               <dt className="text-slate-500">Source</dt><dd className="text-right">{exp.source === "book" ? "prior system" : "UW Desktop"}</dd>
-              <dt className="text-slate-500">Producer</dt><dd className="text-right">{exp.producer[0]}</dd>
+              <dt className="text-slate-500">Producer</dt><dd className="text-right">{producerOf(exp).agency}</dd>
               <dt className="text-slate-500">Losses (5 yr)</dt><dd className="text-right tabular-nums">{exp.losses.claims} claims · {money(exp.losses.incurred)}{exp.losses.open_claims ? ` · ${exp.losses.open_claims} open` : ""}</dd>
             </dl>
           </Section>

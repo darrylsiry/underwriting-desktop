@@ -1,6 +1,7 @@
 // Fictitious E&S contractors GL risks, built deterministically from a seed: the vocabulary the
 // prior-system book, the seeded history and the generated inbox submissions all share, so the demo's
 // insureds, producers and trades read as one portfolio. Pure module (type-only imports) for node:test.
+import { addYears } from "./quote-terms.ts";
 import { ROOFING_CLASSES } from "./referrals.ts";
 import type { Loss, SubmissionData } from "./submission";
 
@@ -129,8 +130,7 @@ export function buildSyntheticCase(r: Rng, o: { effective: string; referrals: Re
   });
   const priorPremium = roundTo((receipts / 1000) * BASE_RATE[code] * (0.9 + r() * 0.25), 100);
   const slug = slugify(name);
-  const [y, m, d] = o.effective.split("-").map(Number);
-  const expiration = `${y + 1}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const expiration = addYears(o.effective, 1);
 
   const data = {
     applicant: { name, dba: "", street: `${between(r, 100, 9800)} ${pick(r, STREETS)}`, city, state: home, zip: `${zipPrefix}${String(between(r, 10, 99))}`, fein, entity_type: entityType, years_in_business: years, website: r() < 0.6 ? `www.${slug.replace(/-(llc|inc|corp|co)$/, "")}.example` : "" },

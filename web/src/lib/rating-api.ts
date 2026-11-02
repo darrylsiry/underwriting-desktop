@@ -54,8 +54,9 @@ export async function rateVersionId(label: string): Promise<number | null> {
   try {
     res = await fetch(`${RATING_SERVICE_URL}/rate-versions`, { cache: "no-store", signal: AbortSignal.timeout(RATING_TIMEOUT_MS) });
   } catch (err) {
-    throw new RatingServiceError(`Rating service unreachable (${(err as Error).message}). Your inputs are saved; the last premium is kept.`, null);
+    throw new RatingServiceError(`Rating service unreachable (${(err as Error).message}). Try again shortly.`, null);
   }
+  // Status null below 500: a refused listing says nothing about the inputs, so it must not read as `rejectedInputs`.
   if (!res.ok) throw new RatingServiceError(`Rating service returned ${res.status} listing rate versions`, res.status >= 500 ? res.status : null);
   const versions: { id: number; label: string }[] = await res.json();
   return versions.find((v) => v.label === label)?.id ?? null;

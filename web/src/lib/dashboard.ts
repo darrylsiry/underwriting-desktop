@@ -2,6 +2,7 @@ import { plural } from "./text.ts";
 export { plural };
 import { customerDb, policyDb } from "./db";
 import { listInbox } from "./inbox";
+import { producerOf, type ProducerFields } from "./quote-terms";
 import { missingForRating, type SubmissionRow } from "./submissions";
 import { stageOf, type Stage } from "./stage";
 import { whenDate } from "./time";
@@ -64,7 +65,7 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
               incurred::float8 AS incurred, open_claims, renewal_status, renewal_submission_id
        FROM book_policies WHERE underwriter = $1 AND expiration_date >= CURRENT_DATE`, [user]),
     policyDb.query<{ id: string; policy_number: string; insured_name: string; submission_id: string; effective_date: string;
-      expiration_date: string; premium: number; terms: { class_code?: string; class_description?: string; producer?: string[] };
+      expiration_date: string; premium: number; terms: { class_code?: string; class_description?: string; producer?: string[]; producer_fields?: ProducerFields };
       states: string[] | null; subjectivities: { text: string; status: string; due_date: string }[];
       renewal_status: BookPolicy["renewal_status"]; renewal_submission_id: string | null }>(
       `SELECT p.id, p.policy_number, p.insured_name, p.submission_id, p.effective_date::text, p.expiration_date::text,
@@ -85,7 +86,7 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
   const written: BookPolicy[] = policies.rows.filter((p) => p.expiration_date >= today).map((p) => ({
     id: p.id, policy_number: p.policy_number, insured_name: p.insured_name,
     class_code: p.terms?.class_code ?? "", class_description: p.terms?.class_description ?? "",
-    states: p.states ?? [], producer: p.terms?.producer?.[0] ?? "",
+    states: p.states ?? [], producer: producerOf(p.terms ?? {}).agency,
     effective_date: p.effective_date, expiration_date: p.expiration_date, premium: p.premium,
     claims: 0, incurred: 0, open_claims: 0, renewal_status: p.renewal_status, renewal_submission_id: p.renewal_submission_id,
     source: "uw desktop", href: `/policies/${p.id}`,
