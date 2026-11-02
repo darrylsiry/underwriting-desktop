@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>UX-050 before and after</title>
+<style>
+body{font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;background:#f8fafc;color:#0f172a;margin:0;padding:24px}
+h1{font-size:16px;margin:0 0 4px}.note{color:#64748b;margin:0 0 16px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin:0 0 8px}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:12px}
+.t{border-bottom:1px solid #f1f5f9;padding:8px 16px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b}
+.b{padding:16px}.ok{background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px;padding:10px;color:#065f46}
+.big{font-size:30px;font-weight:600}.mut{color:#64748b;font-size:12px}
+.in{background:#f8fafc;border:1px solid #cbd5e1;border-radius:4px;padding:5px 8px;text-align:right;margin-top:4px}
+.bad{outline:2px solid #e11d48}.good{outline:2px solid #059669}
+.banner{background:#ecfdf5;border:1px solid #a7f3d0;border-radius:4px;padding:8px 12px;color:#065f46;margin-bottom:12px}
+</style></head><body>
+<h1>UX-050: a bound file shows what was bound</h1>
+<p class="note">Bound "as issued" after the worksheet moved on. Amounts are illustrative. Outlines mark the values that change.</p>
+<div class="grid">
+<div><h2>Before</h2>
+<div class="banner">Bound as GL-26-00021 · this worksheet is the rating that was bound.</div>
+<div class="card"><div class="t">Policy</div><div class="b"><div class="ok"><b>Bound · GL-26-00021</b><br>Q-2026-0009 v2 · $14,230 · by underwriter1</div></div></div>
+<div class="card"><div class="t">Premium as bound</div><div class="b"><div class="big bad">$13,640</div><div class="mut">bound Oct 30, 2026 · rates 2026.2</div></div></div>
+<div class="card"><div class="t">Rating inputs</div><div class="b"><span class="mut">Deductible</span><div class="in bad">$ 2,500</div></div></div>
+</div>
+<div><h2>After</h2>
+<div class="banner">Bound as GL-26-00021 · this is the rating that was bound.</div>
+<div class="card"><div class="t">Policy</div><div class="b"><div class="ok"><b>Bound · GL-26-00021</b><br>Q-2026-0009 v2 · $14,230 · by underwriter1</div></div></div>
+<div class="card"><div class="t">Premium as bound</div><div class="b"><div class="big good">$14,230</div><div class="mut">bound Oct 30, 2026 · rates 2026.2</div></div></div>
+<div class="card"><div class="t">Rating inputs</div><div class="b"><span class="mut">Deductible</span><div class="in good">$ 1,000</div></div></div>
+</div>
+</div></body></html>

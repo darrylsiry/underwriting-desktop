@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>UX-053 before and after</title>
+<style>
+body{font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;background:#f8fafc;color:#0f172a;margin:0;padding:24px}
+h1{font-size:16px;margin:0 0 4px}.note{color:#64748b;margin:0 0 16px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin:0 0 8px}
+.err{background:#fff1f2;color:#be123c;border-radius:4px;padding:8px 12px;margin-bottom:12px}
+.err a{color:inherit}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;margin-bottom:12px}
+.t{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin-bottom:8px}
+code{font-size:12px}.s{font-size:12px;margin-top:6px}.m{color:#64748b}
+</style></head><body>
+<h1>UX-053: intake review uses the labels on the form</h1>
+<p class="note">A sparse broker email. Field names and values follow the form; file names are illustrative.</p>
+<div class="grid">
+<div><h2>Before</h2>
+<div class="err">Missing before this can be rated: operations.class_code, policy.occurrence_limit. Fill them in or ask the broker.</div>
+<div class="card"><div class="t">Documents disagree</div><code>operations.gross_receipts</code>: used <b>2300000</b>; 2100000 in app.pdf</div>
+<div class="card"><div class="t">History</div><div class="s"><span class="m">Oct 30, 2026, 5:03 PM EDT</span> <b>underwriter1</b>: SUB-0014: applicant.fein corrected ("12-3" → "12-3456789")</div></div>
+</div>
+<div><h2>After</h2>
+<div class="err">Missing before this can be rated: <a href="#">Class code</a>, <a href="#">Each occurrence</a>. Fill them in or ask the broker.</div>
+<div class="card"><div class="t">Documents disagree</div>Gross receipts: used <b>$2,300,000</b>; $2,100,000 in app.pdf</div>
+<div class="card"><div class="t">History</div><div class="s"><span class="m">Oct 30, 2026, 5:03 PM EDT</span> <b>underwriter1</b>: SUB-0014: FEIN corrected (12-3 → 12-3456789)</div></div>
+</div>
+</div></body></html>

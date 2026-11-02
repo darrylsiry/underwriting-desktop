@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>UX-051 before and after</title>
+<style>
+body{font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;background:#f8fafc;color:#0f172a;margin:0;padding:24px}
+h1{font-size:16px;margin:0 0 4px}.note{color:#64748b;margin:0 0 16px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin:0 0 8px}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:8px}
+.t{border-bottom:1px solid #f1f5f9;padding:8px 16px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b}
+.r{display:flex;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid #f1f5f9}
+.r span.x{flex:1}.due{font-size:12px;color:#92400e}.late{font-size:12px;color:#be123c;font-weight:600}
+.p{border-radius:999px;padding:2px 8px;font-size:12px;font-weight:500}
+.o{background:#fffbeb;color:#92400e}.d{background:#ecfdf5;color:#047857}
+button{font:inherit;font-size:12px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;padding:3px 8px}
+.who{display:block;font-size:12px;color:#64748b}.foot{padding:8px 16px;font-size:12px;color:#64748b;border-top:1px solid #f1f5f9}
+</style></head><body>
+<h1>UX-051: record a subjectivity when it arrives</h1>
+<p class="note">Policy page, Subjectivities card. Dates are illustrative.</p>
+<div class="grid">
+<div><h2>Before</h2><div class="card"><div class="t">Subjectivities · 3 open</div>
+<div class="r"><span class="x">Signed and dated application</span><span class="due">due Nov 30, 2026</span><span class="p o">open</span></div>
+<div class="r"><span class="x">Five years of currently valued loss runs</span><span class="due">due Nov 30, 2026</span><span class="p o">open</span></div>
+<div class="r"><span class="x">Confirmation of operations and class code</span><span class="due">due Oct 20, 2026</span><span class="p o">open</span></div>
+</div></div>
+<div><h2>After</h2><div class="card"><div class="t">Subjectivities · 2 open</div>
+<div class="r"><span class="x">Signed and dated application</span><span class="due">due Nov 30, 2026</span><button>Mark received</button></div>
+<div class="r"><span class="x">Five years of currently valued loss runs<span class="who">Received Nov 12, 2026 by underwriter1</span></span><span class="p d">received</span></div>
+<div class="r"><span class="x">Confirmation of operations and class code</span><span class="late">12 days overdue</span><button>Mark received</button></div>
+<div class="foot">The binder is kept as issued; receipts are recorded here.</div>
+</div></div>
+</div></body></html>

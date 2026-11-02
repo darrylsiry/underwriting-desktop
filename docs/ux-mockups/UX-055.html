@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>UX-055 before and after</title>
+<style>
+body{font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;background:#f1f5f9;color:#0f172a;margin:0;padding:24px}
+h1{font-size:16px;margin:0 0 4px}.note{color:#64748b;margin:0 0 16px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin:0 0 8px}
+.pg{background:#fff;border:1px solid #cbd5e1;padding:24px;font-size:12px}
+.k{color:#4f46e5;font-weight:700;font-size:11px}.ti{font-size:19px;font-weight:700;margin:4px 0}
+.h{color:#4f46e5;font-size:10px;font-weight:700;text-transform:uppercase;border-bottom:1px solid #e2e8f0;margin:12px 0 5px;padding-bottom:2px}
+.row{display:flex;justify-content:space-between}.m{color:#64748b}
+.box{border:1px solid #c7d2fe;background:#eef2ff;padding:10px 12px;margin:12px 0}
+.tot{font-size:20px;font-weight:700}
+</style></head><body>
+<h1>UX-055: the broker sees price, period, limits and next step first</h1>
+<p class="note">Top of the quote PDF, approximated. Values are illustrative.</p>
+<div class="grid">
+<div><h2>Before</h2><div class="pg">
+<div class="k">UNDERWRITING DESKTOP SPECIALTY</div><div class="ti">Commercial General Liability Quotation</div>
+<div class="m">Issued 10/30/2026 · Valid until 11/29/2026</div>
+<div class="h">Named insured and producer</div>Desert Bloom Landscaping LLC
+<div class="h">Policy period</div><div class="row"><span class="m">Effective</span><span>12/01/2026 to 12/01/2027</span></div>
+<div class="h">Coverage and limits</div><div class="row"><span class="m">Each occurrence</span><span>$1,000,000</span></div>
+<div class="h">Premium</div><div class="row"><b>Total</b><b>$14,230</b></div>
+<div class="h">Subjectivities (required before binding)</div>1. Signed and dated application
+</div></div>
+<div><h2>After</h2><div class="pg">
+<div class="k">UNDERWRITING DESKTOP SPECIALTY</div><div class="ti">Commercial General Liability Quotation</div>
+<div class="m">Issued 10/30/2026 · Valid until 11/29/2026</div>
+<div class="box"><div class="row"><span>Total cost</span><span class="tot">$14,230</span></div>
+<div class="row"><span class="m">Policy period</span><span>12/01/2026 to 12/01/2027</span></div>
+<div class="row"><span class="m">Limits</span><span>$1,000,000 occurrence / $2,000,000 aggregate</span></div>
+<div class="row"><span class="m">Deductible</span><span>$1,000</span></div>
+<div style="margin-top:6px"><b>To bind:</b> confirm acceptance with underwriter1 by 11/29/2026.</div></div>
+<div class="h">Named insured and producer</div>Desert Bloom Landscaping LLC
+<div class="h">Subjectivities (due within 30 days of binding unless received first)</div>1. Signed and dated application
+</div></div>
+</div></body></html>

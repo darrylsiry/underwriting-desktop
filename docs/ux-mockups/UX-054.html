@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>UX-054 before and after</title>
+<style>
+body{font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;background:#f8fafc;color:#0f172a;margin:0;padding:24px}
+h1{font-size:16px;margin:0 0 4px}.note{color:#64748b;margin:0 0 16px}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin:0 0 8px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e2e8f0}
+th{font-size:12px;text-transform:uppercase;color:#64748b;text-align:left;padding:8px;background:#f8fafc}
+td{padding:8px;border-top:1px solid #f1f5f9}.n{text-align:right;font-variant-numeric:tabular-nums}
+a{color:#4f46e5}.p{border-radius:999px;padding:2px 8px;font-size:12px;font-weight:500}
+.i{background:#eef2ff;color:#4338ca}.e{background:#fffbeb;color:#92400e}
+.head{display:flex;align-items:center;gap:10px;margin:14px 0}.head b{font-size:20px}
+.go{background:#047857;color:#fff;border-radius:6px;padding:4px 10px;font-size:12px}
+.rev{background:#4f46e5;color:#fff;border-radius:6px;padding:4px 10px;font-size:12px}
+.chip{background:#fef2f2;color:#b91c1c;border-radius:4px;padding:1px 5px;font-size:12px}
+.m{color:#64748b;font-size:13px}
+</style></head><body>
+<h1>UX-054: an expired quote says so everywhere</h1>
+<p class="note">Quotes list and quote page, three days after valid-until. Values are illustrative.</p>
+<div class="grid">
+<div><h2>Before</h2>
+<table><tr><th>Quote</th><th>Status</th><th class="n">Total</th></tr>
+<tr><td><a href="#">Q-2026-0009 v1</a></td><td><span class="p i">issued</span></td><td class="n">$14,230</td></tr></table>
+<div class="head"><b>Q-2026-0009 v1</b><span class="p i">issued</span><span class="go">Bind on the workbench →</span></div>
+<div class="m">issued by underwriter1 · valid until Nov 20, 2026</div>
+</div>
+<div><h2>After</h2>
+<table><tr><th>Quote</th><th>Status</th><th>Valid until</th><th class="n">Total</th></tr>
+<tr><td><a href="#">Q-2026-0009 v1</a></td><td><span class="p e">expired</span></td><td>Nov 20, 2026 <span class="chip">3d overdue</span></td><td class="n">$14,230</td></tr></table>
+<div class="head"><b>Q-2026-0009 v1</b><span class="p e">expired</span><span class="rev">Revise on the workbench →</span></div>
+<div class="m">Expired Nov 20, 2026. Issue a revised quote before binding.</div>
+</div>
+</div></body></html>
