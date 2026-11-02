@@ -1,7 +1,7 @@
 -- SEC-007: least-privilege database roles, one per service, for installs that can use them.
 --
--- The stack runs as the server's owner role (`uw` locally; the role `fly mpg attach` creates on
--- Fly) because that role must also run migrations at startup. This script adds a runtime role per
+-- By default the stack runs as the server's owner role (`uw` locally; the role `fly mpg attach`
+-- creates on Fly), which also runs migrations at startup. This script adds a runtime role per
 -- service with only the table privileges that service needs, and no UPDATE or DELETE on the
 -- evidence tables beyond the columns a later step fills in. The append-only triggers in the
 -- migrations hold either way; these roles add defence in depth. Safe to re-run.
@@ -9,7 +9,8 @@
 --   Local:  docker compose exec -T db psql -U uw -d postgres -v web_pw="'…'" -v rating_pw="'…'" -f - < db/roles.sql
 --   Fly:    fly mpg connect <cluster> then \i this file (or paste it), with the two passwords set.
 --   Then point CUSTOMER_DATABASE_URL / POLICY_DATABASE_URL at web_app and DATABASE_URL at rating_app
---   for the request-serving processes, keeping the owner URL for migrations.
+--   for the request-serving processes, and keep the owner URL for migrations (CR-096):
+--   CUSTOMER_MIGRATION_DATABASE_URL / POLICY_MIGRATION_DATABASE_URL on web, MIGRATION_DATABASE_URL on rating.
 --
 -- New tables a later migration creates are covered by the ALTER DEFAULT PRIVILEGES lines, as long
 -- as the migration runs as the owner role that ran this script.
