@@ -143,6 +143,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
                   <li key={e.key} className="grid grid-cols-[150px_minmax(0,1fr)] gap-4 px-4 py-2.5 text-sm">
                     <div className="text-xs text-slate-500">
                       <time dateTime={e.at}>{when(e.at)}</time>{/* UX-006 */}
+                      {e.recordedAt && <span className="mt-0.5 block text-[11px] text-amber-700" title="When this row was written. The time above is when it says the event happened.">recorded {when(e.recordedAt)}</span>/* CR-074 */}
                       <span className={`mt-1 block w-fit rounded px-1.5 py-0.5 text-[11px] font-medium ${SOURCES[e.source].style}`}>{SOURCES[e.source].label}</span>
                     </div>
                     <div className="min-w-0">

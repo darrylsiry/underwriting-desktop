@@ -75,7 +75,7 @@ export function producerFields(p: Record<string, unknown>): ProducerFields {
 
 /** The producer block as a PDF prints it. */
 export function producerLines(f: ProducerFields): string[] {
-  return [f.agency, f.contact, [f.email, f.phone].filter(Boolean).join("  ·  ")].filter(Boolean);
+  return [f.agency, f.contact, f.email, f.phone].filter(Boolean);   // CR-118: one line each, so a long email can't push the phone off the page
 }
 
 /** The named producer on a frozen quote or expiring policy. Rows from before CR-125 have only the display lines, read by position. */

@@ -1,7 +1,8 @@
 """Rate-table admin: drafts, audited edits, activation, and the /admin UI.
 
-Runs after test_api.py (it activates a new version, which changes the default
-rate version for later tests). Tests in this file share one draft and run in order.
+It activates a new version, which changes the default rate version; test_api.py pins
+the seeded one, so the files can run in any order. Tests in this file share one draft
+and run in order.
 """
 import pytest
 

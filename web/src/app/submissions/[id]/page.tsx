@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { when, whenDate } from "@/components/ui";
 import { auditTrail } from "@/lib/audit";
+import { recordedApart } from "@/lib/timeline-merge";
 import { isOpenLoss } from "@/lib/referrals";
 import { dataFingerprint, getSubmission, listDocuments, missingForRating } from "@/lib/submissions";
 import {
@@ -155,7 +156,7 @@ export default async function ReviewPage({ params, searchParams }: Props) {
                 {ex.documents.map((d, i) => (
                   <li key={i}>
                     <span className="font-medium text-slate-700">{d.doc_type.replaceAll("_", " ")}</span>: {d.filename}
-                    {d.parent && <> (in email)</>} · {d.method === "form_field" ? "form fields" : d.method === "not_read" ? "not read" : "Claude"}
+                    {d.parent && <> (in email)</>} · {d.method === "not_read" ? "not read" : d.method === "claude" ? "Claude" : "form fields"}
                   </li>
                 ))}
               </ul>
@@ -184,6 +185,7 @@ export default async function ReviewPage({ params, searchParams }: Props) {
                   <li key={h.id}>
                     {/* UX-006: one display zone, named. */}
                     <span className="text-slate-500">{when(h.occurred_at)}</span>{" "}
+                    {recordedApart(h.occurred_at, h.recorded_at) && <span className="text-amber-700">(recorded {when(h.recorded_at!)}) </span>/* CR-074 */}
                     <span className="font-medium">{h.actor}</span>: {h.summary}
                     {h.action === "submission.field_corrected" && (
                       <span className="text-slate-500"> ({JSON.stringify(Object.values(h.before as object)[0])} → {JSON.stringify(Object.values(h.after as object)[0])})</span>

@@ -80,7 +80,7 @@ test("every limit on a quote is one the underwriter saw on the worksheet (CR-024
 
 test("producer details are read by name, not by position in the display lines (CR-125)", () => {
   const noContact = producerFields({ agency: "Sunbelt Brokers", contact: "", email: "a@b.example", phone: "555-0100" });
-  assert.deepEqual(producerLines(noContact), ["Sunbelt Brokers", "a@b.example  ·  555-0100"]);
+  assert.deepEqual(producerLines(noContact), ["Sunbelt Brokers", "a@b.example", "555-0100"]);
   assert.equal(producerOf({ producer: producerLines(noContact), producer_fields: noContact }).contact, "");
   const noAgency = producerFields({ agency: null, contact: "Pat Lee", email: "a@b.example", phone: null });
   assert.deepEqual(producerLines(noAgency), ["Pat Lee", "a@b.example"]);

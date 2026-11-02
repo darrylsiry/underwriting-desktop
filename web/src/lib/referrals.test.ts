@@ -70,7 +70,7 @@ test("inferred class and missing loss runs warn", () => {
 });
 
 test("loss runs are requested whatever the tenure, sized to it (CR-062)", () => {
-  const noLossRun = { fields: {}, documents: [{ filename: "a.eml", doc_type: "broker_email", parent: null, method: "claude" }] };
+  const noLossRun = { fields: {}, documents: [{ filename: "a.eml", doc_type: "broker_email" as const, parent: null, method: "claude" as const }] };
   const unknown = ctx({ extraction: noLossRun, data: { ...ctx().data, applicant: {} } as unknown as SubmissionData });
   assert.deepEqual(codes(unknown), ["warn:NO_LOSS_RUNS"]);
   assert.match(referralFlags(unknown)[0].detail, /request 5 years of/);

@@ -18,15 +18,45 @@ export const usDate = (iso: string) => {
 /** Standard PDF fonts only encode WinAnsi; replace anything else so drawing never throws. */
 export function pdfSafe(text: string): string {
   return text
+    .replace(/\s*[\r\n\t\f\v]\s*/g, " ")   // CR-046: a line break or tab reads as a space, not "?"; the documents' deliberate double spaces stay
     .replace(/[‐-‒]/g, "-")
     .replace(/[→]/g, "->")
     .replace(/[^\x20-\x7E -ÿ–—‘’“”•…€]/g, "?");
 }
 
+/** Greedy word wrap. A single word wider than the column (a long email address) is cut to fit rather than run off the page (CR-118). */
+export function wrapLines(text: string, font: PDFFont, size: number, width: number): string[] {
+  const fits = (s: string) => font.widthOfTextAtSize(s, size) <= width;
+  const lines: string[] = [];
+  let line = "";
+  for (let word of text.split(/\s+/).filter(Boolean)) {
+    const next = line ? `${line} ${word}` : word;
+    if (fits(next)) { line = next; continue; }
+    if (line) lines.push(line);
+    while (!fits(word) && word.length > 1) {
+      let n = word.length - 1;
+      while (n > 1 && !fits(word.slice(0, n))) n--;
+      lines.push(word.slice(0, n));
+      word = word.slice(n);
+    }
+    line = word;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
 export class Writer {
   page!: PDFPage;
   y = 0;
-  constructor(private doc: PDFDocument, private font: PDFFont, private bold: PDFFont, private footer: string) {
+  private doc: PDFDocument;
+  private font: PDFFont;
+  private bold: PDFFont;
+  private footer: string;
+  constructor(doc: PDFDocument, font: PDFFont, bold: PDFFont, footer: string) {   // no parameter properties: node:test strips types, it doesn't compile
+    this.doc = doc;
+    this.font = font;
+    this.bold = bold;
+    this.footer = footer;
     this.newPage();
   }
 
@@ -54,19 +84,7 @@ export class Writer {
     const font = opts.bold ? this.bold : this.font;
     const x = opts.x ?? PAGE.margin;
     const width = opts.width ?? PAGE.w - PAGE.margin - x;
-    let line = "";
-    for (const word of pdfSafe(s).split(/\s+/)) {
-      const next = line ? `${line} ${word}` : word;
-      if (font.widthOfTextAtSize(next, size) > width && line) {
-        this.ensure(size + 3);
-        this.page.drawText(line, { x, y: this.y, size, font, color: opts.color ?? INK });
-        this.y -= size + 3;
-        line = word;
-      } else {
-        line = next;
-      }
-    }
-    if (line) {
+    for (const line of wrapLines(pdfSafe(s), font, size, width)) {
       this.ensure(size + 3);
       this.page.drawText(line, { x, y: this.y, size, font, color: opts.color ?? INK });
       this.y -= size + 3;
@@ -117,14 +135,16 @@ export function masthead(w: Writer, m: { reference: string; title: string; subti
   if (!m.right.length) w.y -= 12;
 }
 
-/** Two columns: named insured (left) and producer (right). */
+const PRODUCER_X = 330;
+
+/** Two columns: named insured (left) and producer (right), each wrapped inside its own width (CR-118). */
 export function parties(w: Writer, title: string, insured: string[], producer: string[]) {
   w.heading(title);
   const top = w.y;
-  insured.forEach((line, i) => { w.text(line, { bold: i === 0 }); w.y -= 13; });
+  insured.forEach((line, i) => w.para(line, { width: PRODUCER_X - 16 - PAGE.margin, bold: i === 0 }));
   const leftBottom = w.y;
   w.y = top;
-  producer.forEach((line, i) => { w.text(line, { x: 330, bold: i === 0 }); w.y -= 13; });
+  producer.forEach((line, i) => w.para(line, { x: PRODUCER_X, width: RIGHT - PRODUCER_X, bold: i === 0 }));
   w.y = Math.min(leftBottom, w.y);
 }
 

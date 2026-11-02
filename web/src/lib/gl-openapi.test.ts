@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { EXPORT_FORMATS, PERIOD_PRESETS, TRANSACTION_LABEL } from "./gl-journal.ts";
+import { EXPORT_FORMATS, GL_API_VERSION, PERIOD_PRESETS, TRANSACTION_LABEL } from "./gl-journal.ts";
 import { glOpenApi } from "./gl-openapi.ts";
 
 test("the OpenAPI document names this instance, secures every path with basic auth and enumerates the same values the routes accept", () => {
   const doc = glOpenApi("https://uwdesk-web.fly.dev");
   assert.equal(doc.openapi, "3.1.0");
+  assert.equal(doc.info.version, GL_API_VERSION, "one version, in one place (CR-120)");
   assert.deepEqual(doc.servers.map((s) => s.url), ["https://uwdesk-web.fly.dev"]);
   assert.deepEqual(doc.security, [{ basicAuth: [] }]);
   assert.equal((doc.components.securitySchemes.basicAuth as { scheme: string }).scheme, "basic");

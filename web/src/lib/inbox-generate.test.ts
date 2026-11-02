@@ -72,3 +72,69 @@ test("a flattened application has no fields; a sparse email is plain text; an em
   assert.match(mixed, /Content-Disposition: attachment; filename=".+-loss-run\.pdf"/);
   assert.match(mixed, /JVBERi0/, "a base64 PDF (%PDF-) is attached");
 });
+
+// ---- CR-128: a folder appears only once all its documents are written --------------------------
+
+const aCase = () => buildSyntheticCase(rng(23), { effective: "2026-12-01", referrals: "none" }, new Set());
+
+test("a write that fails part way leaves nothing in the inbox, and a retry works", async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "inbox-gen-"));
+  const realWrite = fs.writeFileSync;
+  let writes = 0;
+  const mock = t.mock.method(fs, "writeFileSync", (...args: Parameters<typeof fs.writeFileSync>) => {
+    if (++writes === 2) {
+      assert.deepEqual(readInbox(dir), [], "the first document is written but the inbox doesn't list the folder");
+      throw new Error("disk full");
+    }
+    return realWrite(...args);
+  });
+  await assert.rejects(writeSubmission(dir, aCase(), "acord_fillable+loss_run", NOW), /disk full/);
+  assert.equal(writes, 2);
+  assert.deepEqual(readInbox(dir), []);
+  assert.deepEqual(fs.readdirSync(dir), [], "the temp folder is gone too, so the minute's retry isn't blocked");
+
+  mock.mock.restore();
+  const made = await writeSubmission(dir, aCase(), "acord_fillable+loss_run", NOW);
+  assert.deepEqual(fs.readdirSync(dir), [made.folder], "a successful run leaves the same folder as before");
+  assert.deepEqual(readInbox(dir).map((f) => f.files.map((x) => x.name)), [made.files.toSorted()]);
+});
+
+test("while a folder is being written the inbox can't see it", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "inbox-gen-"));
+  const writing = writeSubmission(dir, aCase(), "acord_fillable+questionnaire", NOW);
+  const during = fs.readdirSync(dir);
+  assert.equal(during.length, 1);
+  assert.match(during[0], /^\.tmp-20261030-1432-/);
+  assert.deepEqual(readInbox(dir), []);
+  const made = await writing;
+  assert.deepEqual(fs.readdirSync(dir), [made.folder]);
+  assert.equal(readInbox(dir).length, 1);
+});
+
+test("if another server finishes the same case first, its folder stands", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "inbox-gen-"));
+  const c = aCase();
+  const first = await writeSubmission(dir, c, "broker_email_sparse", NOW);
+  const email = path.join(dir, first.folder, `${c.slug}-submission-email.eml`);
+  fs.writeFileSync(email, "the first server's copy");
+  const second = await writeSubmission(dir, c, "broker_email_sparse", NOW);
+  assert.equal(second.folder, first.folder);
+  assert.deepEqual(fs.readdirSync(dir), [first.folder], "no temp folder left behind");
+  assert.equal(fs.readFileSync(email, "utf8"), "the first server's copy");
+});
+
+test("a temp folder left by a stopped process is cleared once it's old, not while it may still be in use", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "inbox-gen-"));
+  const stale = path.join(dir, ".tmp-20261030-0900-old-co-abcd1234");
+  const fresh = path.join(dir, ".tmp-20261030-1430-new-co-abcd1234");
+  for (const d of [stale, fresh]) { fs.mkdirSync(d); fs.writeFileSync(path.join(d, "app.pdf"), "%PDF-1.4"); }
+  const old = new Date(NOW.getTime() - 2 * 3_600_000);
+  fs.utimesSync(stale, old, old);
+  const recent = new Date(NOW.getTime() - 60_000);
+  fs.utimesSync(fresh, recent, recent);
+  await generateInboxSubmissions(dir, 1, NOW);
+  const left = fs.readdirSync(dir);
+  assert.ok(!left.includes(path.basename(stale)));
+  assert.ok(left.includes(path.basename(fresh)));
+  assert.equal(readInbox(dir).length, 1, "neither is listed; only the new submission is");
+});

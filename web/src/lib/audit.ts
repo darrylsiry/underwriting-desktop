@@ -9,7 +9,7 @@ export type AuditEvent = {
   before?: unknown;
   after?: unknown;
   correlationId?: string;
-  occurredAt?: Date;   // when it happened, if not now (seeded history)
+  occurredAt?: Date;   // when it happened, if not now (seeded history); the database stamps recorded_at itself (CR-074)
 };
 
 /**
@@ -33,7 +33,7 @@ export async function audit(...args: AuditEvent[] | [AuditEvent[], Queryable]): 
 }
 
 export type AuditRow = {
-  id: number; occurred_at: Date; actor: string; action: string; summary: string;
+  id: number; occurred_at: Date; recorded_at: Date | null; actor: string; action: string; summary: string;
   before: unknown; after: unknown; correlation_id: string;
 };
 

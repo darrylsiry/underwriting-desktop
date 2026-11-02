@@ -1,7 +1,7 @@
 // The OpenAPI 3.1 description of the GL API, rendered as the docs page and served at
 // /api/gl/openapi.json. Built from the same constants the routes validate against, so the
 // enums can't drift. Pure module for node:test.
-import { ACCOUNTS, EXPORT_FORMATS, GL_TIME_ZONE, PERIOD_PRESETS, PRESET_LABEL, TRANSACTION_LABEL } from "./gl-journal.ts";
+import { ACCOUNTS, EXPORT_FORMATS, GL_API_VERSION, GL_TIME_ZONE, PERIOD_PRESETS, PRESET_LABEL, TRANSACTION_LABEL } from "./gl-journal.ts";
 
 export type Parameter = {
   name: string; in: "query" | "path"; required?: boolean; description: string;
@@ -26,8 +26,6 @@ export type OpenApiDocument = {
   paths: Record<string, Partial<Record<"get" | "post", Operation>>>;
   components: { securitySchemes: Record<string, unknown>; schemas: Record<string, unknown> };
 };
-
-export const GL_API_VERSION = "1.0.0";
 
 const presetList = PERIOD_PRESETS.map((p) => `\`${p}\` (${PRESET_LABEL[p]})`).join(", ");
 const typeList = Object.entries(TRANSACTION_LABEL).map(([k, v]) => `\`${k}\` (${v})`).join(", ");
