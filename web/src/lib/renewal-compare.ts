@@ -64,7 +64,11 @@ export function inputText(key: keyof RatingInputs, v: RatingInputs[keyof RatingI
   if (typeof v === "boolean") return v ? "yes" : "no";
   if (def.kind === "money") return money(Number(v));
   if (def.kind === "pct") return `${v}%`;
-  if (def.kind === "mod") return Number(v).toFixed(2);
+  if (def.kind === "mod") {
+    // Saves allow two decimals (CR-104). A longer value saved before that shows in full, so the input can't quietly round it.
+    const n = Number(v);
+    return Math.round(n * 100) / 100 === n ? n.toFixed(2) : String(n);
+  }
   return String(v);
 }
 

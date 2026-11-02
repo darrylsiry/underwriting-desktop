@@ -22,3 +22,11 @@ test("the service's detail is read from JSON or a stripped HTML body", () => {
   assert.equal(errorDetailOf("<html><body><h1>502 Bad Gateway</h1></body></html>"), "502 Bad Gateway");
   assert.equal(errorDetailOf(""), null);
 });
+
+test("FastAPI's validation list reads as its messages, not as JSON (CR-130)", () => {
+  const body = JSON.stringify({ detail: [{ type: "greater_than", loc: ["body", "gross_receipts"], msg: "Input should be greater than 0", input: 0 }] });
+  assert.equal(errorDetailOf(body), "gross_receipts: Input should be greater than 0");
+  const two = JSON.stringify({ detail: [{ loc: ["body", "a"], msg: "one" }, { msg: "two" }] });
+  assert.equal(errorDetailOf(two), "a: one; two");
+  assert.equal(errorDetailOf(JSON.stringify({ detail: "plain" })), "plain");
+});

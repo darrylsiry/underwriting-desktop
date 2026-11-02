@@ -17,11 +17,12 @@ export function suggestedSubjectivities(flags: Flag[], data: SubmissionData): st
       : `Currently valued loss runs for ${span}, satisfactory to the company`);
   }
   if (codes.has("CLASS_INFERRED")) out.push("Confirmation of operations and class code");
+  if (codes.has("ASSUMED_INPUTS")) out.push("Confirmation of working height, subcontracted share and subcontractor certificates");
   if (codes.has("UNINSURED_SUBS") || codes.has("HEAVY_SUBCONTRACTING")) {
     out.push("Sample subcontract showing hold-harmless and additional insured requirements");
   }
   if (codes.has("NY_LABOR_LAW")) out.push("Executed contractual risk transfer for all NY projects (Labor Law 240/241)");
-  if (codes.has("LARGE_OPEN_CLAIM")) out.push("Current adjuster's status report on open claims");
+  if (codes.has("LARGE_OPEN_CLAIM") || codes.has("OPEN_CLAIMS_NO_DETAIL")) out.push("Current adjuster's status report on open claims");
   const missing = (["street", "zip", "fein"] as const).filter((k) => !String(data.applicant?.[k] ?? "").trim());
   if (missing.length) out.push(`Complete named insured details (${missing.join(", ").replace("fein", "FEIN")})`);
   return out;

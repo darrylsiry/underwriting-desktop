@@ -6,7 +6,7 @@ import { inboxWarning, listInbox } from "@/lib/inbox";
 import { StageChip } from "@/components/stage-chip";
 import { STAGE_FILTERS, isStageKey, stageSummary } from "@/lib/stage";
 import { listSubmissions, missingForRating } from "@/lib/submissions";
-import { FIELD_DEFS, attention, getPath } from "@/lib/submission";
+import { FIELD_DEFS, getPath, openAttention } from "@/lib/submission";
 import { iso } from "@/lib/time";
 import { InboxList } from "./inbox-list";
 import { UploadForm } from "./upload-form";
@@ -70,8 +70,7 @@ export default async function SubmissionsPage({ searchParams }: { searchParams: 
             const st = stages.get(s.id)!;
             const conflicted = new Set(s.extraction.conflicts.map((c) => c.path));
             const flags = FIELD_DEFS.filter((d) =>
-              !s.corrected_fields.includes(d.path) &&
-              attention(d.path, getPath(s.data, d.path), s.extraction.fields[d.path], conflicted.has(d.path))).length;
+              openAttention(d.path, getPath(s.data, d.path), s.extraction.fields[d.path], conflicted.has(d.path), s.corrected_fields.includes(d.path))).length;
             const missing = missingForRating(s.data).length;
             const receipts = getPath(s.data, "operations.gross_receipts");
             return (

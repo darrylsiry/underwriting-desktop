@@ -6,7 +6,7 @@ import { auditTrail } from "@/lib/audit";
 import { isOpenLoss } from "@/lib/referrals";
 import { dataFingerprint, getSubmission, listDocuments, missingForRating } from "@/lib/submissions";
 import {
-  SECTIONS, attention, formatValue, getPath, toInput, type FieldDef, type FieldMeta, type Value,
+  SECTIONS, formatValue, getPath, openAttention, toInput, type FieldDef, type FieldMeta, type Value,
 } from "@/lib/submission";
 import { reviewAction } from "../actions";
 import { StatusBadge } from "../status-badge";
@@ -233,8 +233,8 @@ function constraints(type: FieldDef["type"]): React.InputHTMLAttributes<HTMLInpu
 }
 
 function FieldRow({ def, value, original, meta, corrected, conflicted, editable, docType }: FieldRowProps) {
-  const reason = corrected ? null : attention(def.path, value, meta, conflicted);
-  const tone = corrected ? "border-l-indigo-400" : reason === "Required for rating" ? "border-l-rose-400" : reason ? "border-l-amber-400" : "border-l-transparent";
+  const reason = openAttention(def.path, value, meta, conflicted, corrected);
+  const tone = reason === "Required for rating" ? "border-l-rose-400" : corrected ? "border-l-indigo-400" : reason ? "border-l-amber-400" : "border-l-transparent";
   const inputClass = "w-full rounded border px-2 py-1 text-sm";
   const saved = toInput(def.type, value);
   return (

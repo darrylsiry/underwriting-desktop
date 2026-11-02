@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { inputText } from "./renewal-compare.ts";
 import { FieldError, inputChanges, inputUnit, INPUT_DEFS, parseInputs, parseSchedule, worksheetChips, type RatingInputs } from "./worksheet.ts";
 
 const form = {
@@ -53,4 +54,24 @@ test("worksheetChips: the commercial chip persists while the worksheet chip trac
   assert.equal(worksheetChips({ ...base, quote: { number: "Q", version: 1 }, quoteCurrent: true }).worksheet, null);
   assert.deepEqual(worksheetChips({ ...base, quote: { number: "Q", version: 1 }, quoteCurrent: false }).worksheet, { label: "Differs from quote", tone: "attention" });
   assert.deepEqual(worksheetChips({ ...base, policyNumber: "GL-26-00001", quote: { number: "Q", version: 1 } }), { commercial: { label: "Bound · GL-26-00001", tone: "done" }, worksheet: null });
+});
+
+test("gross receipts of zero is refused under the field, not by the rating service (CR-130)", () => {
+  for (const gross_receipts of ["0", "$0", "0.4"]) {
+    assert.throws(() => parseInputs({ ...form, gross_receipts }), (err: unknown) =>
+      err instanceof FieldError && err.field === "gross_receipts" && err.message === "Gross receipts must be more than zero");
+  }
+  assert.equal(parseInputs({ ...form, deductible: "0", max_height_ft: "0" }).deductible, 0);   // zero is fine elsewhere
+});
+
+test("an experience mod holds two decimals, so what's shown is what's rated (CR-104)", () => {
+  assert.equal(parseInputs({ ...form, experience_mod: "0.95" }).experience_mod, 0.95);
+  assert.equal(parseInputs({ ...form, experience_mod: "1.1" }).experience_mod, 1.1);
+  assert.equal(parseInputs({ ...form, experience_mod: ".9" }).experience_mod, 0.9);
+  assert.throws(() => parseInputs({ ...form, experience_mod: "0.875" }), (err: unknown) =>
+    err instanceof FieldError && err.field === "experience_mod" && /up to two decimals/.test(err.message));
+  // What the input shows goes back in unchanged: a save with nothing touched isn't a change.
+  for (const v of [1, 0.95, 1.1]) assert.equal(parseInputs({ ...form, experience_mod: inputText("experience_mod", v) }).experience_mod, v);
+  // A longer value saved before the rule shows in full, not rounded to something a save would then write.
+  assert.equal(inputText("experience_mod", 0.875), "0.875");
 });

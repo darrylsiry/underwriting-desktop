@@ -7,9 +7,11 @@ import type { ExpiringPolicy } from "./renewal-compare";
 import { INGESTION_SERVICE_URL } from "./services";
 import { ServiceError, describeServiceError, errorDetailOf } from "./service-errors";
 import {
-  FIELD_DEFS, REQUIRED_FOR_RATING, fromInput, getPath, isEmpty, sameValue, setPath,
+  FIELD_DEFS, fromInput, getPath, missingForRating, sameValue, setPath,
   type Extraction, type SubmissionData, type Value,
 } from "./submission";
+
+export { missingForRating };
 
 export type SubmissionRow = {
   id: string;
@@ -200,10 +202,6 @@ export async function saveReview(id: string, inputs: Record<string, string>, act
     })));
   }
   return changes.length;
-}
-
-export function missingForRating(data: SubmissionData): string[] {
-  return REQUIRED_FOR_RATING.filter((p) => isEmpty(getPath(data, p)));
 }
 
 /** Accept the intake: link (or create) the insured and lock the extracted data for underwriting. `at` back-dates it (seeded history). */

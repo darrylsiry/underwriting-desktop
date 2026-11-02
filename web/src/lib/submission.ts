@@ -93,8 +93,24 @@ export function setPath(data: SubmissionData, path: string, value: Value): void 
   (data[section] as Record<string, Value>)[name] = value;
 }
 
+/** A real calendar date as YYYY-MM-DD. The regex alone passes 2026-02-30, which then fails at the Postgres cast (CR-019). */
+export function isIsoDate(s: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || s.startsWith("0000")) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
+
 export function isEmpty(v: Value): boolean {
   return v === null || v === "" || (Array.isArray(v) && v.length === 0);
+}
+
+/** A rating field with nothing usable in it: empty, or gross receipts of 0, which the rating service refuses (CR-130). */
+export function missingRequired(path: string, value: Value): boolean {
+  return REQUIRED_FOR_RATING.includes(path) && (isEmpty(value) || (path === "operations.gross_receipts" && Number(value) === 0));
+}
+
+export function missingForRating(data: SubmissionData): string[] {
+  return REQUIRED_FOR_RATING.filter((p) => missingRequired(p, getPath(data, p)));
 }
 
 /** Text shown in an input for a stored value. */
@@ -133,7 +149,7 @@ export function fromInput(def: FieldDef, raw: string): Value {
       if (/^(n|no|false)$/i.test(text)) return false;
       throw new Error(`${def.label}: answer yes or no`);
     case "date":
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || Number.isNaN(Date.parse(text))) throw new Error(`${def.label}: use YYYY-MM-DD`);
+      if (!isIsoDate(text)) throw new Error(`${def.label}: use YYYY-MM-DD`);
       return text;
   }
 }
@@ -144,12 +160,19 @@ export function sameValue(a: Value, b: Value): boolean {
 
 /** Why a field deserves the underwriter's attention, or null if it looks fine. */
 export function attention(path: string, value: Value, meta: FieldMeta | undefined, conflicted: boolean): string | null {
-  if (isEmpty(value)) return REQUIRED_FOR_RATING.includes(path) ? "Required for rating" : null;
+  if (missingRequired(path, value)) return "Required for rating";
+  if (isEmpty(value)) return null;
   if (conflicted) return "Documents disagree";
   if (!meta) return null;
   if (meta.basis === "inferred") return "Inferred, not stated";
   if (meta.confidence < 0.9) return "Low confidence";
   return null;
+}
+
+/** `attention` for the intake screens: a correction settles a doubt, but it doesn't supply a field rating still needs (CR-048). */
+export function openAttention(path: string, value: Value, meta: FieldMeta | undefined, conflicted: boolean, corrected: boolean): string | null {
+  const reason = attention(path, value, meta, conflicted);
+  return corrected && reason !== "Required for rating" ? null : reason;
 }
 
 export function formatValue(type: FieldType, v: Value): string {

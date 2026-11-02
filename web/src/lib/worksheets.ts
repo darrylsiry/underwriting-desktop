@@ -1,6 +1,6 @@
 import { audit } from "./audit";
 import { customerDb } from "./db";
-import { clearanceStatus, referralFlags, type Flag } from "./referrals";
+import { clearanceAudit, clearanceStatus, referralFlags, type Flag } from "./referrals";
 import { RATING_TIMEOUT_MS, RatingServiceError, rateOn, rateVersionId } from "./rating-api";
 import { RATING_SERVICE_URL } from "./services";
 import type { SubmissionRow } from "./submissions";
@@ -56,7 +56,7 @@ export async function openWorksheet(sub: SubmissionRow, actor: string, at: Date 
 export function flagsFor(sub: SubmissionRow, ws: WorksheetRow): Flag[] {
   return referralFlags({
     data: sub.data, extraction: sub.extraction, correctedFields: sub.corrected_fields,
-    inputs: ws.rating_inputs, schedule: ws.schedule,
+    inputs: ws.rating_inputs, schedule: ws.schedule, expiringLosses: sub.renewal_of?.losses,
   });
 }
 
@@ -165,7 +165,7 @@ export async function clearReferral(sub: SubmissionRow, code: string, note: stri
   );
   await audit({
     actor, action: "referral.cleared", entityType: "submission", entityId: sub.id,
-    summary: `${sub.reference}: referral "${flag.title}" cleared`, before: flag, after: clearance, occurredAt: at ?? undefined,
+    summary: `${sub.reference}: referral "${flag.title}" cleared`, ...clearanceAudit(flag, clearance), occurredAt: at ?? undefined,
   });
 }
 
@@ -180,8 +180,11 @@ async function bridgeRating(sub: SubmissionRow, inputs: RatingInputs, schedule: 
   try {
     const versionId = await rateVersionId(exp.rate_version);
     return versionId ? await rateOn(inputs, schedule, versionId, `${sub.reference} (expiring rates)`   /* UX-031: the summary adds "on <version>" itself */, actor) : null;
-  } catch {
-    return null;
+  } catch (err) {
+    // Only the inputs being refused on that version means it "couldn't be rated on". A service that is down
+    // says nothing about the version, and that explanation would be frozen into the memo (CR-067).
+    if (err instanceof RatingServiceError && err.rejectedInputs) return null;
+    throw err;
   }
 }
 
