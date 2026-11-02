@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { todayIso, when, whenDate, whenShort } from "./time.ts";
+import { isIsoDate, todayIso, when, whenDate, whenShort } from "./time.ts";
 
 // UX-006: every on-screen timestamp carries the display zone's name.
 test("when renders the display zone with its abbreviation", () => {
@@ -30,4 +30,12 @@ test("todayIso is the books' date, not the UTC date", () => {
   assert.equal(evening.toISOString().slice(0, 10), "2027-01-01");
   assert.equal(todayIso(evening), "2026-12-31");
   assert.equal(todayIso(new Date("2026-07-04T12:00:00Z")), "2026-07-04");
+});
+
+// CR-068: these would otherwise reach a Postgres ::date cast and come back as a 500.
+test("isIsoDate takes real calendar dates only", () => {
+  for (const good of ["2026-02-28", "2028-02-29", "2026-12-31"]) assert.equal(isIsoDate(good), true, good);
+  for (const bad of ["2026-02-30", "2026-02-29", "2026-13-01", "2026-00-10", "0000-01-01", "2026-2-3", "yesterday", "", undefined, null, ["2026-01-01"]]) {
+    assert.equal(isIsoDate(bad), false, String(bad));
+  }
 });

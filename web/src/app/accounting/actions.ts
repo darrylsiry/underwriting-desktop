@@ -1,12 +1,10 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { EXPORT_FORMATS, glDate, type ExportFormat } from "@/lib/gl-journal";
-import { parseLedgerQuery, pushedAccountingPath } from "@/lib/gl-query";
+import { NothingToPushError, nothingToPushPath, parseLedgerQuery, pushedAccountingPath } from "@/lib/gl-query";
 import { ledgerFilter } from "@/lib/gl-service";
-import { requestOrigin } from "@/lib/http";
-import { exportLedger } from "@/lib/ledger";
+import { pushLedger } from "@/lib/ledger";
 import { currentUser } from "@/lib/user";
 
 /**
@@ -18,6 +16,12 @@ export async function pushToGlAction(form: FormData) {
   const p = Object.fromEntries([...form.entries()].map(([k, v]) => [k, String(v)]));
   const { query } = parseLedgerQuery(p, glDate(new Date()), "all");
   const format: ExportFormat = (EXPORT_FORMATS as readonly string[]).includes(p.format) ? (p.format as ExportFormat) : "xlsx";
-  const file = await exportLedger(ledgerFilter(query), format, await currentUser(), requestOrigin(await headers()), query.period);
-  redirect(pushedAccountingPath(p, file.batch, file.fresh, format));
+  let pushed: Awaited<ReturnType<typeof pushLedger>>;
+  try {
+    pushed = await pushLedger(ledgerFilter(query), format, await currentUser());
+  } catch (err) {
+    if (err instanceof NothingToPushError) redirect(nothingToPushPath(p));
+    throw err;
+  }
+  redirect(pushedAccountingPath(p, pushed.batch, pushed.fresh, format));
 }

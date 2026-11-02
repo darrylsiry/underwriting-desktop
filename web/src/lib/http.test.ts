@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addressedToUs, configuredOrigin, configuredOrigins, contentDisposition, requestOrigin, safeReturnPath, sameOrigin } from "./http.ts";
+import { addressedToUs, configuredOrigin, configuredOrigins, contentDisposition, firstParams, requestOrigin, safeReturnPath, sameOrigin } from "./http.ts";
+
+test("a repeated query parameter counts as its first value (CR-056)", () => {
+  const p = firstParams<{ q?: string; actor?: string; all?: string }>({ q: ["a", "b"], actor: "x" });
+  assert.deepEqual(p, { q: "a", actor: "x" });
+  assert.equal(p.q?.trim(), "a");
+  assert.deepEqual(firstParams<{ q?: string }>({ q: [] }), { q: undefined });
+});
 
 test("non-Latin-1 filenames are header-safe (CR-002)", () => {
   const value = contentDisposition('Submission – ACME "final".pdf', "inline");

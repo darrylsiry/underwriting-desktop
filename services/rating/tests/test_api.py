@@ -83,3 +83,11 @@ def test_ratings_feed_honours_a_day_range(client):
     assert client.get("/rate-table-audit", params={"since": "2999-01-01", "tz": "UTC"}).json() == []
     assert client.get("/ratings", params={"since": "yesterday"}).status_code == 422
     assert client.get("/ratings", params={"tz": "Not a zone;drop"}).status_code == 422
+
+
+def test_feeds_refuse_a_date_that_is_not_on_the_calendar(client):
+    """CR-068: it fits the pattern, so it used to reach the ::timestamp cast and come back as a 500."""
+    assert client.get("/ratings", params={"since": "2026-02-30T00:00:00"}).status_code == 422
+    assert client.get("/ratings", params={"until": "2026-02-30"}).status_code == 422
+    assert client.get("/rate-table-audit", params={"since": "2026-02-30"}).status_code == 422
+    assert client.get("/rate-table-audit", params={"until": "2026-13-01T00:00:00"}).status_code == 422

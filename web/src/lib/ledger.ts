@@ -8,6 +8,7 @@ import {
   type ExportFormat, type JournalLine, type PolicyAmounts, type TransactionType,
 } from "./gl-journal";
 import { ledgerJson } from "./gl-export-json";
+import { NothingToPushError } from "./gl-query";
 import { toXlsx } from "./xlsx";
 
 // The premium sub-ledger (policy DB, table gl_postings): what each underwriting action booked to
@@ -201,10 +202,11 @@ export function renderLedger(rows: Posting[], f: LedgerFilter, format: ExportFor
 }
 
 /**
- * Push the filtered sub-ledger to the GL as a file. Lines not pushed before are stamped with this
- * batch; lines pushed earlier keep their batch (the file shows which). Audited.
+ * Push the filtered sub-ledger to the GL. Lines not pushed before are stamped with a new batch;
+ * lines pushed earlier keep theirs. Audited. Refuses a filter with no lines (CR-119) before a batch
+ * number is taken. The page's buttons stop here and let the download read the same lines back.
  */
-export async function exportLedger(f: LedgerFilter, format: ExportFormat, actor: string, origin: string, period: string | null = null) {
+export async function pushLedger(f: LedgerFilter, format: ExportFormat, actor: string) {
   // One transaction (SEC-026): the lines are read and locked, stamped, and audited together, so a
   // failure after the stamp can't leave pushed lines with no audit row, and two pushes of the same
   // filter at once can't both claim the same lines (the second waits, then sees them stamped).
@@ -213,6 +215,7 @@ export async function exportLedger(f: LedgerFilter, format: ExportFormat, actor:
   try {
     await client.query("BEGIN");
     rows = await listPostings(f, client, true);
+    if (!rows.length) throw new NothingToPushError();
     batch = (await client.query<{ b: string }>(
       "SELECT 'GLX-' || to_char(now() AT TIME ZONE $1, 'YYYYMMDD') || '-' || lpad(nextval('gl_export_seq')::text, 3, '0') AS b", [GL_TIME_ZONE])).rows[0].b;
     fresh = (await client.query<{ id: number }>(
@@ -233,6 +236,12 @@ export async function exportLedger(f: LedgerFilter, format: ExportFormat, actor:
   } finally {
     client.release();
   }
+  return { rows, batch, fresh };
+}
+
+/** The push, plus the file it sent: what the API and the MCP tool answer with. */
+export async function exportLedger(f: LedgerFilter, format: ExportFormat, actor: string, origin: string, period: string | null = null) {
+  const { rows, batch, fresh } = await pushLedger(f, format, actor);
   const file = renderLedger(rows, f, format, { batch, actor, origin, period });
   const t = ledgerTotals(rows);
   return { ...file, batch, lines: rows.length, journals: t.journals, fresh };

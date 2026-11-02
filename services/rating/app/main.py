@@ -181,11 +181,23 @@ _WALL = r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?)?$"   # a wall-cl
 _TZ = r"^[A-Za-z_]+(/[A-Za-z_+\-0-9]+)*$"
 
 
+def _real_time(name: str, value: str | None) -> None:
+    """The pattern lets 2026-02-30 through, and Postgres would then fail the cast with a 500 (CR-068)."""
+    if value is None:
+        return
+    try:
+        datetime.fromisoformat(value)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"{name} is not a real date and time: {value}") from None
+
+
 @app.get("/rate-table-audit")
 def rate_table_audit(version_id: int | None = None, limit: int = Query(200, ge=1, le=1000),
                      since: str | None = Query(None, pattern=_WALL), until: str | None = Query(None, pattern=_WALL),
                      tz: str = Query("UTC", pattern=_TZ)):
     """Rate-table changes, newest first; `since`/`until` are wall-clock bounds in `tz` (UX-044)."""
+    _real_time("since", since)
+    _real_time("until", until)
     return repository.audit_trail(version_id, limit, since, until, tz)
 
 
@@ -195,4 +207,6 @@ def list_ratings(reference_prefix: str | None = None, limit: int = Query(200, ge
                  tz: str = Query("UTC", pattern=_TZ)):
     """Rating calls, newest first: who rated what, on which rate version, for which reference (SUB-/Q-).
     `since`/`until` are wall-clock bounds in `tz` (UX-044)."""
+    _real_time("since", since)
+    _real_time("until", until)
     return repository.list_ratings(reference_prefix, limit, since, until, tz)

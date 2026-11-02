@@ -56,7 +56,7 @@ const DOWNLOAD_PARAM: Parameter = {
 const money = { type: "number", description: "USD, two decimals" };
 const SCHEMAS: Record<string, unknown> = {
   Error: { type: "object", required: ["error"], properties: { error: { type: "object", required: ["code", "message"], properties: {
-    code: { type: "string", enum: ["bad_request", "not_found", "unauthorized"] }, message: { type: "string" }, details: { type: "array", items: { type: "string" } } } } } },
+    code: { type: "string", enum: ["bad_request", "not_found", "unauthorized", "nothing_to_push"] }, message: { type: "string" }, details: { type: "array", items: { type: "string" } } } } } },
   Filter: { type: "object", properties: {
     period: { type: ["string", "null"], enum: [...PERIOD_PRESETS, null] }, period_label: { type: "string" },
     posting_date_from: { type: ["string", "null"], format: "date" }, posting_date_to: { type: ["string", "null"], format: "date" },
@@ -158,13 +158,14 @@ export function glOpenApi(origin: string): OpenApiDocument {
         responses: { "200": { description: "OK", content: json(ref("Batches")) }, "401": errorResponse("Missing or wrong credentials") }, "x-try": "" } },
       "/api/gl/accounts": { get: { operationId: "chartOfAccounts", tags: ["Reference"], summary: "Chart of accounts", description: "The four accounts the sub-ledger posts to, the rule a bind posts by, and the transaction types.",
         responses: { "200": { description: "OK", content: json(ref("Accounts")) }, "401": errorResponse("Missing or wrong credentials") }, "x-try": "" } },
-      "/api/gl/exports": { post: { operationId: "pushToGl", tags: ["Push"], summary: "Push a period to the GL", description: "Does what the Accounting page's push button does: renders the filter's lines, stamps the lines not pushed before with a new batch (`GLX-YYYYMMDD-NNN`), and records the push in the audit trail. Lines pushed earlier keep their batch and the file shows which. With `format: json` the answer is the push record plus the ledger document; with `csv` or `xlsx` it is the file, with the batch in the `X-GL-Export-Batch` header. Not idempotent: every call opens a new batch.",
+      "/api/gl/exports": { post: { operationId: "pushToGl", tags: ["Push"], summary: "Push a period to the GL", description: "Does what the Accounting page's push button does: renders the filter's lines, stamps the lines not pushed before with a new batch (`GLX-YYYYMMDD-NNN`), and records the push in the audit trail. Lines pushed earlier keep their batch and the file shows which. With `format: json` the answer is the push record plus the ledger document; with `csv` or `xlsx` it is the file, with the batch in the `X-GL-Export-Batch` header. Not idempotent: every call opens a new batch, except a filter with no lines, which is refused with a 409 and opens none.",
         requestBody: { required: false, description: "The filter and format, as JSON (or the same names as query parameters).", content: json(ref("ExportRequest"), { period: "last_month", format: "json" }) },
         responses: {
           "201": { description: "Pushed (JSON format)", content: json(ref("PushResult")) },
           "200": { description: "Pushed (CSV or Excel file)", headers: { "X-GL-Export-Batch": { description: "The batch this push opened", schema: { type: "string" } }, "X-GL-Newly-Stamped-Lines": { description: "Lines pushed for the first time", schema: { type: "integer" } } },
             content: { "text/csv": { schema: { type: "string" } }, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { schema: { type: "string", format: "binary" } } } },
-          "400": errorResponse("A parameter is invalid"), "401": errorResponse("Missing or wrong credentials") } } },
+          "400": errorResponse("A parameter is invalid"), "401": errorResponse("Missing or wrong credentials"),
+          "409": errorResponse("No lines match the filter (`nothing_to_push`): no batch was opened and nothing was audited") } } },
       "/api/gl/openapi.json": { get: { operationId: "openapi", tags: ["Meta"], summary: "This specification", description: "The OpenAPI 3.1 document, with this instance as the server. Import it into Postman, Insomnia, Bruno or a client generator.",
         responses: { "200": { description: "OK", content: json({ type: "object" }) } }, "x-try": "" } },
     },

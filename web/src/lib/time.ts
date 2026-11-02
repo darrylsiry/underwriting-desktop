@@ -14,6 +14,16 @@ export const DISPLAY_TIME_ZONE = process.env.DISPLAY_TZ || "America/New_York";
  */
 export const todayIso = (now: Date = new Date()) => glDate(now);
 
+/**
+ * A real calendar date as `YYYY-MM-DD`. The round trip refuses `2026-02-30`, which Date.parse lets
+ * through and Postgres then fails on with a 500 (CR-068). Year 0000 is refused too: Postgres has none.
+ */
+export function isIsoDate(s: unknown): s is string {
+  if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s) || s.startsWith("0000")) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
+
 /** `Oct 31, 2026, 11:30 PM EDT` */
 export const when = (d: Date | string) =>
   // Component options, not dateStyle/timeStyle: V8 rejects those together with timeZoneName ("Invalid option : option").

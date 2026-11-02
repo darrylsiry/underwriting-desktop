@@ -1,4 +1,5 @@
 import { apiError, fileResponse, glContext, jsonResponse, ledgerQuery, searchParamsOf } from "@/lib/gl-http";
+import { NothingToPushError } from "@/lib/gl-query";
 import { pushDocument } from "@/lib/gl-service";
 import { CROSS_SITE_REFUSED, sameOrigin } from "@/lib/http";
 
@@ -25,7 +26,15 @@ export async function POST(req: Request) {
   const { query, errors } = ledgerQuery(params);
   if (errors.length) return apiError(400, "bad_request", "Invalid export request", errors);
 
-  const { file, document } = await pushDocument(query, query.format, await glContext(req));
+  const ctx = await glContext(req);
+  let pushed: Awaited<ReturnType<typeof pushDocument>>;
+  try {
+    pushed = await pushDocument(query, query.format, ctx);
+  } catch (err) {
+    if (err instanceof NothingToPushError) return apiError(409, err.code, err.message);
+    throw err;
+  }
+  const { file, document } = pushed;
   if (query.format === "json") return jsonResponse({ push: document, ledger: JSON.parse(new TextDecoder().decode(file.body)) }, 201);
   return fileResponse(file, { "X-GL-Export-Batch": document.batch, "X-GL-Newly-Stamped-Lines": String(document.newly_stamped_lines) });
 }
