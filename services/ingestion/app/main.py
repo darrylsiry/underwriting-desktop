@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from app import claude, pipeline
+from app.responses import ExtractResponse, Health
 
 RATING_SERVICE_URL = os.environ.get("RATING_SERVICE_URL", "http://localhost:8001")
 # One broker submission is a handful of documents; cap direct callers like the web tier does (25 MB).
@@ -25,7 +26,7 @@ app = FastAPI(
 )
 
 
-@app.get("/health")
+@app.get("/health", response_model=Health)
 def health():
     return {
         "service": "ingestion",
@@ -74,7 +75,7 @@ async def read_uploads(files: list[UploadFile]) -> list[tuple[str, bytes]]:
     return uploads
 
 
-@app.post("/extract")
+@app.post("/extract", response_model=ExtractResponse)
 async def extract(files: list[UploadFile] = File(..., description="Every document in one submission"),
                   use_claude: bool = True):
     """Upload one submission's documents (PDF, EML, DOCX, TXT) and get back the canonical submission JSON.
@@ -124,7 +125,8 @@ async def extract_stream(files: list[UploadFile] = File(..., description="Every 
             emit({"type": "step", "stage": "classes",
                   "message": f"Loaded {len(classes)} rateable class codes from the rating service" if classes
                   else "Rating service class list unavailable"})
-            emit({"type": "result", "result": pipeline.run(uploads, classes, use_claude=use_claude, emit=emit, cancel=cancel)})
+            result = pipeline.run(uploads, classes, use_claude=use_claude, emit=emit, cancel=cancel)
+            emit({"type": "result", "result": ExtractResponse.model_validate(result).model_dump()})
         except Exception as e:  # the stream has already started, so report errors in-band
             emit({"type": "error", "message": f"Extraction failed: {e}"})
         finally:

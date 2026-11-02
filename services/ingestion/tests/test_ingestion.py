@@ -8,12 +8,15 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+from fastapi.exceptions import ResponseValidationError
 from fastapi.testclient import TestClient
 from starlette.requests import ClientDisconnect
 
 from app import acord, claude, pipeline
+from app.contract import contract
 from app.documents import Document, load
 from app.main import app
+from app.responses import ExtractResponse
 from app.schema import FieldValue, Loss, NormalizeError, normalize
 from tests.conftest import SAMPLES, case_files, fillable_pdf
 
@@ -650,6 +653,54 @@ def test_stream_slots_bound_concurrency_and_are_released(monkeypatch):
         res = client.post("/extract/stream", files=files)
         assert res.status_code == 200
         assert json.loads(res.text.splitlines()[-1])["type"] == "result"
+
+
+def test_read_endpoints_declare_their_response_shapes():
+    """CR-064: the web tier hand-types these bodies."""
+    client = TestClient(app)
+    paths = client.get("/openapi.json").json()["paths"]
+    schema_of = lambda path, verb: paths[path][verb]["responses"]["200"]["content"]["application/json"]["schema"]  # noqa: E731
+    assert schema_of("/health", "get") == {"$ref": "#/components/schemas/Health"}
+    assert schema_of("/extract", "post") == {"$ref": "#/components/schemas/ExtractResponse"}
+    assert client.get("/health").json()["service"] == "ingestion"
+
+
+def test_extract_refuses_to_send_a_body_that_has_drifted_from_its_model(monkeypatch):
+    """CR-064: a renamed key fails at the service instead of reaching a page as undefined."""
+    good = pipeline.run(case_files("01"), classes=[], use_claude=False)
+    assert ExtractResponse.model_validate(good).model_dump().keys() == good.keys()
+
+    monkeypatch.setattr(pipeline, "run", lambda *a, **k: {**good, "warning_list": good["warnings"], "warnings": None})
+    with pytest.raises(ResponseValidationError):
+        TestClient(app).post("/extract", files=[("files", ("a.txt", b"x"))])
+
+
+def test_every_sample_body_fits_the_response_model():
+    for case_dir in sorted((SAMPLES / "submissions").iterdir()):
+        if case_dir.is_dir():
+            files = [(p.name, p.read_bytes()) for p in sorted(case_dir.iterdir()) if not p.name.startswith(".")]
+            ExtractResponse.model_validate(pipeline.run(files, classes=[], use_claude=False))
+
+
+def test_stream_result_has_the_extract_body():
+    client = TestClient(app)
+    files = [("files", (name, data)) for name, data in case_files("01")]
+    plain = client.post("/extract?use_claude=false", files=files).json()
+    with client.stream("POST", "/extract/stream?use_claude=false", files=files) as res:
+        last = [json.loads(line) for line in res.iter_lines() if line][-1]
+    assert last["type"] == "result" and last["result"] == plain
+
+
+def test_schema_contract_file_is_current():
+    """CR-015: web/src/lib/submission.test.ts asserts the TypeScript copy against this same file.
+    After a deliberate change, regenerate it: python -m app.contract > ../../samples/schema.json"""
+    assert json.loads((SAMPLES / "schema.json").read_text()) == contract()
+
+
+def test_sample_generator_writes_every_form_field_the_reader_reads():
+    source = (SAMPLES / "generate.py").read_text()
+    names = [*acord.FIELD_MAP, *(f"LossHistory_{column}_" for column in acord.LOSS_COLUMNS)]
+    assert [name for name in names if name not in source] == []
 
 
 def test_blank_and_complete_loss_rows_warn_about_nothing():
