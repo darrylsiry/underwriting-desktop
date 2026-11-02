@@ -886,3 +886,38 @@ read this to replay the build quickly.
   - The dev server's `server-reference-manifest.json` only accumulates, so after moving an action the old entries stay listed; check a production build (`docker build web`) for what is really reachable.
   - Locally the sign-in page redirects to `/` (no gate): use the `web-signin` launch config on port 3101 to see the link signed out.
 - **How to show it:** on the live site signed out, the sign-in page → **Request access** → fill in a name and email → "Request sent"; the email arrives at darryl@siryous.com (once `SMTP_URL` is set) with Reply-To the requester; signed in, **Admin → Sign-ins** → Access requests shows it with "sent".
+
+## step-28: Every open code review finding addressed (99 findings, six parallel workers)
+- **Prompt used:** "please address all the open code quality items"
+- **What was built:** No new feature. All 97 findings open when the step began, plus CR-133 and CR-134 from a run that landed during it, have fixes, each named by its `CR-NNN` in a commit message. Six worktree agents worked one area each (rating, ingestion, underwriting core, desk/GL/assistant, sign-in/platform, seed/PDF/tooling) and were merged one at a time. What a user will notice:
+  - **The book's numbers have one definition.** In force excludes policies not yet effective, which move to a new "Bound, not yet effective" row on the desk and `/book`. New business leaves out bound renewals. Renewals · 90 days and `/book?due=` leave out policies already renewed. The status panel says "no answer" after 3 seconds rather than holding the page blank.
+  - **Referrals fire on prior-system renewals.** They now refer on `LOSS_FREQUENCY` (3+ claims) and a new `OPEN_CLAIMS_NO_DETAIL`, which blocks quoting until cleared. No premium formula changed. A bound file labels such a flag "since bind", because a file can't bind with a referral open.
+  - **Bound files stay as bound.** No Re-rate or Clear controls, and the workbench and renewal comparison show the figures frozen on the bound quote.
+  - **Lost updates are refused.** A stale workbench tab is refused and keeps what was typed. In rate admin, a cell someone else changed refuses the whole section; a stale cell you didn't touch is skipped.
+  - **Quotes are annual.** Expiration must be exactly one year after Effective, and changing Effective moves Expiration with it.
+  - **More bad input is refused:** three-decimal mods, zero gross receipts, rates with too many decimals, negative amounts on form fields, unusual characters in a request-access email.
+  - **Issued PDFs:** long text wraps, producer email and phone get their own lines, products aggregate equals the general aggregate.
+  - **Sign-in:** 20 failed sign-ins from one network in 15 minutes are refused for the rest of the window, counted per process. A signed-in visitor to `/signin` goes on to the app. The gate now also runs on public paths, so client identity headers are stripped everywhere.
+  - **Request access:** past 30 emails a day, requests are kept and thanked but not emailed; Sign-ins shows "not sent: daily mail cap".
+  - **Accounting and GL:** after a push the page keeps its filter and downloads all lines, with a "Show only this batch" link. An empty push answers 409. The OpenAPI document publishes every error code and the push's filter. A control character can no longer make a pushed workbook unreadable.
+  - **Assistant:** `renewals_due` omits renewed policies, and the chat has a Stop button.
+  - **Ingestion:** documents Claude didn't read show "not read", with new warnings for unread attachments, loss rows missing a date or amount, differing claim amounts and off-list class codes. Past 8 concurrent streams `/extract/stream` answers 503, and the inbox says so in a sentence.
+  - **Audit:** an amber "recorded …" appears on rows back-dated after migration; `/audit` pages older rows by `?before=`.
+  - **App Tests:** the deployed page has no full security report. It keeps the finding titles from the ledger, shows a note that the report stays in the repository, and `/app-tests/security` is a 404 there.
+- **Files:** 159+ files across `web/`, `services/rating/`, `services/ingestion/`, `scripts/`, `uat/`. New: `web/src/lib/format.ts` (one money formatter, CR-015), migrations `web/migrations/customer/005_insured_fein_format.sql`, `web/migrations/policy/{012_login_geo_attempts,013_audit_recorded_at}.sql`, `services/rating/migrations/006_rating_log_recorded_at.sql`.
+- **Commit:** `step-28: ...`, on top of the `fix: CR-...` and `merge: ...` commits it describes (`git log --grep CR-113` finds any one finding).
+- **Decisions:**
+  - **Group by area, one worktree per group,** so writers never touch the same files, then merge and resolve conflicts by keeping both sides.
+  - **CR-124:** kept the label "Book loss ratio (incurred)" and now divide five-year losses by premium × 5, so ratios fall to about a fifth and the 65% red fires far less.
+  - **CR-097:** keep the finding titles, stop deploying the full report, because it holds reproduction steps.
+  - **CR-112:** assumed rating inputs warn rather than block, so Desert Bloom stays "Ready to quote".
+  - **CR-113:** annual-only quotes, which also removed the Expiration field's `min`.
+  - **Left partial on purpose:** CR-096 doesn't match outside quotes (it would let `bash -c` and awk writes through) and doesn't add `uv` to PATH (that needs a `.claude/` edit). CR-014 covers pure logic and rating test order; database paths rely on UAT. CR-074 leaves existing live rows' `recorded_at` NULL. CR-122 leaves loss rows read-only on intake.
+  - **Reports stay auditor-owned:** a finding reads open until the next code review run sees the fix.
+- **Dead ends / gotchas:**
+  - Strict FastAPI response models silently dropped `recorded_at`. The rating tests caught it; add the field to the model as well as the query.
+  - CR-099's redirect broke a UAT spec that opened a "signed-out" context which inherited the `uat` session. Give such a context an empty `storageState`.
+  - Audit tables are append-only, by trigger, and one refused `DELETE` in a multi-statement `psql -c` rolls back the whole command. To undo a local test, make the change back through the app.
+  - The rate admin form requires a reason, so a script's `requestSubmit()` with it blank silently posts nothing.
+  - A review run can land mid-batch: re-read the report before calling the backlog done.
+- **How to show it:** `/` and `/book` for the new row; a bound file's workbench; two tabs on one draft, then Save & rate in both; `/admin/versions/<draft>?section=territory` for the same with rates; `/app-tests` after the next review run.
