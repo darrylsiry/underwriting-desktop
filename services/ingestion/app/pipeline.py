@@ -65,9 +65,10 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
             step("claude", f"Claude returned {len(result.fields)} fields, {len(result.losses)} loss row(s), "
                  f"{len(result.notes)} note(s) ({tokens.get('input_tokens', 0):,} tokens in, "
                  f"{tokens.get('output_tokens', 0):,} out)")
-            candidates += result.fields
+            rateable, off_list = _rateable_only(result.fields, classes)
+            candidates += rateable
             losses += result.losses
-            notes, warnings = result.notes, warnings + result.warnings
+            notes, warnings = result.notes, warnings + result.warnings + off_list
             claude_info = {"model": result.model, "usage": result.usage}
             for d in to_read:
                 d.read_by_claude = True
@@ -96,6 +97,19 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
         "warnings": warnings,
         "claude": claude_info,
     }
+
+
+def _rateable_only(fields: list[FieldValue], classes: list[dict]) -> tuple[list[FieldValue], list[str]]:
+    """The prompt asks Claude to pick from the class list; this enforces it, so an off-list code is caught
+    at intake rather than failing at Save & rate. With no list there is nothing to check against (warned above)."""
+    rateable = {str(c["class_code"]) for c in classes}
+    kept, warnings = [], []
+    for fv in fields:
+        if fv.path == "operations.class_code" and rateable and fv.value not in rateable:
+            warnings.append(f"Claude's class code {fv.value} ({fv.source_document}) is not a rateable class and was dropped")
+        else:
+            kept.append(fv)
+    return kept, warnings
 
 
 def merge(candidates: list[FieldValue]) -> tuple[dict[str, FieldValue], list[dict]]:

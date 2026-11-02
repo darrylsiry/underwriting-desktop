@@ -206,7 +206,8 @@ def extract(docs: list[Document], classes: list[dict], known: list[FieldValue] =
 
 
 def _parse(data: dict, model: str, usage) -> ClaudeResult:
-    warnings, best = [], {}
+    """Every candidate comes back, even several for one path: pipeline.merge chooses and records the conflict."""
+    warnings, fields = [], []
     for item in data["fields"]:
         try:
             value = normalize(item["path"], item["value"])
@@ -215,10 +216,8 @@ def _parse(data: dict, model: str, usage) -> ClaudeResult:
             continue
         if value is None:
             continue
-        fv = FieldValue(item["path"], value, max(0.0, min(1.0, item["confidence"])), "claude",
-                        item["basis"], item["source_document"], item["snippet"])
-        if item["path"] not in best or fv.confidence > best[item["path"]].confidence:
-            best[item["path"]] = fv
+        fields.append(FieldValue(item["path"], value, max(0.0, min(1.0, item["confidence"])), "claude",
+                                 item["basis"], item["source_document"], item["snippet"]))
 
     losses = []
     for item in data["loss_history"]:
@@ -229,7 +228,7 @@ def _parse(data: dict, model: str, usage) -> ClaudeResult:
             warnings.append(f"Claude loss row: {e}")
 
     return ClaudeResult(
-        fields=list(best.values()), losses=losses, notes=data["notes"], model=model,
+        fields=fields, losses=losses, notes=data["notes"], model=model,
         usage={"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens},
         warnings=warnings,
     )

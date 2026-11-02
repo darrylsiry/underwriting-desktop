@@ -425,6 +425,54 @@ def test_same_states_in_another_order_are_not_a_conflict():
     assert len(conflicts) == 1
 
 
+USAGE = type("U", (), {"input_tokens": 10, "output_tokens": 5})()
+
+
+def reply_field(path, value, basis, confidence, source="a.eml"):
+    return {"path": path, "value": value, "basis": basis, "confidence": confidence, "source_document": source, "snippet": ""}
+
+
+def test_claude_candidates_all_reach_merge_so_the_loser_is_a_conflict():
+    """CR-025: an inferred 0.85 used to beat a stated 0.7 inside _parse, and the loser was never seen."""
+    reply = {"fields": [reply_field("operations.employees", "14", "inferred", 0.85, "a.eml"),
+                        reply_field("operations.employees", "12", "stated", 0.7, "b.pdf")],
+             "loss_history": [], "notes": []}
+    result = claude._parse(reply, "claude-opus-5-5", USAGE)
+    assert len(result.fields) == 2
+    chosen, conflicts = pipeline.merge(result.fields)
+    assert chosen["operations.employees"].value == 12
+    assert conflicts == [{"path": "operations.employees", "chosen": 12,
+                          "others": [{"value": 14, "source_document": "a.eml", "method": "claude"}]}]
+
+
+def test_off_list_class_code_is_dropped_with_a_warning(monkeypatch):
+    """CR-058: an off-list code used to pass intake and fail only at Save & rate."""
+    code = lambda value: FieldValue("operations.class_code", value, 0.8, "claude", "inferred", "a.eml")  # noqa: E731
+    classes = [{"class_code": "98304", "description": "Painting"}]
+    files = case_files("05")
+
+    fake_claude(monkeypatch, fields=[code("99999")])
+    result = pipeline.run(files, classes)
+    assert "operations.class_code" in result["missing_for_rating"]
+    assert any("99999" in w and "not a rateable class" in w for w in result["warnings"])
+
+    fake_claude(monkeypatch, fields=[code("98304")])
+    result = pipeline.run(files, classes)
+    assert result["submission"]["operations"]["class_code"] == "98304"
+    assert not any("rateable" in w for w in result["warnings"])
+
+    # A second candidate that is off-list costs only itself.
+    fake_claude(monkeypatch, fields=[code("99999"), code("98304")])
+    result = pipeline.run(files, classes)
+    assert result["submission"]["operations"]["class_code"] == "98304" and result["conflicts"] == []
+
+    # With no class list there is nothing to check against: the code stays, and the existing warning says so.
+    fake_claude(monkeypatch, fields=[code("99999")])
+    result = pipeline.run(files, classes=[])
+    assert result["submission"]["operations"]["class_code"] == "99999"
+    assert any("class list unavailable" in w for w in result["warnings"])
+
+
 def test_blank_and_complete_loss_rows_warn_about_nothing():
     _, [loss], warnings = acord.extract(form_doc(
         LossHistory_OccurrenceDate_A="03/18/2024", LossHistory_OccurrenceDescription_A="Trip",
