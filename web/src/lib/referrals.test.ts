@@ -69,6 +69,18 @@ test("inferred class and missing loss runs warn", () => {
   assert.deepEqual(codes({ ...c, inputs: { ...inputs, class_code: "91342" } }), ["warn:NO_LOSS_RUNS"]);
 });
 
+test("a loss run nobody read is not a loss run on file (CR-147)", () => {
+  const unread = ctx({ extraction: { fields: {}, documents: [{ filename: "losses.pdf", doc_type: "loss_run" as const, parent: null, method: "not_read" as const }] } });
+  assert.deepEqual(codes(unread), ["warn:NO_LOSS_RUNS"]);
+  const flag = referralFlags(unread)[0];
+  assert.equal(flag.title, "Loss run not read");
+  assert.match(flag.detail, /^losses\.pdf was not read/);
+  assert.match(suggestedSubjectivities(referralFlags(unread), unread.data).join(" | "), /loss runs/);
+  // Stored before the method existed: it was read.
+  const older = ctx({ extraction: { fields: {}, documents: [{ filename: "losses.pdf", doc_type: "loss_run", parent: null } as never] } });
+  assert.deepEqual(codes(older), []);
+});
+
 test("loss runs are requested whatever the tenure, sized to it (CR-062)", () => {
   const noLossRun = { fields: {}, documents: [{ filename: "a.eml", doc_type: "broker_email" as const, parent: null, method: "claude" as const }] };
   const unknown = ctx({ extraction: noLossRun, data: { ...ctx().data, applicant: {} } as unknown as SubmissionData });

@@ -5,6 +5,7 @@ text) so it's free, instant, and explainable. Emails are unpacked: the body
 becomes one document and each attachment is classified on its own.
 """
 import email
+import hashlib
 import io
 from dataclasses import dataclass, field
 from email import policy
@@ -37,6 +38,10 @@ class Document:
         """Only a filled application is read from its fields. A fillable loss run or questionnaire, or a
         PDF whose filled fields aren't ones acord.py maps, would yield nothing that way, so Claude reads it."""
         return self.doc_type not in NOT_READ_FROM_FORM and acord.has_mapped_fields(self.form_fields)
+
+    @property
+    def content_hash(self) -> str:
+        return hashlib.sha256(self.data or self.text.encode("utf-8", "replace")).hexdigest()
 
     def summary(self) -> dict:
         method = "form_field" if self.read_from_form else "claude" if self.read_by_claude else "not_read"

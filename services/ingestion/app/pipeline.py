@@ -3,7 +3,7 @@ import threading
 
 from app import acord, claude
 from app.documents import Document, UnsupportedDocument, load
-from app.schema import REQUIRED_FOR_RATING, FieldValue, Loss, build_submission
+from app.schema import REQUIRED_FOR_RATING, FieldValue, Loss, build_submission, scrubbed
 
 
 DOC_TYPE_LABELS = {
@@ -21,12 +21,19 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
     step = lambda stage, message: emit({"type": "step", "stage": stage, "message": message})  # noqa: E731
     docs: list[Document] = []
     warnings: list[str] = []
+    first_copy: dict[str, str] = {}  # content hash -> the file name it was first read under
     step("receive", f"Received {len(files)} file(s): " + ", ".join(f"{n} ({len(d) / 1024:.0f} KB)" for n, d in files))
     for name, data in files:
         try:
-            loaded = load(name, data)
-            docs += loaded
-            for d in loaded:
+            for d in load(name, data):
+                # A copy would be read twice under one name, and dedupe_losses keeps every row from one document (CR-142).
+                first = first_copy.get(d.content_hash)
+                if first is not None:
+                    warnings.append(f"{d.filename} appears twice with the same contents; read once" if first == d.filename
+                                    else f"{d.filename} has the same contents as {first}; read once")
+                    continue
+                first_copy[d.content_hash] = d.filename
+                docs.append(d)
                 how = ("has filled form fields, reading them directly" if d.read_from_form
                        else "no application form fields, Claude will read it")
                 where = f" (attached to {d.parent})" if d.parent else ""
@@ -91,7 +98,7 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
     warnings += loss_warnings
     for w in warnings:
         emit({"type": "warning", "message": w})
-    return {
+    return scrubbed({
         "submission": build_submission(chosen, kept_losses),
         "fields": {path: {k: v for k, v in fv.to_dict().items() if k != "path"} for path, fv in chosen.items()},
         "conflicts": conflicts,
@@ -100,7 +107,7 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
         "notes": notes,
         "warnings": warnings,
         "claude": claude_info,
-    }
+    })
 
 
 def _rateable_only(fields: list[FieldValue], classes: list[dict]) -> tuple[list[FieldValue], list[str]]:

@@ -140,7 +140,12 @@ export function referralFlags(ctx: ReferralContext): Flag[] {
     add("CLASS_INFERRED", "warn", "Class code inferred", `Class ${classMeta.value} was inferred from "${classMeta.snippet}"; confirm with the broker`);
   }
   // Loss runs are asked for whether or not tenure is known; a younger business is asked for all of its years (CR-062).
-  if (!ctx.extraction.documents.some((d) => d.doc_type === "loss_run")) {
+  // One nobody read isn't on file: its claims never reached the rules above (CR-147). Rows stored without a method were read.
+  const lossRuns = ctx.extraction.documents.filter((d) => d.doc_type === "loss_run");
+  const unread = lossRuns.filter((d) => d.method === "not_read").map((d) => d.filename);
+  if (unread.length) {
+    add("NO_LOSS_RUNS", "warn", "Loss run not read", `${unread.join(", ")} was not read, so its claims have not been checked; read it before quoting, or request ${lossRunYears(years)} of currently valued loss runs`);
+  } else if (!lossRuns.length) {
     add("NO_LOSS_RUNS", "warn", "No loss runs", `No loss run was submitted; request ${lossRunYears(years)} of currently valued loss runs`);
   }
   return flags;

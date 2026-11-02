@@ -85,6 +85,26 @@ def normalize_status(raw) -> str:
     return text
 
 
+# Pasted into a PDF form, these would travel through to every document and export built from the field
+# (CR-134), and Postgres jsonb refuses \u0000, so one left anywhere stops the whole submission being stored (CR-141).
+CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
+
+def clean_text(text: object) -> str:
+    return CONTROL_CHARS.sub("", str(text or ""))
+
+
+def scrubbed(value):
+    """`value` with control characters out of every string in it, at any depth."""
+    if isinstance(value, str):
+        return clean_text(value)
+    if isinstance(value, list):
+        return [scrubbed(v) for v in value]
+    if isinstance(value, dict):
+        return {scrubbed(k): scrubbed(v) for k, v in value.items()}
+    return value
+
+
 @dataclass
 class Loss:
     date: str
@@ -94,15 +114,12 @@ class Loss:
     source_document: str
 
     def __post_init__(self):
-        self.status = normalize_status(self.status)
+        self.description = clean_text(self.description)
+        self.status = normalize_status(clean_text(self.status))
 
 
 class NormalizeError(ValueError):
     pass
-
-
-# Pasted into a PDF form, these would travel through to every document and export built from the field (CR-134).
-CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
 
 def normalize(path: str, raw) -> object:
@@ -110,7 +127,7 @@ def normalize(path: str, raw) -> object:
     kind = FIELDS[path]
     if raw is None or (isinstance(raw, str) and not raw.strip()):
         return None
-    text = CONTROL_CHARS.sub("", str(raw)).strip()
+    text = clean_text(raw).strip()
     if not text:
         return None
     if kind == "str":

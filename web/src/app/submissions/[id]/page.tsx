@@ -5,6 +5,7 @@ import { when, whenDate } from "@/components/ui";
 import { auditTrail } from "@/lib/audit";
 import { recordedApart } from "@/lib/timeline-merge";
 import { isOpenLoss } from "@/lib/referrals";
+import { plural } from "@/lib/text";
 import { dataFingerprint, getSubmission, listDocuments, missingForRating } from "@/lib/submissions";
 import {
   SECTIONS, formatValue, getPath, openAttention, toInput, type FieldDef, type FieldMeta, type Value,
@@ -34,6 +35,7 @@ export default async function ReviewPage({ params, searchParams }: Props) {
   const missing = missingForRating(sub.data);
   const conflicts = new Map(ex.conflicts.map((c) => [c.path, c]));
   const docTypes = new Map(ex.documents.map((d) => [d.filename, d]));
+  const unreadDocuments = ex.documents.filter((d) => d.method === "not_read").length;   // CR-147
 
   return (
     <main className="mx-auto max-w-7xl p-8">
@@ -112,7 +114,7 @@ export default async function ReviewPage({ params, searchParams }: Props) {
                       <td className="px-4 py-2"><span className={isOpenLoss(l.status) ? "font-medium text-rose-700" : "text-slate-500"}>{l.status}</span></td>
                     </tr>
                   ))}
-                  {!sub.data.loss_history.length && <tr><td className="px-4 py-3 text-slate-500">No losses reported.</td></tr>}
+                  {!sub.data.loss_history.length && <tr><td className="px-4 py-3 text-slate-500">{unreadDocuments ? `No losses read; ${plural(unreadDocuments, "document")} ${unreadDocuments === 1 ? "was" : "were"} not read.` : "No losses reported."}</td></tr>}
                 </tbody>
               </table>
             </section>

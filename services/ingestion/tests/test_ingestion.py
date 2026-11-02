@@ -711,3 +711,44 @@ def test_sample_generator_writes_every_form_field_the_reader_reads():
     source = (SAMPLES / "generate.py").read_text()
     names = [*acord.FIELD_MAP, *(f"LossHistory_{column}_" for column in acord.LOSS_COLUMNS)]
     assert [name for name in names if name not in source] == []
+
+
+def test_a_nul_in_a_form_field_cannot_stop_the_submission_being_stored():
+    """Postgres jsonb refuses \\u0000, in a snippet, a loss row or a warning as much as in a value (CR-141)."""
+    files = [("app.pdf", fillable_pdf("INSURANCE APPLICATION", {
+        "NamedInsured_FullName_A": "A\x00B",
+        "LossHistory_OccurrenceDate_A": "01/02/2025",
+        "LossHistory_OccurrenceDescription_A": "Fell\x00 from a ladder",
+        "LossHistory_TotalIncurredAmount_A": "1200",
+        "LossHistory_ClaimStatusCode_A": "Op\x00en",
+        "LossHistory_OccurrenceDescription_B": "No date\x00 here",
+    }))]
+    result = pipeline.run(files, [], use_claude=False)
+    assert "\\u0000" not in json.dumps(result)
+    assert result["submission"]["applicant"]["name"] == "AB"
+    assert result["submission"]["loss_history"][0]["description"] == "Fell from a ladder"
+    assert result["submission"]["loss_history"][0]["status"] == "Open"
+
+
+def test_the_same_file_sent_twice_is_read_once():
+    """Two copies under one name would both count as one document's rows, doubling its claims (CR-142)."""
+    pdf = fillable_pdf("INSURANCE APPLICATION", {
+        "NamedInsured_FullName_A": "Copy Roofing",
+        "LossHistory_OccurrenceDate_A": "01/02/2025", "LossHistory_OccurrenceDescription_A": "Fall", "LossHistory_TotalIncurredAmount_A": "1200", "LossHistory_ClaimStatusCode_A": "Closed",
+        "LossHistory_OccurrenceDate_B": "03/04/2025", "LossHistory_OccurrenceDescription_B": "Slip", "LossHistory_TotalIncurredAmount_B": "900", "LossHistory_ClaimStatusCode_B": "Closed",
+    })
+    msg = EmailMessage()
+    msg["From"], msg["Subject"] = "broker@example.com", "Submission"
+    msg.set_content("See attached.")
+    msg.add_attachment(pdf, maintype="application", subtype="pdf", filename="app.pdf")
+    result = pipeline.run([("app.pdf", pdf), ("mail.eml", msg.as_bytes())], [], use_claude=False)
+    assert len(result["submission"]["loss_history"]) == 2
+    assert [d["filename"] for d in result["documents"]].count("app.pdf") == 1
+    assert any("app.pdf appears twice" in w for w in result["warnings"])
+
+
+def test_the_same_contents_under_another_name_is_read_once_and_named():
+    pdf = fillable_pdf("INSURANCE APPLICATION", {"NamedInsured_FullName_A": "Copy Roofing"})
+    result = pipeline.run([("a.pdf", pdf), ("b.pdf", pdf)], [], use_claude=False)
+    assert [d["filename"] for d in result["documents"]] == ["a.pdf"]
+    assert any("b.pdf has the same contents as a.pdf" in w for w in result["warnings"])

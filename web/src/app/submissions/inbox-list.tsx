@@ -21,12 +21,14 @@ export function InboxList({ items }: { items: InboxFolder[] }) {
   const [active, setActive] = useState<InboxFolder | null>(null);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [running, setRunning] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const abort = useRef<AbortController | null>(null);
 
   async function extract(item: InboxFolder) {
     const controller = new AbortController();
     abort.current = controller;
     setActive(item);
+    setAttempt((n) => n + 1);
     setEvents([]);
     setRunning(true);
     try {
@@ -93,7 +95,8 @@ export function InboxList({ items }: { items: InboxFolder[] }) {
           </li>
         ))}
       </ul>
-      {active && <ActivityPanel title={active.title} events={events} running={running} onClose={close} onRetry={() => extract(active)} />}
+      {/* A new key per attempt: "Try again" gets a new panel, and its clock starts from zero (CR-145). */}
+      {active && <ActivityPanel key={attempt} title={active.title} events={events} running={running} onClose={close} onRetry={() => extract(active)} />}
     </>
   );
 }
