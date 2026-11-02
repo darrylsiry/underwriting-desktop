@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { when, whenDate, whenShort } from "./time.ts";
+import { resolveTimeZone, when, whenDate, whenShort } from "./time.ts";
 
 // UX-006: every on-screen timestamp carries the display zone's name.
 test("when renders the display zone with its abbreviation", () => {
@@ -22,4 +22,16 @@ test("whenShort drops this year and the zone, and keeps another year", () => {
 // UX-025: one on-screen date format; a YYYY-MM-DD string never shifts a day.
 test("whenDate renders Dec 1, 2026 for an ISO date string", () => {
   assert.equal(whenDate("2026-12-01"), "Dec 1, 2026");
+});
+
+test("a misspelt DISPLAY_TZ falls back with a logged error instead of throwing on every page (CR-094)", (t) => {
+  const logged = t.mock.method(console, "error", () => {});
+  assert.equal(resolveTimeZone("America/Chicago"), "America/Chicago");
+  assert.equal(resolveTimeZone("america/chicago"), "America/Chicago", "the spelling the other services need");
+  assert.equal(resolveTimeZone(undefined), "America/New_York");
+  assert.equal(resolveTimeZone(""), "America/New_York");
+  assert.equal(logged.mock.callCount(), 0);
+  for (const bad of ["Not/AZone", "America/NewYork", "+05:30", "-08:00"]) assert.equal(resolveTimeZone(bad), "America/New_York", bad);
+  assert.equal(logged.mock.callCount(), 4);
+  assert.match(String(logged.mock.calls[0].arguments[0]), /DISPLAY_TZ "Not\/AZone"/);
 });

@@ -1,4 +1,4 @@
-import { RATING_SERVICE_URL, ratingAuthHeaders } from "./services";
+import { actingUserHeaders, RATING_SERVICE_URL, ratingAuthHeaders } from "./services";
 import { scheduleMod, type RatingInputs, type ScheduleItem } from "./worksheet";
 import type { Rating } from "./worksheets";
 
@@ -42,7 +42,7 @@ async function ratingPost<T>(path: string, body: unknown, actor?: string): Promi
     res = await fetch(`${RATING_SERVICE_URL}${path}`, {
       method: "POST", body: JSON.stringify(body),
       // Who is acting travels in a header the service trusts from us (SEC-002), not in the body.
-      headers: { "Content-Type": "application/json", ...(actor ? { "x-uw-user": actor } : {}), ...ratingAuthHeaders() },
+      headers: { "Content-Type": "application/json", ...(actor ? actingUserHeaders(actor) : {}), ...ratingAuthHeaders() },
       signal: AbortSignal.timeout(RATING_TIMEOUT_MS),
     });
   } catch (err) {

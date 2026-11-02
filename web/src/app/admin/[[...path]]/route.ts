@@ -1,5 +1,6 @@
 import { CROSS_SITE_REFUSED, sameOrigin } from "@/lib/http";
-import { RATING_SERVICE_URL, ratingAuthHeaders } from "@/lib/services";
+import { proxyFailurePage } from "@/lib/service-errors";
+import { actingUserHeaders, RATING_SERVICE_URL, ratingAuthHeaders } from "@/lib/services";
 import { currentUser } from "@/lib/user";
 
 // The rating service's rate-table admin UI, served through the web app so it sits behind the
@@ -18,20 +19,28 @@ async function proxy(req: Request): Promise<Response> {
   if (req.method !== "GET" && req.method !== "HEAD" && !sameOrigin(req.headers)) {
     return new Response(CROSS_SITE_REFUSED, { status: 403, headers: { "Content-Type": "text/plain" } });
   }
-  const upstream = await fetch(`${RATING_SERVICE_URL}${url.pathname}${url.search}`, {
-    method: req.method,
-    headers: {
-      ...Object.fromEntries(FORWARD_REQUEST.flatMap((h) => (req.headers.get(h) ? [[h, req.headers.get(h)!]] : []))),
-      // Tell the admin it's inside the UW Desktop so it renders the desktop's top nav (display only).
-      "x-uw-desktop": "1",
-      "x-uw-user": await currentUser(),
-      // The service trusts x-uw-user only from a caller holding this shared secret (SEC-002).
-      ...ratingAuthHeaders(),
-    },
-    body: req.method === "GET" || req.method === "HEAD" ? undefined : await req.arrayBuffer(),
-    redirect: "manual",  // the admin redirects after each POST; let the browser follow it
-    signal: AbortSignal.timeout(15_000),
-  });
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${RATING_SERVICE_URL}${url.pathname}${url.search}`, {
+      method: req.method,
+      headers: {
+        ...Object.fromEntries(FORWARD_REQUEST.flatMap((h) => (req.headers.get(h) ? [[h, req.headers.get(h)!]] : []))),
+        // Tell the admin it's inside the UW Desktop so it renders the desktop's top nav (display only).
+        "x-uw-desktop": "1",
+        ...actingUserHeaders(await currentUser()),
+        // The service trusts x-uw-user only from a caller holding this shared secret (SEC-002).
+        ...ratingAuthHeaders(),
+      },
+      body: req.method === "GET" || req.method === "HEAD" ? undefined : await req.arrayBuffer(),
+      redirect: "manual",  // the admin redirects after each POST; let the browser follow it
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (err) {
+    // A stopped or slow service (a Fly cold start): a page that says so, not a bare 500 (CR-108).
+    console.error("admin proxy: no answer from the rating service", err);
+    const { status, html } = proxyFailurePage(err, "rating service", req.method, `${url.pathname}${url.search}`);
+    return new Response(html, { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  }
   const headers = new Headers();
   for (const h of FORWARD_RESPONSE) {
     const v = upstream.headers.get(h);

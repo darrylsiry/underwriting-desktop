@@ -235,3 +235,5 @@ def test_admin_shows_the_desktop_nav_only_when_proxied_by_the_desktop(client):
     assert 'href="/docs"' not in inside  # the desktop doesn't proxy the API docs
     standalone = client.get("/admin").text
     assert "Rating admin" in standalone and 'href="/submissions"' not in standalone
+    # CR-072: the proxy percent-encodes the name; the page shows it as written, still escaped.
+    assert "Łukasz K&lt;b&gt;" in client.get("/admin", headers={"x-uw-desktop": "1", "x-uw-user": "%C5%81ukasz%20K%3Cb%3E"}).text

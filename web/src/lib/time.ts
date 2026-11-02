@@ -3,7 +3,25 @@
  * lists and the accounting page all format through here so the same event shows
  * the same wall-clock time, with the zone named, wherever it appears.
  */
-export const DISPLAY_TIME_ZONE = process.env.DISPLAY_TZ || "America/New_York";
+const DEFAULT_TIME_ZONE = "America/New_York";
+
+/**
+ * `name` as a zone every layer takes, or the default with a logged error, so a typo in DISPLAY_TZ
+ * can't take every page down (CR-094). Not an offset like `+05:30`: Intl takes one, but Postgres
+ * reads its sign the other way round and the rating service refuses it.
+ */
+export function resolveTimeZone(name: string | undefined): string {
+  if (!name) return DEFAULT_TIME_ZONE;
+  try {
+    if (/^[A-Za-z]/.test(name)) return new Intl.DateTimeFormat("en-US", { timeZone: name }).resolvedOptions().timeZone;
+  } catch {
+    // Not a zone: said below.
+  }
+  console.error(`DISPLAY_TZ "${name}" is not a time zone; showing times in ${DEFAULT_TIME_ZONE}`);
+  return DEFAULT_TIME_ZONE;
+}
+
+export const DISPLAY_TIME_ZONE = resolveTimeZone(process.env.DISPLAY_TZ);
 
 /** `Oct 31, 2026, 11:30 PM EDT` */
 export const when = (d: Date | string) =>

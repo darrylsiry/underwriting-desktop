@@ -12,6 +12,12 @@ export function ratingAuthHeaders(env: Record<string, string | undefined> = proc
 }
 
 /**
+ * Who is acting, for the rating service. Percent-encoded because a header value must be Latin-1 and
+ * a "Working as" name can be anything (fetch throws on `Łukasz` otherwise); the service decodes it (CR-072).
+ */
+export const actingUserHeaders = (name: string): Record<string, string> => ({ "x-uw-user": encodeURIComponent(name) });
+
+/**
  * Ping rating and ingestion so Fly starts their machines if they auto-stopped while idle. Run by
  * keep-warm (src/instrumentation.ts): when the web process starts and every minute while it runs.
  */

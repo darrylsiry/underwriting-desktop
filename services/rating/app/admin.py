@@ -101,6 +101,7 @@ def when(dt) -> str:
 templates.env.filters["num"] = num
 templates.env.filters["when"] = when
 templates.env.filters["audit_kind"] = audit_kind
+templates.env.filters["uw_user"] = auth.decode_user
 
 ACTOR_COOKIE = "rating_admin_user"
 

@@ -3,6 +3,7 @@ import uuid
 from contextlib import asynccontextmanager
 from decimal import Decimal
 from typing import Annotated, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -181,10 +182,19 @@ _WALL = r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?)?$"   # a wall-cl
 _TZ = r"^[A-Za-z_]+(/[A-Za-z_+\-0-9]+)*$"
 
 
+def _zone(tz: str = Query("UTC", pattern=_TZ)) -> str:
+    """A zone Postgres can use: an unknown name is the caller's error, not a 500 from AT TIME ZONE (CR-094)."""
+    try:
+        ZoneInfo(tz)
+    except (ZoneInfoNotFoundError, ValueError, OSError) as err:
+        raise HTTPException(422, f"Unknown time zone: {tz}") from err
+    return tz
+
+
 @app.get("/rate-table-audit")
 def rate_table_audit(version_id: int | None = None, limit: int = Query(200, ge=1, le=1000),
                      since: str | None = Query(None, pattern=_WALL), until: str | None = Query(None, pattern=_WALL),
-                     tz: str = Query("UTC", pattern=_TZ)):
+                     tz: str = Depends(_zone)):
     """Rate-table changes, newest first; `since`/`until` are wall-clock bounds in `tz` (UX-044)."""
     return repository.audit_trail(version_id, limit, since, until, tz)
 
@@ -192,7 +202,7 @@ def rate_table_audit(version_id: int | None = None, limit: int = Query(200, ge=1
 @app.get("/ratings")
 def list_ratings(reference_prefix: str | None = None, limit: int = Query(200, ge=1, le=1000),
                  since: str | None = Query(None, pattern=_WALL), until: str | None = Query(None, pattern=_WALL),
-                 tz: str = Query("UTC", pattern=_TZ)):
+                 tz: str = Depends(_zone)):
     """Rating calls, newest first: who rated what, on which rate version, for which reference (SUB-/Q-).
     `since`/`until` are wall-clock bounds in `tz` (UX-044)."""
     return repository.list_ratings(reference_prefix, limit, since, until, tz)

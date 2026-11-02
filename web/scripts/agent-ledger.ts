@@ -16,6 +16,7 @@ import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "n
 import path from "node:path";
 import { foldCommit, foldReport, readLedger, type CommitInfo, type Ledger } from "../src/lib/agent-ledger.ts";
 import { AGENTS, agentOfReport, parseReport } from "../src/lib/agent-reports.ts";
+import { DISPLAY_TIME_ZONE as timeZone } from "../src/lib/time.ts";
 
 const check = process.argv.includes("--check");
 const earlierReports = process.argv.slice(2).filter((a) => !a.startsWith("--"));
@@ -23,7 +24,6 @@ const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "
 const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
 const docs = path.join(root, "docs");
 const ledgerPath = path.join(docs, "AGENT_LEDGER.json");
-const timeZone = process.env.DISPLAY_TZ || "America/New_York";
 
 type Event = { at: string; order: number; apply: (l: Ledger) => void };
 const events: Event[] = [];
