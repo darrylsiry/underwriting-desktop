@@ -240,9 +240,9 @@ def test_read_endpoints_declare_what_they_return(client):
     assert set(audit) == {"id", "version_id", "version_label", "actor", "action", "entity", "before", "after", "reason", "created_at"}
 
     summary = client.get("/ratings", params={"limit": 1}).json()[0]
-    assert set(summary) == {"id", "created_at", "requested_by", "reference", "rate_version", "class_code", "premium", "total"}
+    assert set(summary) == {"id", "created_at", "recorded_at", "requested_by", "reference", "rate_version", "class_code", "premium", "total"}
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T.+", summary["created_at"])
 
     entry = client.get(f"/ratings/{summary['id']}").json()
-    assert set(entry) == {"id", "version_id", "reference", "requested_by", "request", "result", "created_at"}
+    assert set(entry) == {"id", "version_id", "reference", "requested_by", "request", "result", "created_at", "recorded_at"}
     assert entry["request"]["class_code"] == summary["class_code"]

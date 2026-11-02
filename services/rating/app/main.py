@@ -81,11 +81,13 @@ class RatingRecord(BaseModel):
     request: dict[str, Any]
     result: dict[str, Any]
     created_at: datetime
+    recorded_at: datetime | None   # when the row was really written (CR-074); null on rows older than the column
 
 
 class RatingSummary(BaseModel):
     id: uuid.UUID
     created_at: datetime
+    recorded_at: datetime | None
     requested_by: str
     reference: str | None
     rate_version: str
