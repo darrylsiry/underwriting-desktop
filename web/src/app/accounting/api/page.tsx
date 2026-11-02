@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Card, Code, Crumbs, Json, Method, btn, btnPrimary } from "@/components/docs";
 import { loadUsers } from "@/lib/basic-auth";
 import { GL_TIME_ZONE, PERIOD_PRESETS, PRESET_LABEL, TRANSACTION_LABEL, glDate, presetRange } from "@/lib/gl-journal";
-import { glOpenApi, type Operation, type Parameter } from "@/lib/gl-openapi";
+import { errorStatuses, glOpenApi, type Operation, type Parameter } from "@/lib/gl-openapi";
 import { periodsDocument } from "@/lib/gl-service";
 import { requestOrigin } from "@/lib/http";
 import { listPostings } from "@/lib/ledger";
@@ -29,6 +29,7 @@ export default async function GlApiDocsPage() {
     return op["x-try"] ? `${p}?${op["x-try"]}` : p;
   };
   const curlAuth = gated ? "-u underwriter1 " : "";
+  const errors = errorStatuses(spec);
   const operations = Object.entries(spec.paths).flatMap(([path, ops]) => Object.entries(ops).map(([method, op]) => ({ path, method, op: op! })));
 
   return (
@@ -78,7 +79,7 @@ export default async function GlApiDocsPage() {
             <li>Amounts are USD with two decimals. Every journal balances: the sum of debits equals the sum of credits, and the document&apos;s totals reconcile against its lines.</li>
             <li>Posting dates and accounting periods (<code className="text-xs">YYYY-MM</code>) follow the books&apos; time zone, {GL_TIME_ZONE}. Timestamps are ISO 8601 in UTC.</li>
             <li>Reads (<code className="text-xs">GET</code>) never change anything. Only <code className="text-xs">POST /api/gl/exports</code> stamps lines as pushed, exactly like the button on the Accounting page.</li>
-            <li>Errors are JSON: <code className="text-xs">{"{ \"error\": { \"code\", \"message\", \"details\"? } }"}</code> with status 400 (a parameter), 401 (login) or 404 (no such journal).</li>
+            <li>Errors are JSON: <code className="text-xs">{"{ \"error\": { \"code\", \"message\", \"details\"? } }"}</code> with status {errors.map((e, i) => `${i === 0 ? "" : i === errors.length - 1 ? " or " : ", "}${e.status}${e.meaning ? ` (${e.meaning})` : ""}`).join("")}.</li>
             <li>Transaction types: {Object.entries(TRANSACTION_LABEL).map(([k, v]) => <span key={k}><code className="text-xs">{k}</code> ({v}) </span>)}— endorsements and cancellations are reserved for when those workflows exist.</li>
           </ul>
           <p className="mt-3 text-xs text-slate-500">Period presets, as they resolve today ({today}, {GL_TIME_ZONE}):</p>

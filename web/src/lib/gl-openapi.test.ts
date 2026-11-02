@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { EXPORT_FORMATS, GL_API_VERSION, PERIOD_PRESETS, TRANSACTION_LABEL } from "./gl-journal.ts";
-import { API_ERROR_CODES, glOpenApi } from "./gl-openapi.ts";
+import { API_ERROR_CODES, errorStatuses, glOpenApi } from "./gl-openapi.ts";
 
 test("the OpenAPI document names this instance, secures every path with basic auth and enumerates the same values the routes accept", () => {
   const doc = glOpenApi("https://uwdesk-web.fly.dev");
@@ -53,4 +53,10 @@ test("a push with nothing to send is documented as a 409 (CR-119)", () => {
   };
   assert.ok(doc.paths["/api/gl/exports"].post?.responses["409"]);
   assert.ok(doc.components.schemas.Error.properties.error.properties.code.enum.includes("nothing_to_push"));
+});
+
+test("the docs page's error list holds every status the document declares, each explained (CR-146)", () => {
+  const errors = errorStatuses(glOpenApi("https://x.test"));
+  assert.deepEqual(errors.map((e) => e.status), ["400", "401", "403", "404", "409"]);
+  for (const e of errors) assert.notEqual(e.meaning, "", `status ${e.status} needs a meaning`);
 });

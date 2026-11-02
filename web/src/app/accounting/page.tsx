@@ -123,7 +123,7 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
       </div>
 
       <Section title="Push to the general ledger">
-        {/* UX-022 / UX-009: a server action (same push as POST /accounting/export) so the buttons can show their pending state. */}
+        {/* UX-022 / UX-009: a server action (same push as POST /api/gl/exports) so the buttons can show their pending state. */}
         <form action={pushToGlAction} className="flex flex-wrap items-center gap-3 p-4 text-sm">
           <input type="hidden" name="period" value={preset} />
           <input type="hidden" name="from" value={isIsoDate(p.from) ? p.from : ""} />

@@ -102,6 +102,11 @@ export function pushedAccountingPath(p: Record<string, string | undefined | null
   return `/accounting?${qs}`;
 }
 
+/** Back to the page, saying why the filter was refused. Not `accountingFilter`: the bad values would only be refused again (CR-139). */
+export function refusedPushPath(p: Record<string, string | undefined | null>, errors: string[]): string {
+  return `/accounting?${new URLSearchParams({ error: `Nothing was pushed: ${errors.join("; ")}.` })}`;
+}
+
 /** Back to the same filter, saying why nothing happened: the lines were gone by the time the push ran (CR-119). */
 export function nothingToPushPath(p: Record<string, string | undefined | null>): string {
   const qs = accountingFilter(p);

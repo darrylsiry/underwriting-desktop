@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ledgerFileQuery, nothingToPushPath, parseLedgerQuery, pushedAccountingPath } from "./gl-query.ts";
+import { ledgerFileQuery, nothingToPushPath, parseLedgerQuery, pushedAccountingPath, refusedPushPath } from "./gl-query.ts";
 
 // UX-022, CR-127: after a push the page keeps the filter, so the download holds the lines the banner and audit row count.
 test("a push that stamped lines names its batch and keeps the filter the file reads back", () => {
@@ -20,6 +20,16 @@ test("a partial push downloads every line it reports, not only the newly stamped
 test("a push that stamped nothing keeps the filter it came from", () => {
   assert.equal(pushedAccountingPath({ period: "custom", from: "2026-10-01", to: "2026-10-31", type: "renewal", batch: "GLX-20261030-002" }, "GLX-20261031-003", 0, "csv"),
     "/accounting?period=custom&from=2026-10-01&to=2026-10-31&type=renewal&batch=GLX-20261030-002&pushed=0&format=csv");
+});
+
+test("a push with a bad filter is reported, and the bad values don't travel back (CR-139)", () => {
+  for (const form of [{ period: "junk" }, { period: "custom", from: "2026-02-31" }]) {
+    const { errors } = parseLedgerQuery(form, "2026-11-02", "all");
+    assert.notEqual(errors.length, 0);
+    const url = new URL(refusedPushPath(form, errors), "https://x.test");
+    assert.match(url.searchParams.get("error") ?? "", /^Nothing was pushed: /);
+    assert.equal(url.searchParams.get("period"), null);
+  }
 });
 
 test("a push with nothing to send returns to the same filter with a message (CR-119)", () => {

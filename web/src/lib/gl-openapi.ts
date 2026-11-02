@@ -117,6 +117,16 @@ const SCHEMAS: Record<string, unknown> = {
     endpoints: { type: "object", additionalProperties: { type: "string" } }, time_zone: { type: "string" }, currency: { type: "string" } } },
 };
 
+const ERROR_STATUS_MEANING: Record<string, string> = {
+  "400": "a parameter", "401": "login", "403": "a form on another site", "404": "no such journal", "409": "nothing to push",
+};
+
+/** Every error status the document declares, with what it means, so the docs page can't fall behind (CR-146). */
+export function errorStatuses(doc: Pick<OpenApiDocument, "paths">): { status: string; meaning: string }[] {
+  const statuses = new Set(Object.values(doc.paths).flatMap((ops) => Object.values(ops).flatMap((op) => Object.keys(op?.responses ?? {}))));
+  return [...statuses].filter((s) => Number(s) >= 400).sort().map((status) => ({ status, meaning: ERROR_STATUS_MEANING[status] ?? "" }));
+}
+
 export function glOpenApi(origin: string): OpenApiDocument {
   return {
     openapi: "3.1.0",
