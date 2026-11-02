@@ -35,8 +35,9 @@ export async function recordLogin(username: string, success: boolean, method: Lo
 const apiSeen = ((globalThis as unknown as { __apiLoginsSeen?: Map<string, number> }).__apiLoginsSeen ??= new Map<string, number>());
 
 /**
- * Note an HTTP Basic login on /api (the GL API, the MCP server), at most once per hour per login
- * and address. A browser session calling the API (the Try-it links) is not a new login.
+ * Note an HTTP Basic login, at most once per hour per login and address. The middleware calls this
+ * for every request it let in on HTTP Basic; a browser session calling the API (the Try-it links) is
+ * not a new login.
  */
 export function noteApiLogin(username: string | null, headers: Headers): void {
   if (!username || !headers.get("authorization")?.startsWith("Basic ")) return;

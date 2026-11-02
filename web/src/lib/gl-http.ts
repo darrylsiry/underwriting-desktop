@@ -3,8 +3,7 @@ import { parseLedgerQuery, type LedgerQuery } from "./gl-query";
 import type { GlContext } from "./gl-service";
 import { contentDisposition, requestOrigin } from "./http";
 import type { LedgerFile } from "./ledger";
-import { noteApiLogin } from "./login-events";
-import { currentUser, signedInUser } from "./user";
+import { currentUser } from "./user";
 
 // Plumbing shared by the /api/gl routes: who is calling, query parsing, and the JSON, error and
 // file responses. Auth itself happens in middleware.ts (HTTP Basic with the underwriter logins).
@@ -12,7 +11,6 @@ import { currentUser, signedInUser } from "./user";
 const NO_STORE = { "Cache-Control": "no-store" };
 
 export async function glContext(req: Request): Promise<GlContext> {
-  noteApiLogin(await signedInUser(), req.headers);   // the sign-in report counts HTTP Basic logins too
   return { actor: await currentUser(), origin: requestOrigin(req.headers) };
 }
 
