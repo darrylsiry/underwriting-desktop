@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { DaysChip, when, whenDate } from "@/components/ui";
-import { daysUntil, loadDashboard, RENEWAL_WINDOW_DAYS, type Task } from "@/lib/dashboard";
+import { LOSS_RATIO_BASIS, lossRatio } from "@/lib/book-metrics";
+import { daysUntil, loadDashboard, plural, RENEWAL_WINDOW_DAYS, type Task } from "@/lib/dashboard";
 import { systemHealth } from "@/lib/health";
 import { iso } from "@/lib/time";
 import { currentUser } from "@/lib/user";
@@ -75,10 +76,16 @@ export default async function Home() {
       <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-label="Book summary">
         <Tile href="/book" label="In-force premium" value={usdShort(k.inForcePremium)} sub={`${k.policies} policies in force`} />
         <Tile href="/book?due=90" label="Renewals · 90 days" value={String(k.renewalsDue90)} sub={`${usdShort(k.renewalPremium90)} expiring premium`} />
-        <Tile href="/book?view=losses" label="Book loss ratio (incurred)" value={pct(k.lossRatio)} sub={`${k.openClaims} open claim${k.openClaims === 1 ? "" : "s"} · prior-system book`} />
-        <Tile href={`/policies?underwriter=${encodeURIComponent(user)}&in_force=1`} label="New business" value={usdShort(k.newBusinessPremium)} sub={`${k.newBusinessPolicies} bound in the UW Desktop`} />
+        <Tile href="/book?view=losses" label="Book loss ratio (incurred)" value={pct(k.lossRatio)} sub={`${LOSS_RATIO_BASIS[0].toUpperCase()}${LOSS_RATIO_BASIS.slice(1)} · ${plural(k.openClaims, "open claim")}`} />
+        <Tile href={`/policies?underwriter=${encodeURIComponent(user)}&new_business=1`} label="New business" value={usdShort(k.newBusinessPremium)} sub={`${k.newBusinessPolicies} bound in the UW Desktop`} />
         <Tile href={`/quotes?status=issued&underwriter=${encodeURIComponent(user)}`} label="Quotes out" value={String(k.quotesOut)} sub={k.hitRatio === null ? "hit ratio: no decided quotes yet" : `hit ratio ${pct(k.hitRatio)} of decided quotes`} />
       </section>
+      {k.boundNotEffectivePolicies > 0 && (
+        <Link href="/book#bound-not-effective" className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-lg border border-slate-200 bg-white px-4 py-2 shadow-sm transition hover:border-indigo-300">
+          <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Bound, not yet effective</span>
+          <span className="text-sm tabular-nums text-slate-900">{k.boundNotEffectivePolicies} polic{k.boundNotEffectivePolicies === 1 ? "y" : "ies"} · {usdShort(k.boundNotEffectivePremium)} premium, not counted as in force</span>
+        </Link>
+      )}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:col-span-2">
@@ -149,7 +156,7 @@ export default async function Home() {
             </thead>
             <tbody>
               {d.renewals.map((p) => {
-                const lr = p.premium ? p.incurred / p.premium : 0;
+                const lr = lossRatio(p.incurred, p.premium) ?? 0;
                 return (
                   <tr key={p.id} className="border-t border-slate-100 hover:bg-slate-50">
                     <td className="whitespace-nowrap px-4 py-2"><span className="mr-2 tabular-nums">{whenDate(p.expiration_date)}</span><DaysChip days={daysUntil(p.expiration_date, d.today)} /></td>
