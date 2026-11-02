@@ -345,26 +345,53 @@ export const inboxStamp = (now: Date) => now.toISOString().slice(0, 16).replace(
 
 export type GeneratedSubmission = { folder: string; name: string; files: string[]; formats: string; trips: string | null };
 
-/** Render one case's documents into `dir/<stamp>-<slug>`. */
+// CR-128: a folder is written under a name the inbox never lists (isSafeName rejects the leading dot)
+// and renamed when complete, so nobody can pick up a submission with only some of its documents.
+const TEMP_PREFIX = ".tmp-";
+const TEMP_MAX_AGE_MS = 60 * 60_000;
+
+/** Render one case's documents into `dir/<stamp>-<slug>`, which appears only once all of them are written. */
 export async function writeSubmission(dir: string, c: SyntheticCase, formats: string, now: Date): Promise<GeneratedSubmission> {
   const kase = c.data as unknown as Case;
   const folder = `${inboxStamp(now)}-${c.slug}`;
-  const full = path.join(dir, folder);
+  const full = path.join(dir, `${TEMP_PREFIX}${folder}-${crypto.randomUUID().slice(0, 8)}`);   // unique: two servers sharing the folder can write the same case
   fs.mkdirSync(full, { recursive: true });
-  const today = usDate(now.toISOString().slice(0, 10));
-  const files: string[] = [];
-  const write = (name: string, bytes: Uint8Array | string) => { fs.writeFileSync(path.join(full, name), bytes); files.push(name); };
-  const fmts = new Set(formats.split("+"));
-  let lossRun: Uint8Array | null = null;
-  if (fmts.has("loss_run") || fmts.has("broker_email")) lossRun = await lossRunPdf(kase, today);
-  if (fmts.has("loss_run")) write(`${c.slug}-loss-run.pdf`, lossRun!);
-  if (fmts.has("acord_fillable")) write(`${c.slug}-acord-application.pdf`, await acordPdf(kase, true, !fmts.has("questionnaire"), today));
-  if (fmts.has("acord_flattened")) write(`${c.slug}-application-scan.pdf`, await acordPdf(kase, false, true, today));
-  if (fmts.has("questionnaire")) write(`${c.slug}-supplemental-questionnaire.pdf`, await questionnairePdf(kase, today));
-  const sent = new Date(now.getTime() - between(rng(hash(folder)), 1, 9) * 3_600_000);
-  if (fmts.has("broker_email")) write(`${c.slug}-submission-email.eml`, emailFile(kase, false, [{ name: `${c.slug}-loss-run.pdf`, bytes: lossRun! }], sent));
-  if (fmts.has("broker_email_sparse")) write(`${c.slug}-submission-email.eml`, emailFile(kase, true, [], sent));
-  return { folder, name: c.name, files, formats, trips: c.trips };
+  try {
+    const today = usDate(now.toISOString().slice(0, 10));
+    const files: string[] = [];
+    const write = (name: string, bytes: Uint8Array | string) => { fs.writeFileSync(path.join(full, name), bytes); files.push(name); };
+    const fmts = new Set(formats.split("+"));
+    let lossRun: Uint8Array | null = null;
+    if (fmts.has("loss_run") || fmts.has("broker_email")) lossRun = await lossRunPdf(kase, today);
+    if (fmts.has("loss_run")) write(`${c.slug}-loss-run.pdf`, lossRun!);
+    if (fmts.has("acord_fillable")) write(`${c.slug}-acord-application.pdf`, await acordPdf(kase, true, !fmts.has("questionnaire"), today));
+    if (fmts.has("acord_flattened")) write(`${c.slug}-application-scan.pdf`, await acordPdf(kase, false, true, today));
+    if (fmts.has("questionnaire")) write(`${c.slug}-supplemental-questionnaire.pdf`, await questionnairePdf(kase, today));
+    const sent = new Date(now.getTime() - between(rng(hash(folder)), 1, 9) * 3_600_000);
+    if (fmts.has("broker_email")) write(`${c.slug}-submission-email.eml`, emailFile(kase, false, [{ name: `${c.slug}-loss-run.pdf`, bytes: lossRun! }], sent));
+    if (fmts.has("broker_email_sparse")) write(`${c.slug}-submission-email.eml`, emailFile(kase, true, [], sent));
+    try {
+      fs.renameSync(full, path.join(dir, folder));
+    } catch (err) {
+      // Another server finished the same case first: its folder stands, and ours is the copy to drop.
+      if (!["ENOTEMPTY", "EEXIST"].includes((err as NodeJS.ErrnoException).code ?? "")) throw err;
+      fs.rmSync(full, { recursive: true, force: true });
+    }
+    return { folder, name: c.name, files, formats, trips: c.trips };
+  } catch (err) {
+    fs.rmSync(full, { recursive: true, force: true });
+    throw err;
+  }
+}
+
+/** A process stopped mid-write leaves its temp folder behind. The inbox ignores it; an hour on, it can go. */
+function sweepStaleTemp(dir: string, now: Date) {
+  if (!fs.existsSync(dir)) return;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!e.isDirectory() || !e.name.startsWith(TEMP_PREFIX)) continue;
+    const full = path.join(dir, e.name);
+    if (now.getTime() - fs.statSync(full).mtimeMs > TEMP_MAX_AGE_MS) fs.rmSync(full, { recursive: true, force: true });
+  }
 }
 
 /**
@@ -373,6 +400,7 @@ export async function writeSubmission(dir: string, c: SyntheticCase, formats: st
  * already in the folder are avoided.
  */
 export async function generateInboxSubmissions(dir: string, count: number, now = new Date()): Promise<GeneratedSubmission[]> {
+  sweepStaleTemp(dir, now);
   const r = rng(hash(inboxStamp(now)) ^ count);
   const taken = new Set(readInbox(dir).map((f) => folderTitle(f.folder)));
   const out: GeneratedSubmission[] = [];
