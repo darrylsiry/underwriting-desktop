@@ -11,9 +11,12 @@ export const RATING_TIMEOUT_MS = 15_000;
 
 /** A failed rating call. `status` is the HTTP status, or null when the service didn't answer at all. */
 export class RatingServiceError extends Error {
-  constructor(message: string, readonly status: number | null) {
+  readonly status: number | null;
+
+  constructor(message: string, status: number | null) {
     super(message);
     this.name = "RatingServiceError";
+    this.status = status;
   }
 
   /** The inputs themselves were refused (a 4xx), as opposed to the service being down or mid-restart. */
