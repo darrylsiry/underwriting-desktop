@@ -1,7 +1,7 @@
 import { auditByCorrelation } from "./audit";
 import { journalEntry, ledgerDocument, type LedgerDocument } from "./gl-export-json";
 import { ACCOUNTS, GL_TIME_ZONE, PRESET_LABEL, TRANSACTION_LABEL, periodLabel, type ExportFormat, type TransactionType } from "./gl-journal";
-import type { LedgerQuery } from "./gl-query";
+import { ledgerFileQuery, type LedgerQuery } from "./gl-query";
 import {
   byPeriod, exportLedger, getJournal, groupJournals, ledgerTotals, listBatches, listPeriods, listPostings, renderLedger,
   type LedgerFile, type LedgerFilter, type Totals,
@@ -128,18 +128,13 @@ export function accountsDocument() {
 /** Push the filter's lines to the GL (stamps a batch, audited) and say what happened. */
 export async function pushDocument(q: LedgerQuery, format: ExportFormat, ctx: GlContext) {
   const r = await exportLedger(ledgerFilter(q), format, ctx.actor, ctx.origin, q.period);
-  const qs = new URLSearchParams();
-  if (q.from) qs.set("from", q.from);
-  if (q.to) qs.set("to", q.to);
-  if (q.type) qs.set("type", q.type);
-  qs.set("format", format);
   return {
     file: r, document: {
       batch: r.batch, format, filename: r.filename, pushed_at: new Date().toISOString(), pushed_by: ctx.actor,
       filter: filterDoc(q), lines: r.lines, journals: r.journals, newly_stamped_lines: r.fresh,
       note: r.fresh === r.lines ? "Every line in the file was pushed for the first time in this batch."
         : r.fresh === 0 ? "Every line in the file had been pushed in an earlier batch; the file shows which." : `${r.fresh} of ${r.lines} lines were pushed for the first time in this batch; the rest show their earlier batch.`,
-      file_url: `${ctx.origin}/api/gl/postings?${qs}`,
+      file_url: `${ctx.origin}/api/gl/postings?${ledgerFileQuery(q, format)}`,
       batch_url: r.fresh ? `${ctx.origin}/api/gl/postings?batch=${r.batch}&format=${format}` : null,
       accounting_url: `${ctx.origin}/accounting?batch=${r.batch}`,
       audit_url: `${ctx.origin}/audit?entityType=ledger&q=${r.batch}`,

@@ -1,5 +1,6 @@
 // The canonical submission schema (see samples/README.md and the ingestion
 // service's app/schema.py) plus helpers for the intake review screen.
+import { isIsoDate } from "./time.ts";
 
 export type FieldType = "str" | "state" | "states" | "int" | "money" | "pct" | "bool" | "date";
 export type FieldDef = { path: string; label: string; type: FieldType };
@@ -93,12 +94,7 @@ export function setPath(data: SubmissionData, path: string, value: Value): void 
   (data[section] as Record<string, Value>)[name] = value;
 }
 
-/** A real calendar date as YYYY-MM-DD. The regex alone passes 2026-02-30, which then fails at the Postgres cast (CR-019). */
-export function isIsoDate(s: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || s.startsWith("0000")) return false;
-  const d = new Date(`${s}T00:00:00Z`);
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
-}
+export { isIsoDate };   // CR-019, CR-068: one rule for a real calendar date, in lib/time.ts
 
 export function isEmpty(v: Value): boolean {
   return v === null || v === "" || (Array.isArray(v) && v.length === 0);

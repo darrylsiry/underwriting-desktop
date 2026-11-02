@@ -1,4 +1,5 @@
 import { MUTED, createDocument, masthead, money, parties, premiumBlock, surplusLinesNotice, usDate } from "./pdf-writer";
+import { todayIso } from "./time";
 
 export type QuoteDocument = {
   quoteNumber: string;
@@ -43,7 +44,7 @@ export async function renderQuotePdf(q: QuoteDocument): Promise<Uint8Array> {
     title: "Commercial General Liability Quotation",
     subtitle: q.renewalOf ? `Renewal of policy ${q.renewalOf}  ·  Excess & surplus lines` : "Excess & surplus lines  ·  Contractors",
     right: [
-      `Issued ${usDate(q.issuedAt.toISOString().slice(0, 10))}  ·  Valid until ${usDate(q.validUntil)}`,
+      `Issued ${usDate(todayIso(q.issuedAt))}  ·  Valid until ${usDate(q.validUntil)}`,
       // UX-016: a broker holding two versions can see which one is live.
       ...(q.supersedes ? [`Supersedes version ${q.supersedes.version} issued ${usDate(q.supersedes.issuedAt)}; that version is withdrawn.`] : []),
       `Underwriter: ${q.issuedBy}`,

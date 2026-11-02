@@ -4,38 +4,42 @@ import { AutoDownload } from "@/components/auto-download";
 import { SubmitButton } from "@/components/submit-button";
 import { Section, when, whenDate } from "@/components/ui";
 import {
-  EXPORT_FORMATS, GL_TIME_ZONE, PERIOD_PRESETS, PRESET_LABEL, TRANSACTION_LABEL, glDate, periodLabel, presetRange, type ExportFormat, type PeriodPreset, type TransactionType,
+  EXPORT_FORMATS, GL_TIME_ZONE, PERIOD_PRESETS, PRESET_LABEL, TRANSACTION_LABEL, glDate, periodLabel, type ExportFormat, type TransactionType,
 } from "@/lib/gl-journal";
-import { byPeriod, ledgerTotals, listPostings, type Journal, type LedgerFilter } from "@/lib/ledger";
-import { iso } from "@/lib/time";
+import { ledgerFileQuery, parseLedgerQuery } from "@/lib/gl-query";
+import { ledgerFilter } from "@/lib/gl-service";
+import { byPeriod, ledgerTotals, listPostings, type Journal } from "@/lib/ledger";
+import { firstParams, type RawParams } from "@/lib/http";
+import { iso, isIsoDate } from "@/lib/time";
 import { pushToGlAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-type Params = { period?: string; from?: string; to?: string; type?: string; batch?: string; msg?: string; error?: string; pushed?: string; format?: string };
+type Params = { period?: string; from?: string; to?: string; type?: string; batch?: string; msg?: string; error?: string; pushed?: string; pushed_batch?: string; format?: string };
+
+/** The filter by the same rules as the API and the push (CR-086): bare from/to are a custom range. A bad value falls back rather than failing the page. */
+const pageQuery = (p: Params) => parseLedgerQuery(p, glDate(new Date()), p.batch ? "all" : "this_month").query;
 
 // UX-010: the tab names the month being looked at.
-export async function generateMetadata({ searchParams }: { searchParams: Promise<Params> }): Promise<Metadata> {
-  const p = await searchParams;
-  const preset: PeriodPreset = (PERIOD_PRESETS as readonly string[]).includes(p.period ?? "") ? (p.period as PeriodPreset) : p.batch ? "all" : "this_month";
-  const range = presetRange(preset, glDate(new Date()), { from: isDate(p.from) ? p.from! : null, to: isDate(p.to) ? p.to! : null });
-  const month = range.from && range.to && range.from.slice(0, 7) === range.to.slice(0, 7) ? periodLabel(range.from.slice(0, 7)) : PRESET_LABEL[preset];
-  return { title: `Accounting · ${p.batch ? `batch ${p.batch}` : month}` };
+export async function generateMetadata({ searchParams }: { searchParams: Promise<RawParams<Params>> }): Promise<Metadata> {
+  const q = pageQuery(firstParams<Params>(await searchParams));
+  const month = q.from && q.to && q.from.slice(0, 7) === q.to.slice(0, 7) ? periodLabel(q.from.slice(0, 7)) : PRESET_LABEL[q.period];
+  return { title: `Accounting · ${q.batch ? `batch ${q.batch}` : month}` };
 }
 
 const money = (n: number | string) => `$${Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const amount = (n: number | string) => (Number(n) === 0 ? "" : money(n));
 // UX-006: clock times through the shared `when` (one display zone, zone named); posting dates and periods stay on GL_TIME_ZONE.
-const isDate = (s?: string) => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const TYPES = Object.keys(TRANSACTION_LABEL) as TransactionType[];
 
 /** Accounting: the premium sub-ledger by accounting month, and the push to the general ledger. */
-export default async function AccountingPage({ searchParams }: { searchParams: Promise<Params> }) {
-  const p = await searchParams;
-  const preset: PeriodPreset = (PERIOD_PRESETS as readonly string[]).includes(p.period ?? "") ? (p.period as PeriodPreset) : p.batch ? "all" : "this_month";
+export default async function AccountingPage({ searchParams }: { searchParams: Promise<RawParams<Params>> }) {
+  const p = firstParams<Params>(await searchParams);
+  const query = pageQuery(p);
+  const preset = query.period;
   const today = glDate(new Date());
-  const range = presetRange(preset, today, { from: isDate(p.from) ? p.from! : null, to: isDate(p.to) ? p.to! : null });
-  const filter: LedgerFilter = { from: range.from, to: range.to, type: TYPES.includes(p.type as TransactionType) ? (p.type as TransactionType) : "", batch: p.batch ?? "" };
+  const range = { from: query.from, to: query.to };
+  const filter = ledgerFilter(query);
   const rows = await listPostings(filter);
   const periods = byPeriod(rows);
   const t = ledgerTotals(rows);
@@ -45,9 +49,7 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
   const justPushed = /^\d+$/.test(p.pushed ?? "") ? Number(p.pushed) : null;
   const format: ExportFormat = (EXPORT_FORMATS as readonly string[]).includes(p.format ?? "") ? (p.format as ExportFormat) : "xlsx";
   const last = rows.filter((r) => r.exported_at).sort((a, b) => b.exported_at!.getTime() - a.exported_at!.getTime())[0];
-  // All periods has no dates, so it must be named or the API falls back to this month (UAT-F1). JSON asks to be a file (UAT-F2).
-  const fileQs = new URLSearchParams({ ...(!filter.from && !filter.to ? { period: "all" } : {}), ...(filter.from ? { from: filter.from } : {}), ...(filter.to ? { to: filter.to } : {}), ...(filter.type ? { type: filter.type } : {}), ...(filter.batch ? { batch: filter.batch } : {}), format, ...(format === "json" ? { download: "1" } : {}) });
-  const fileHref = `/api/gl/postings?${fileQs}`;   // a read: renders the same file without stamping
+  const fileHref = `/api/gl/postings?${ledgerFileQuery(filter, format, { download: format === "json" })}`;   // a read: renders the same file without stamping
 
   return (
     <main className="mx-auto max-w-7xl p-8">
@@ -74,33 +76,33 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
       {/* UX-022: the push just made, confirmed on the page; the file follows on its own. */}
       {justPushed !== null && (
         <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800" role="status">
-          {justPushed > 0 && p.batch
-            ? <><span className="font-medium">Pushed batch <code className="text-xs">{p.batch}</code></span><span>{justPushed} line{justPushed === 1 ? "" : "s"} marked</span></>
+          {justPushed > 0 && p.pushed_batch
+            ? <><span className="font-medium">Pushed batch <code className="text-xs">{p.pushed_batch}</code></span><span>{justPushed} of {rows.length} line{rows.length === 1 ? "" : "s"} newly marked; the file holds all {rows.length}</span></>
             : <><span className="font-medium">Nothing new to push</span><span>every line in the file had been pushed in an earlier batch; the file shows which</span></>}
           <a href={fileHref} className="font-medium underline">Download .{format}</a>
           <span className="text-xs text-emerald-700">(downloading now)</span>
-          {p.batch && <Link href="/accounting" className="ml-auto text-xs underline">Show all</Link>}
-          <AutoDownload href={fileHref} strip={["pushed", "format"]} />
+          {p.pushed_batch && <Link href={`/accounting?batch=${encodeURIComponent(p.pushed_batch)}`} className="ml-auto text-xs underline">Show only this batch</Link>}
+          <AutoDownload href={fileHref} strip={["pushed", "pushed_batch", "format"]} />
         </p>
       )}
-      {p.batch && justPushed === null && (
+      {filter.batch && (
         <p className="mt-4 rounded bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
-          Showing the lines pushed in batch <code className="text-xs">{p.batch}</code>. <Link href="/accounting" className="underline">Show all</Link>
+          Showing the lines pushed in batch <code className="text-xs">{filter.batch}</code>. <Link href="/accounting" className="underline">Show all</Link>
         </p>
       )}
 
       <form className="mt-6 flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm">
-        {p.batch && <input type="hidden" name="batch" value={p.batch} />}
+        {filter.batch && <input type="hidden" name="batch" value={filter.batch} />}
         <label className="flex flex-col gap-1 text-xs text-slate-500">Period
           <select name="period" defaultValue={preset} className="rounded border border-slate-300 px-2 py-1 text-sm text-slate-900">
             {PERIOD_PRESETS.map((k) => <option key={k} value={k}>{PRESET_LABEL[k]}</option>)}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-slate-500">From (custom)
-          <input type="date" name="from" defaultValue={isDate(p.from) ? p.from : ""} className="rounded border border-slate-300 px-2 py-1 text-sm text-slate-900" />
+          <input type="date" name="from" defaultValue={isIsoDate(p.from) ? p.from : ""} className="rounded border border-slate-300 px-2 py-1 text-sm text-slate-900" />
         </label>
         <label className="flex flex-col gap-1 text-xs text-slate-500">To (custom)
-          <input type="date" name="to" defaultValue={isDate(p.to) ? p.to : ""} className="rounded border border-slate-300 px-2 py-1 text-sm text-slate-900" />
+          <input type="date" name="to" defaultValue={isIsoDate(p.to) ? p.to : ""} className="rounded border border-slate-300 px-2 py-1 text-sm text-slate-900" />
         </label>
         <label className="flex flex-col gap-1 text-xs text-slate-500">Transaction type
           <select name="type" defaultValue={filter.type} className="rounded border border-slate-300 px-2 py-1 text-sm text-slate-900">
@@ -124,8 +126,8 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
         {/* UX-022 / UX-009: a server action (same push as POST /accounting/export) so the buttons can show their pending state. */}
         <form action={pushToGlAction} className="flex flex-wrap items-center gap-3 p-4 text-sm">
           <input type="hidden" name="period" value={preset} />
-          <input type="hidden" name="from" value={isDate(p.from) ? p.from : ""} />
-          <input type="hidden" name="to" value={isDate(p.to) ? p.to : ""} />
+          <input type="hidden" name="from" value={isIsoDate(p.from) ? p.from : ""} />
+          <input type="hidden" name="to" value={isIsoDate(p.to) ? p.to : ""} />
           <input type="hidden" name="type" value={filter.type} />
           <input type="hidden" name="batch" value={filter.batch} />
           <SubmitButton pending="Preparing file…" name="format" value="xlsx" disabled={!rows.length} className="rounded-md bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 disabled:opacity-50">Export Excel (.xlsx)</SubmitButton>
@@ -154,7 +156,7 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
                 <tr><th className="px-4 py-2 font-medium">Journal · posted</th><th className="px-4 py-2 font-medium">Account</th><th className="px-4 py-2 text-right font-medium">Debit</th><th className="px-4 py-2 text-right font-medium">Credit</th></tr>
               </thead>
               <tbody>
-                {g.journals.map((j) => <JournalRows key={j.journal_no} j={j} highlight={justPushed ? p.batch : undefined} />)}
+                {g.journals.map((j) => <JournalRows key={j.journal_no} j={j} highlight={justPushed ? p.pushed_batch : undefined} />)}
               </tbody>
             </table>
           </section>

@@ -1,12 +1,14 @@
 import { plural } from "./text.ts";
 export { plural };
+import { RENEWAL_WINDOW_DAYS, daysUntil, summarizeBook } from "./book-metrics.ts";
+export { RENEWAL_WINDOW_DAYS, daysUntil };
 import { customerDb, policyDb } from "./db";
 import { listInbox } from "./inbox";
 import { producerOf, type ProducerFields } from "./quote-terms";
 import { missingForRating, type SubmissionRow } from "./submissions";
 import { stageOf, type Stage } from "./stage";
-import { whenDate } from "./time";
-import { activeRateVersion, readiness, type WorksheetRow } from "./worksheets";
+import { todayIso, whenDate } from "./time";
+import { readiness, recentRateVersion, type WorksheetRow } from "./worksheets";
 
 // Everything the home page shows for one underwriter. An underwriter owns the submissions they
 // picked up (received_by), and through them the quotes and policies written in the UW Desktop;
@@ -19,6 +21,7 @@ export type BookPolicy = {
   renewal_status: "not_started" | "in_progress" | "renewed" | "non_renewed"; source: "prior system" | "uw desktop";
   renewal_submission_id: string | null;
   href: string | null;
+  is_renewal?: boolean;   // bound in the UW Desktop as the renewal of an expiring policy
 };
 
 export type Task = {
@@ -33,27 +36,23 @@ export type Task = {
 export type Dashboard = {
   user: string;
   today: string;
-  book: BookPolicy[];
+  book: BookPolicy[];                 // in force today: effective and unexpired (CR-102)
+  boundNotEffective: BookPolicy[];    // bound ahead of its effective date, such as a renewal waiting for its start
+  unexpired: BookPolicy[];            // both of the above: the wider list renewal work runs on
   renewals: BookPolicy[];
   tasks: Task[];
   premiumByClass: { code: string; description: string; premium: number; policies: number }[];
   kpis: {
-    inForcePremium: number; policies: number; renewalsDue90: number; renewalPremium90: number;
+    inForcePremium: number; policies: number; boundNotEffectivePremium: number; boundNotEffectivePolicies: number;
+    renewalsDue90: number; renewalPremium90: number;
     lossRatio: number | null; openClaims: number; newBusinessPremium: number; newBusinessPolicies: number;
     quotesOut: number; hitRatio: number | null;
   };
   activity: { occurred_at: Date; action: string; summary: string }[];
 };
 
-const iso = (d: Date) => d.toISOString().slice(0, 10);
-const addDays = (date: string, days: number) => iso(new Date(new Date(`${date}T00:00:00Z`).getTime() + days * 86_400_000));
-export const daysUntil = (date: string, today: string) =>
-  Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
-
-export const RENEWAL_WINDOW_DAYS = 120;
-
 export async function loadDashboard(user: string): Promise<Dashboard> {
-  const today = iso(new Date());
+  const today = todayIso();
   const { rows: subs } = await customerDb.query<SubmissionRow & { ws: WorksheetRow | null }>(
     `SELECT s.*, to_jsonb(w) AS ws FROM submissions s LEFT JOIN worksheets w ON w.submission_id = s.id
      WHERE s.received_by = $1 ORDER BY s.received_at`, [user]);
@@ -63,14 +62,14 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
       `SELECT id, policy_number, insured_name, class_code, class_description, states, producer,
               effective_date::text, expiration_date::text, premium::float8 AS premium, claims,
               incurred::float8 AS incurred, open_claims, renewal_status, renewal_submission_id
-       FROM book_policies WHERE underwriter = $1 AND expiration_date >= CURRENT_DATE`, [user]),
+       FROM book_policies WHERE underwriter = $1 AND expiration_date >= $2::date`, [user, today]),
     policyDb.query<{ id: string; policy_number: string; insured_name: string; submission_id: string; effective_date: string;
       expiration_date: string; premium: number; terms: { class_code?: string; class_description?: string; producer?: string[]; producer_fields?: ProducerFields };
       states: string[] | null; subjectivities: { text: string; status: string; due_date: string }[];
-      renewal_status: BookPolicy["renewal_status"]; renewal_submission_id: string | null }>(
+      renewal_status: BookPolicy["renewal_status"]; renewal_submission_id: string | null; is_renewal: boolean }>(
       `SELECT p.id, p.policy_number, p.insured_name, p.submission_id, p.effective_date::text, p.expiration_date::text,
               p.premium::float8 AS premium, q.terms, q.rating_inputs->'states' AS states, p.subjectivities,
-              p.renewal_status, p.renewal_submission_id
+              p.renewal_status, p.renewal_submission_id, (p.renewed_from IS NOT NULL) AS is_renewal
        FROM policies p JOIN quotes q ON q.id = p.quote_id WHERE p.submission_id = ANY($1)`, [mine]),
     policyDb.query<{ id: string; quote_number: string; version: number; status: string; submission_id: string;
       insured_name: string; valid_until: string; total: number }>(
@@ -79,22 +78,21 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     policyDb.query<{ occurred_at: Date; action: string; summary: string }>(
       "SELECT occurred_at, action, summary FROM audit_events WHERE actor = $1 ORDER BY occurred_at DESC, id DESC LIMIT 8", [user]),
     listInbox(),
-    activeRateVersion(),
+    recentRateVersion(),
   ]);
 
-  // The book: prior-system policies plus in-force policies written here.
+  // Every unexpired policy: prior-system ones plus those written here, in force or still to start.
   const written: BookPolicy[] = policies.rows.filter((p) => p.expiration_date >= today).map((p) => ({
     id: p.id, policy_number: p.policy_number, insured_name: p.insured_name,
     class_code: p.terms?.class_code ?? "", class_description: p.terms?.class_description ?? "",
     states: p.states ?? [], producer: producerOf(p.terms ?? {}).agency,
     effective_date: p.effective_date, expiration_date: p.expiration_date, premium: p.premium,
     claims: 0, incurred: 0, open_claims: 0, renewal_status: p.renewal_status, renewal_submission_id: p.renewal_submission_id,
-    source: "uw desktop", href: `/policies/${p.id}`,
+    source: "uw desktop", href: `/policies/${p.id}`, is_renewal: p.is_renewal,
   }));
-  const book = [...legacy.rows.map((p) => ({ ...p, source: "prior system" as const, href: `/policies/book/${p.id}` })), ...written]
+  const unexpired = [...legacy.rows.map((p) => ({ ...p, source: "prior system" as const, href: `/policies/book/${p.id}` })), ...written]
     .sort((a, b) => a.expiration_date.localeCompare(b.expiration_date));
-  const renewalCutoff = addDays(today, RENEWAL_WINDOW_DAYS);
-  const renewals = book.filter((p) => p.expiration_date <= renewalCutoff && p.renewal_status !== "renewed");
+  const { book, boundNotEffective, renewals, premiumByClass, kpis } = summarizeBook(unexpired, today);
 
   const tasks: Task[] = [];
   const latestQuote = new Map<string, (typeof quotes.rows)[number]>();
@@ -170,31 +168,13 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
   // The inbox stays on top so new work is never buried; everything else by urgency.
   tasks.sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || a.urgency - b.urgency);
 
-  const byClass = new Map<string, { code: string; description: string; premium: number; policies: number }>();
-  for (const p of book) {
-    const c = byClass.get(p.class_code) ?? { code: p.class_code, description: p.class_description, premium: 0, policies: 0 };
-    c.premium += p.premium;
-    c.policies += 1;
-    byClass.set(p.class_code, c);
-  }
   const quoteNumbers = [...latestQuote.values()];
   const decided = quoteNumbers.filter((q) => q.status === "bound" || (q.status === "issued" && q.valid_until < today));
-  const premium = book.reduce((n, p) => n + p.premium, 0);
-  const priorPremium = legacy.rows.reduce((n, p) => n + p.premium, 0);
 
   return {
-    user, today, book, renewals, tasks,
-    premiumByClass: [...byClass.values()].sort((a, b) => b.premium - a.premium),
+    user, today, book, boundNotEffective, unexpired, renewals, tasks, premiumByClass,
     kpis: {
-      inForcePremium: premium,
-      policies: book.length,
-      renewalsDue90: book.filter((p) => daysUntil(p.expiration_date, today) <= 90).length,
-      renewalPremium90: book.filter((p) => daysUntil(p.expiration_date, today) <= 90).reduce((n, p) => n + p.premium, 0),
-      lossRatio: priorPremium ? legacy.rows.reduce((n, p) => n + p.incurred, 0) / priorPremium : null,
-      openClaims: legacy.rows.reduce((n, p) => n + p.open_claims, 0),
-      // Everything written in the UW Desktop is new business; the prior-system book is renewal business.
-      newBusinessPremium: written.reduce((n, p) => n + p.premium, 0),
-      newBusinessPolicies: written.length,
+      ...kpis,
       quotesOut: quoteNumbers.filter((q) => q.status === "issued").length,
       // Only decided quotes count: bound (won) or past their valid-until date unbound (lost).
       hitRatio: decided.length ? decided.filter((q) => q.status === "bound").length / decided.length : null,
@@ -214,7 +194,7 @@ export async function submissionStages(subs: SubmissionRow[]): Promise<Map<strin
     policyDb.query<{ submission_id: string; version: number; total: string; status: string }>(
       "SELECT DISTINCT ON (submission_id) submission_id, version, total, status FROM quotes WHERE submission_id = ANY($1) ORDER BY submission_id, version DESC", [ids]),
     policyDb.query<{ id: string; submission_id: string; policy_number: string }>("SELECT id, submission_id, policy_number FROM policies WHERE submission_id = ANY($1)", [ids]),
-    activeRateVersion(),
+    recentRateVersion(),
   ]);
   const ws = new Map(worksheets.rows.map((w) => [w.submission_id, w]));
   const quote = new Map(quotes.rows.map((q) => [q.submission_id, q]));

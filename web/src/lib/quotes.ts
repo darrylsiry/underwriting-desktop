@@ -7,6 +7,7 @@ import { renderRenewalMemoPdf } from "./renewal-memo-pdf";
 import { QUOTE_VALID_DAYS, addDays, formsFor, parseSubjectivities, producerFields, producerLines, quoteLimits, quotePeriod, type ProducerFields } from "./quote-terms";
 import { rateOn } from "./rating-api";
 import type { SubmissionRow } from "./submissions";
+import { todayIso } from "./time";
 import type { RatingInputs, ScheduleItem } from "./worksheet";
 import { activeRateVersion, getWorksheet, money, readiness, type Rating } from "./worksheets";
 
@@ -81,7 +82,7 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
   if (previous?.status === "bound") throw new Error(`${previous.quote_number} is already bound; changes now need a policy endorsement`);
   const issuedAt = at ?? new Date();
   const quoteNumber = previous?.quote_number ?? (await policyDb.query<{ n: string }>(
-    `SELECT 'Q-' || $1 || '-' || ${paddedSeq("quote_number_seq", 4)} AS n`, [String(issuedAt.getUTCFullYear())])).rows[0].n;
+    `SELECT 'Q-' || $1 || '-' || ${paddedSeq("quote_number_seq", 4)} AS n`, [todayIso(issuedAt).slice(0, 4)])).rows[0].n;
   const version = (previous?.version ?? 0) + 1;
 
   // Re-rated pinned to the rate version the worksheet shows, so the quote is exactly what the underwriter saw.
@@ -105,7 +106,7 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
     forms: formsFor(inputs),
   };
   const subjectivities = parseSubjectivities(form.subjectivities);
-  const validUntil = addDays(issuedAt.toISOString().slice(0, 10), QUOTE_VALID_DAYS);
+  const validUntil = addDays(todayIso(issuedAt), QUOTE_VALID_DAYS);
 
   const pdf = await renderQuotePdf({
     quoteNumber, version, issuedAt, validUntil, issuedBy: actor,
@@ -117,7 +118,7 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
     surplusLinesTaxRate: Number(rating.surplus_lines_tax_rate), homeState: inputs.home_state, total: Number(rating.total),
     rateVersion: rating.rate_version, subjectivities, forms: terms.forms, renewalOf: sub.renewal_of?.policy_number,
     // UX-016: a revised quote says which version it replaces.
-    supersedes: previous ? { version: previous.version, issuedAt: previous.issued_at.toISOString().slice(0, 10) } : undefined,
+    supersedes: previous ? { version: previous.version, issuedAt: todayIso(previous.issued_at) } : undefined,
   });
 
   // A renewal quote comes with a memo to the insured: premium change, what changed in the rating

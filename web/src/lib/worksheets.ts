@@ -1,5 +1,6 @@
 import { audit } from "./audit";
 import { customerDb, policyDb } from "./db";
+import { memoFor } from "./memo-for";
 import { clearanceAudit, clearanceStatus, referralFlags, type Flag } from "./referrals";
 import { RATING_TIMEOUT_MS, RatingServiceError, rateOn, rateVersionId } from "./rating-api";
 import { RATING_SERVICE_URL } from "./services";
@@ -61,14 +62,21 @@ export function flagsFor(sub: SubmissionRow, ws: WorksheetRow): Flag[] {
 }
 
 /** The rating service's active rate version label, or null if it can't be reached. */
-export async function activeRateVersion(): Promise<string | null> {
+export async function activeRateVersion(timeoutMs = RATING_TIMEOUT_MS): Promise<string | null> {
   try {
-    const res = await fetch(`${RATING_SERVICE_URL}/health`, { cache: "no-store", signal: AbortSignal.timeout(RATING_TIMEOUT_MS) });
+    const res = await fetch(`${RATING_SERVICE_URL}/health`, { cache: "no-store", signal: AbortSignal.timeout(timeoutMs) });
     return res.ok ? ((await res.json()).active_rate_version ?? null) : null;
   } catch {
     return null;
   }
 }
+
+/**
+ * The active version for pages that only word a task from it (the desk, the lists): remembered for
+ * 30 s, waited on for 3 s, so a stopped service can't hold them up (CR-085). Quoting and the
+ * workbench, which act on the answer, keep asking activeRateVersion.
+ */
+export const recentRateVersion = memoFor(30_000, () => activeRateVersion(3_000));
 
 /**
  * Ready to quote: a rating of the current inputs on the currently active rate version, and every

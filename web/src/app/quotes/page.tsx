@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { when, whenDate } from "@/components/ui";
+import { firstParams, type RawParams } from "@/lib/http";
 import { listQuotes, type QuoteRow } from "@/lib/quotes";
 import { submissionIdsReceivedBy } from "@/lib/submissions";
 import { iso } from "@/lib/time";
@@ -21,8 +22,8 @@ const STATUSES: QuoteRow["status"][] = ["issued", "superseded", "bound"];
  * Every quote version. `?highlight=<quote id>` (where issuing a quote lands) calls out that version;
  * `?status=issued&underwriter=<name>` is the desk's Quotes out tile: current quotes, not yet bound or superseded, from that underwriter's submissions.
  */
-export default async function QuotesPage({ searchParams }: { searchParams: Promise<Params> }) {
-  const p = await searchParams;
+export default async function QuotesPage({ searchParams }: { searchParams: Promise<RawParams<Params>> }) {
+  const p = firstParams<Params>(await searchParams);
   const status = STATUSES.includes(p.status as QuoteRow["status"]) ? (p.status as QuoteRow["status"]) : null;
   const underwriter = p.underwriter?.trim() || null;
   const quotes = await listQuotes({ status, submissionIds: underwriter ? await submissionIdsReceivedBy(underwriter) : null });

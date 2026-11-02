@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { AUTH_USER_HEADER, authenticate, loadUsers } from "@/lib/basic-auth";
+import { noteApiLogin } from "@/lib/login-events";
 import { SESSION_COOKIE, sessionKey, verifySession } from "@/lib/session";
 
 // The sign-in gate for the public deployment, on when BASIC_AUTH_USERS (or BASIC_AUTH_PASSWORD) is
@@ -26,8 +27,11 @@ export function middleware(req: NextRequest) {
     return NextResponse.next({ request: { headers } });
   }
 
-  const name = verifySession(req.cookies.get(SESSION_COOKIE)?.value, sessionKey(process.env))
-    ?? authenticate(req.headers.get("authorization"), users);
+  const session = verifySession(req.cookies.get(SESSION_COOKIE)?.value, sessionKey(process.env));
+  const basic = session ? null : authenticate(req.headers.get("authorization"), users);
+  // Every HTTP Basic caller shows up in the sign-in report, whichever route it reached (CR-093).
+  if (basic) noteApiLogin(basic, req.headers);
+  const name = session ?? basic;
   if (name) {
     headers.set(AUTH_USER_HEADER, name);
     return NextResponse.next({ request: { headers } });

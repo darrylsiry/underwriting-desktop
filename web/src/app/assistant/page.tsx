@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ASSISTANT_MODEL, assistantEnabled } from "@/lib/assistant";
+import { firstParams, type RawParams } from "@/lib/http";
 import { currentUser } from "@/lib/user";
 import { AssistantChat } from "./chat";
 
@@ -18,8 +19,9 @@ const SUGGESTIONS = [
 ];
 
 /** The AI assistant: ask anything about the app; Claude answers from the app's data with links. `?q=` (the desk's ask box) asks it on arrival. */
-export default async function AssistantPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const [user, { q }] = await Promise.all([currentUser(), searchParams]);
+export default async function AssistantPage({ searchParams }: { searchParams: Promise<RawParams<{ q?: string }>> }) {
+  const [user, raw] = await Promise.all([currentUser(), searchParams]);
+  const { q } = firstParams<{ q?: string }>(raw);
   return (
     <main className="mx-auto max-w-4xl p-6 lg:p-8">
       <h1 className="text-2xl font-semibold">AI Assistant</h1>

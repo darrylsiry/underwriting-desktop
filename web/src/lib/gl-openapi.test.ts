@@ -32,3 +32,12 @@ test("the OpenAPI document names this instance, secures every path with basic au
   for (const r of refs) assert.ok(r.split("/").pop()! in doc.components.schemas, `${r} resolves`);
   assert.doesNotThrow(() => JSON.parse(JSON.stringify(doc)));
 });
+
+test("a push with nothing to send is documented as a 409 (CR-119)", () => {
+  const doc = glOpenApi("https://uw.example") as unknown as {
+    paths: Record<string, { post?: { responses: Record<string, unknown> } }>;
+    components: { schemas: { Error: { properties: { error: { properties: { code: { enum: string[] } } } } } } };
+  };
+  assert.ok(doc.paths["/api/gl/exports"].post?.responses["409"]);
+  assert.ok(doc.components.schemas.Error.properties.error.properties.code.enum.includes("nothing_to_push"));
+});

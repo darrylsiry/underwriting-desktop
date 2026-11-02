@@ -8,6 +8,17 @@ test("csv quotes what needs quoting and neutralizes formulas", () => {
   assert.equal(csv, "﻿" + 'a,b\r\nplain,1234.50\r\n"say ""hi"", now",\'=SUM(1)\r\n,2026-10-30T12:00:00.000Z\r\n');
 });
 
+test("csv neutralizes every formula prefix but leaves numbers alone (CR-071)", () => {
+  const cells = (row: (string | number)[]) => toCsv(["a"], [row]).split("\r\n")[1];
+  assert.equal(cells(["-2+3"]), "'-2+3");
+  assert.equal(cells(["\tcmd"]), "'\tcmd");
+  assert.equal(cells(["\rcmd"]), '"\'\rcmd"');
+  assert.equal(cells(["+1"]), "'+1");
+  assert.equal(cells(["@x"]), "'@x");
+  assert.equal(cells([-5]), "-5");
+  assert.equal(cells([-5.5]), "-5.50");
+});
+
 test("crc32 matches the standard check value", () => {
   assert.equal(crc32(new TextEncoder().encode("123456789")), 0xcbf43926);
 });

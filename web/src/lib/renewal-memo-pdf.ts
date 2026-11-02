@@ -1,5 +1,6 @@
 import { ACCENT, MUTED, PAGE, RULE, createDocument, masthead, money, parties, surplusLinesNotice, usDate, type Writer } from "./pdf-writer";
 import { changeSummary, signed, type Comparison } from "./renewal-compare";
+import { todayIso } from "./time";
 
 export type RenewalMemo = {
   quoteNumber: string;
@@ -54,7 +55,7 @@ export async function renderRenewalMemoPdf(m: RenewalMemo): Promise<Uint8Array> 
     reference: `Renewal of policy ${m.expiringPolicyNumber}`,
     title: "Renewal Memorandum",
     subtitle: `Commercial General Liability  ·  Quote ${m.quoteNumber} v${m.version}`,
-    right: [`${usDate(m.issuedAt.toISOString().slice(0, 10))}  ·  Quote valid until ${usDate(m.validUntil)}`, `Underwriter: ${m.issuedBy}`],
+    right: [`${usDate(todayIso(m.issuedAt))}  ·  Quote valid until ${usDate(m.validUntil)}`, `Underwriter: ${m.issuedBy}`],
   });
   parties(w, "Prepared for", [m.insuredName, ...m.insuredAddress], m.producer);
 

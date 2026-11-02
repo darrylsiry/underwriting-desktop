@@ -21,21 +21,23 @@ export async function POST(req: Request) {
     : [];
   const ctx = { actor: await currentUser(), origin: requestOrigin(req.headers), today: glDate(new Date()) };
   const encoder = new TextEncoder();
+  let gone = false;   // the reader left (Stop, or the page closed): nothing more can be sent
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const send = (e: unknown) => controller.enqueue(encoder.encode(JSON.stringify(e) + "\n"));
+      const send = (e: unknown) => { if (!gone) controller.enqueue(encoder.encode(JSON.stringify(e) + "\n")); };
       try {
         if (!assistantEnabled()) {
           send({ type: "error", message: "The assistant needs ANTHROPIC_API_KEY on the web app (the same key the ingestion service uses)." });
         } else {
-          for await (const event of askAssistant(question, history, ctx)) send(event);
+          for await (const event of askAssistant(question, history, ctx, { signal: req.signal })) send(event);
         }
       } catch (err) {
         send({ type: "error", message: (err as Error).message });
       } finally {
-        controller.close();
+        if (!gone) controller.close();
       }
     },
+    cancel() { gone = true; },
   });
   return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
 }

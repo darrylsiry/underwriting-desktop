@@ -3,6 +3,8 @@
 // trail, rate tables, the inbox), each answering with the URLs of the records it names so the
 // assistant can link its answers. Everyone is treated as an admin: nothing is filtered by user.
 import type Anthropic from "@anthropic-ai/sdk";
+import { auditSearch } from "./assistant-audit.ts";
+import { LOSS_RATIO_BASIS, teamSummary } from "./book-metrics.ts";
 import { daysUntil, loadDashboard } from "./dashboard";
 import { customerDb, policyDb } from "./db";
 import { GL_TOOLS } from "./gl-mcp";
@@ -14,11 +16,10 @@ import { getQuote, listQuotes, quoteVersions, quotesForSubmission, type QuoteRow
 import { expiringOf, getBookPolicy } from "./renewals";
 import { search } from "./search";
 import { parseQuery } from "./search-terms";
-import { RATING_SERVICE_URL } from "./services";
+import { listRateVersions } from "./rating-api";
 import { getSubmission, submissionIdsReceivedBy } from "./submissions";
 import { isUuid } from "./text.ts";
 import { loadTimeline } from "./timeline";
-import { applyFilters } from "./timeline-merge";
 import { activeRateVersion, flagsFor, getWorksheet, readiness } from "./worksheets";
 
 export type AssistantContext = { actor: string; origin: string; today: string };
@@ -55,21 +56,25 @@ async function submissionIdFor(ref: string): Promise<string | null> {
   return rows[0]?.id ?? null;
 }
 
-const entityUrl = (type: string, id: string) => ({
-  submission: `/submissions/${id}`, quote: `/quotes/${id}`, policy: `/policies/${id}`, insured: `/insureds/${id}`,
-  book_policy: `/policies/book/${id}`, ledger: `/accounting?batch=${id}`, rate_version: `/admin/versions/${id}`,
-} as Record<string, string>)[type] ?? `/audit?q=${encodeURIComponent(id)}`;
-
 const UNDERWRITER = { type: "string", description: "An underwriter's login (underwriter1 … underwriter9). Leave out for everyone." };
 
-/** Every login that has picked up a submission or owns prior-system policies. */
-async function underwriterNames(): Promise<string[]> {
-  const [subs, book, written] = await Promise.all([
+/** Every login that has picked up a submission or owns prior-system policies: everyone with a desk. */
+async function underwriterNames(today: string): Promise<string[]> {
+  const [subs, book] = await Promise.all([
     customerDb.query<{ name: string }>("SELECT DISTINCT received_by AS name FROM submissions"),
-    policyDb.query<{ name: string }>("SELECT DISTINCT underwriter AS name FROM book_policies WHERE expiration_date >= CURRENT_DATE"),
-    policyDb.query<{ name: string }>("SELECT DISTINCT bound_by AS name FROM policies"),
+    policyDb.query<{ name: string }>("SELECT DISTINCT underwriter AS name FROM book_policies WHERE expiration_date >= $1::date", [today]),
   ]);
-  return [...new Set([...subs.rows, ...book.rows, ...written.rows].map((r) => r.name))].sort();
+  return [...new Set([...subs.rows, ...book.rows].map((r) => r.name))].sort();
+}
+
+/**
+ * Who owns each submission. A policy written here belongs to the underwriter who picked its
+ * submission up, as on the desk, whoever clicked Bind (CR-089). The two live in different databases.
+ */
+async function submissionOwners(ids: string[]): Promise<Map<string, string>> {
+  if (!ids.length) return new Map();
+  const { rows } = await customerDb.query<{ id: string; received_by: string }>("SELECT id::text AS id, received_by FROM submissions WHERE id = ANY($1::uuid[])", [[...new Set(ids)]]);
+  return new Map(rows.map((r) => [r.id, r.received_by]));
 }
 
 export const APP_TOOLS: AppTool[] = [
@@ -79,7 +84,7 @@ export const APP_TOOLS: AppTool[] = [
     input_schema: { type: "object", properties: { underwriter: UNDERWRITER } },
     run: async (a, ctx) => {
       const uw = str(a.underwriter) || null;
-      const names = uw ? [uw] : await underwriterNames();
+      const names = uw ? [uw] : await underwriterNames(ctx.today);
       const [desks, inbox] = await Promise.all([Promise.all(names.map(async (n) => ({ n, d: await loadDashboard(n) }))), listInbox()]);
       const tasks = desks.flatMap(({ n, d }) => d.tasks.filter((t) => t.kind !== "inbox").map((t) => {
         const days = t.due ? daysUntil(t.due, ctx.today) : null;
@@ -218,7 +223,7 @@ export const APP_TOOLS: AppTool[] = [
   },
   {
     name: "list_policies",
-    description: "Policies bound in the UW Desktop, newest first, with premium, period, open subjectivities and renewal status. in_force=true keeps unexpired ones; underwriter keeps those from that underwriter's submissions. (Policies from the prior policy system are in renewals_due and book_summary.)",
+    description: "Policies bound in the UW Desktop, newest first, with premium, period, open subjectivities and renewal status. in_force=true keeps those in force today (effective and unexpired); underwriter keeps those from that underwriter's submissions. (Policies from the prior policy system are in renewals_due and book_summary.)",
     input_schema: { type: "object", properties: { in_force: { type: "boolean" }, underwriter: UNDERWRITER, limit: { type: "integer", description: "Default 50, max 200" } } },
     run: async (a) => {
       const ids = str(a.underwriter) ? await submissionIdsReceivedBy(str(a.underwriter)) : null;
@@ -256,43 +261,29 @@ export const APP_TOOLS: AppTool[] = [
   },
   {
     name: "book_summary",
-    description: "The numbers on the desk: in-force premium and policy count (prior-system book plus policies bound here), renewals due in 90 days, book loss ratio (incurred over premium, prior-system book), new business bound in the UW Desktop, quotes out. For one underwriter, exactly their desk; without one, the whole operation with a per-underwriter breakdown.",
+    description: "The numbers on the desk: in-force premium and policy count (effective today and unexpired: prior-system book plus policies bound here), policies bound but not yet effective (reported separately, not in force), renewals still to do in 90 days (policies already renewed are left out), book loss ratio (five years of incurred over five years of current premium, prior-system book), new business bound in the UW Desktop (renewals are left out), quotes out. For one underwriter, exactly their desk; without one, the whole operation as the sum of the desks, with a per-underwriter breakdown.",
     input_schema: { type: "object", properties: { underwriter: UNDERWRITER } },
-    run: async (a) => {
+    run: async (a, ctx) => {
       const uw = str(a.underwriter);
       if (uw) {
         const d = await loadDashboard(uw);
-        return { underwriter: uw, as_of: d.today, kpis: d.kpis, premium_by_class: d.premiumByClass, next_up: d.tasks.slice(0, 10), renewals_in_window: d.renewals.slice(0, 25).map((p) => ({ policy_number: p.policy_number, insured: p.insured_name, expiration_date: p.expiration_date, premium: money(p.premium), renewal_status: p.renewal_status, url: p.href })),
-          urls: { desk: "/", in_force_book: "/book", renewals_90_days: "/book?due=90", loss_ratio: "/book?view=losses", new_business: `/policies?underwriter=${encodeURIComponent(uw)}&in_force=1`, quotes_out: `/quotes?status=issued&underwriter=${encodeURIComponent(uw)}` } };
+        return { underwriter: uw, as_of: d.today, kpis: d.kpis, loss_ratio_basis: LOSS_RATIO_BASIS, premium_by_class: d.premiumByClass, next_up: d.tasks.slice(0, 10), renewals_in_window: d.renewals.slice(0, 25).map((p) => ({ policy_number: p.policy_number, insured: p.insured_name, expiration_date: p.expiration_date, premium: money(p.premium), renewal_status: p.renewal_status, url: p.href })),
+          urls: { desk: "/", in_force_book: "/book", renewals_90_days: "/book?due=90", bound_not_effective: "/book#bound-not-effective", loss_ratio: "/book?view=losses", new_business: `/policies?underwriter=${encodeURIComponent(uw)}&new_business=1`, quotes_out: `/quotes?status=issued&underwriter=${encodeURIComponent(uw)}` } };
       }
-      const [book, written, quotes] = await Promise.all([
-        policyDb.query<{ underwriter: string; policies: number; premium: number; incurred: number; open_claims: number; due_90: number; due_90_premium: number }>(
-          `SELECT underwriter, count(*)::int AS policies, sum(premium)::float8 AS premium, sum(incurred)::float8 AS incurred, sum(open_claims)::int AS open_claims,
-                  count(*) FILTER (WHERE expiration_date <= CURRENT_DATE + 90)::int AS due_90, coalesce(sum(premium) FILTER (WHERE expiration_date <= CURRENT_DATE + 90), 0)::float8 AS due_90_premium
-           FROM book_policies WHERE expiration_date >= CURRENT_DATE GROUP BY underwriter ORDER BY underwriter`),
-        policyDb.query<{ underwriter: string; policies: number; premium: number; due_90: number }>(
-          `SELECT bound_by AS underwriter, count(*)::int AS policies, sum(premium)::float8 AS premium, count(*) FILTER (WHERE expiration_date <= CURRENT_DATE + 90)::int AS due_90
-           FROM policies WHERE expiration_date >= CURRENT_DATE GROUP BY bound_by ORDER BY bound_by`),
+      const names = await underwriterNames(ctx.today);
+      const [desks, quotes] = await Promise.all([
+        Promise.all(names.map(loadDashboard)),
         policyDb.query<{ n: number; total: number }>("SELECT count(*)::int AS n, coalesce(sum(total), 0)::float8 AS total FROM quotes WHERE status = 'issued'"),
       ]);
-      const names = [...new Set([...book.rows.map((r) => r.underwriter), ...written.rows.map((r) => r.underwriter)])].sort();
-      const b = (n: string) => book.rows.find((r) => r.underwriter === n);
-      const w = (n: string) => written.rows.find((r) => r.underwriter === n);
-      const sum = (f: (n: string) => number) => money(names.reduce((s, n) => s + f(n), 0));
-      const priorPremium = book.rows.reduce((s, r) => s + r.premium, 0);
       return {
-        scope: "everyone", in_force_premium: sum((n) => (b(n)?.premium ?? 0) + (w(n)?.premium ?? 0)), policies_in_force: names.reduce((s, n) => s + (b(n)?.policies ?? 0) + (w(n)?.policies ?? 0), 0),
-        renewals_due_90_days: names.reduce((s, n) => s + (b(n)?.due_90 ?? 0) + (w(n)?.due_90 ?? 0), 0), renewal_premium_90_days: sum((n) => b(n)?.due_90_premium ?? 0),
-        book_loss_ratio_incurred: priorPremium ? Math.round((book.rows.reduce((s, r) => s + r.incurred, 0) / priorPremium) * 1000) / 1000 : null, open_claims: book.rows.reduce((s, r) => s + r.open_claims, 0),
-        new_business_premium: sum((n) => w(n)?.premium ?? 0), new_business_policies: written.rows.reduce((s, r) => s + r.policies, 0), quotes_out: quotes.rows[0].n, quotes_out_total: money(quotes.rows[0].total),
-        by_underwriter: names.map((n) => ({ underwriter: n, prior_system_policies: b(n)?.policies ?? 0, prior_system_premium: money(b(n)?.premium ?? 0), uw_desktop_policies: w(n)?.policies ?? 0, uw_desktop_premium: money(w(n)?.premium ?? 0), renewals_due_90: (b(n)?.due_90 ?? 0) + (w(n)?.due_90 ?? 0), loss_ratio: b(n)?.premium ? Math.round(((b(n)!.incurred) / b(n)!.premium) * 1000) / 1000 : null })),
-        urls: { in_force_book: "/book", renewals: "/book?due=90", losses: "/book?view=losses", policies: "/policies?in_force=1", quotes_out: "/quotes?status=issued" },
+        scope: "everyone", as_of: ctx.today, ...teamSummary(desks), quotes_out: quotes.rows[0].n, quotes_out_total: money(quotes.rows[0].total),
+        urls: { in_force_book: "/book", bound_not_effective: "/book#bound-not-effective", renewals: "/book?due=90", losses: "/book?view=losses", policies: "/policies?in_force=1", quotes_out: "/quotes?status=issued" },
       };
     },
   },
   {
     name: "renewals_due",
-    description: "Policies expiring within N days (default 90), prior-system and UW Desktop, with premium, losses, renewal status (not started, in progress, renewed) and the link to start or continue the renewal. Optionally one underwriter.",
+    description: "Policies expiring within N days (default 90) that still need renewing, prior-system and UW Desktop, with premium, losses, renewal status (not started, in progress) and the link to start or continue the renewal. Policies already renewed are left out and counted in already_renewed, matching the list on /book?due=N. Optionally one underwriter.",
     input_schema: { type: "object", properties: { days: { type: "integer", description: "Window in days from today; default 90" }, underwriter: UNDERWRITER } },
     run: async (a, ctx) => {
       const days = int(a.days, 90, 400);
@@ -300,16 +291,18 @@ export const APP_TOOLS: AppTool[] = [
       const [book, desk] = await Promise.all([
         policyDb.query<{ id: string; policy_number: string; insured_name: string; underwriter: string; class_description: string; states: string[]; producer: string; effective_date: string; expiration_date: string; premium: number; claims: number; incurred: number; open_claims: number; renewal_status: string; renewal_submission_id: string | null }>(
           `SELECT id, policy_number, insured_name, underwriter, class_description, states, producer, effective_date::text, expiration_date::text, premium::float8 AS premium, claims, incurred::float8 AS incurred, open_claims, renewal_status, renewal_submission_id
-           FROM book_policies WHERE expiration_date BETWEEN CURRENT_DATE AND CURRENT_DATE + $1::int AND ($2::text IS NULL OR underwriter = $2) ORDER BY expiration_date`, [days, uw]),
-        policyDb.query<{ id: string; policy_number: string; insured_name: string; bound_by: string; effective_date: string; expiration_date: string; premium: number; renewal_status: string; renewal_submission_id: string | null; submission_id: string }>(
-          `SELECT id, policy_number, insured_name, bound_by, effective_date::text, expiration_date::text, premium::float8 AS premium, renewal_status, renewal_submission_id, submission_id
-           FROM policies WHERE expiration_date BETWEEN CURRENT_DATE AND CURRENT_DATE + $1::int AND ($2::text IS NULL OR bound_by = $2) ORDER BY expiration_date`, [days, uw]),
+           FROM book_policies WHERE expiration_date BETWEEN $3::date AND $3::date + $1::int AND ($2::text IS NULL OR underwriter = $2) ORDER BY expiration_date`, [days, uw, ctx.today]),
+        policyDb.query<{ id: string; policy_number: string; insured_name: string; effective_date: string; expiration_date: string; premium: number; renewal_status: string; renewal_submission_id: string | null; submission_id: string }>(
+          `SELECT id, policy_number, insured_name, effective_date::text, expiration_date::text, premium::float8 AS premium, renewal_status, renewal_submission_id, submission_id
+           FROM policies WHERE expiration_date BETWEEN $2::date AND $2::date + $1::int ORDER BY expiration_date`, [days, ctx.today]),
       ]);
-      const rows = [
+      const owners = await submissionOwners(desk.rows.map((p) => p.submission_id));
+      const all = [
         ...book.rows.map((p) => ({ source: "prior system", policy_number: p.policy_number, insured: p.insured_name, underwriter: p.underwriter, class: p.class_description, states: p.states, producer: p.producer, effective_date: p.effective_date, expiration_date: p.expiration_date, days_left: daysUntil(p.expiration_date, ctx.today), premium: money(p.premium), claims: p.claims, incurred: money(p.incurred), open_claims: p.open_claims, renewal_status: p.renewal_status, renewal_url: p.renewal_submission_id ? `/submissions/${p.renewal_submission_id}/renewal` : null, url: `/policies/book/${p.id}` })),
-        ...desk.rows.map((p) => ({ source: "UW Desktop", policy_number: p.policy_number, insured: p.insured_name, underwriter: p.bound_by, class: null, states: null, producer: null, effective_date: p.effective_date, expiration_date: p.expiration_date, days_left: daysUntil(p.expiration_date, ctx.today), premium: money(p.premium), claims: 0, incurred: 0, open_claims: 0, renewal_status: p.renewal_status, renewal_url: p.renewal_submission_id ? `/submissions/${p.renewal_submission_id}/renewal` : null, url: `/policies/${p.id}` })),
+        ...desk.rows.filter((p) => !uw || owners.get(p.submission_id) === uw).map((p) => ({ source: "UW Desktop", policy_number: p.policy_number, insured: p.insured_name, underwriter: owners.get(p.submission_id) ?? "", class: null, states: null, producer: null, effective_date: p.effective_date, expiration_date: p.expiration_date, days_left: daysUntil(p.expiration_date, ctx.today), premium: money(p.premium), claims: 0, incurred: 0, open_claims: 0, renewal_status: p.renewal_status, renewal_url: p.renewal_submission_id ? `/submissions/${p.renewal_submission_id}/renewal` : null, url: `/policies/${p.id}` })),
       ].sort((x, y) => x.expiration_date.localeCompare(y.expiration_date));
-      return { window_days: days, as_of: ctx.today, count: rows.length, expiring_premium: money(rows.reduce((s, r) => s + r.premium, 0)), policies: rows, list_url: `/book?due=${days}` };
+      const rows = all.filter((r) => r.renewal_status !== "renewed");
+      return { window_days: days, as_of: ctx.today, count: rows.length, already_renewed: all.length - rows.length, expiring_premium: money(rows.reduce((s, r) => s + r.premium, 0)), policies: rows, list_url: `/book?due=${days}` };
     },
   },
   ...GL_TOOLS.filter((t) => t.annotations?.readOnlyHint).map<AppTool>((t) => ({
@@ -318,31 +311,20 @@ export const APP_TOOLS: AppTool[] = [
   })),
   {
     name: "audit_search",
-    description: "The audit trail across the UW Desktop, the rating engine and the rate tables: who did what and when. Filter by free text, actor, entity type (submission, quote, policy, insured, rate_version, rating, ledger), dates, or one submission's case history. Use for 'who changed', 'when was', 'what happened to' questions.",
+    description: "The audit trail across the UW Desktop, the rating engine and the rate tables: who did what and when. Filter by free text, actor, entity type (submission, quote, policy, insured, rate_version, rating, ledger), dates, or one submission's case history. Use for 'who changed', 'when was', 'what happened to' questions. Each source returns its newest 500 rows: when capped is true the history was cut at oldest_loaded_at, so say so rather than reporting that nothing happened, and narrow from/to to look further back.",
     input_schema: { type: "object", properties: {
       q: { type: "string", description: "Text to look for in summaries and references" }, actor: { type: "string" },
       entity_type: { type: "string", enum: ["submission", "quote", "policy", "insured", "rate_version", "rating", "ledger", "book_policy"] },
       submission_id: { type: "string", description: "Only this submission's case history (id or SUB- reference)" },
       from: { type: "string", description: "YYYY-MM-DD" }, to: { type: "string", description: "YYYY-MM-DD" }, limit: { type: "integer", description: "Default 50, max 200" } } },
-    run: async (a) => {
-      const subId = str(a.submission_id) ? await submissionIdFor(str(a.submission_id)) : undefined;
-      const t = await loadTimeline(subId ?? undefined);
-      const events = applyFilters(t.events, { q: str(a.q) || undefined, actor: str(a.actor) || undefined, entityType: str(a.entity_type) || undefined, from: str(a.from) || undefined, to: str(a.to) || undefined }).slice(0, int(a.limit, 50));
-      return {
-        scope: t.scope, warnings: t.warnings, count: events.length,
-        events: events.map((e) => ({ at: e.at, source: e.source, actor: e.actor, action: e.action, entity: `${e.entityType} ${t.labels.get(`${e.entityType}:${e.entityId}`) ?? e.entityLabel ?? e.entityId}`, summary: e.summary, url: entityUrl(e.entityType, e.entityId), correlation_id: e.correlationId })),
-        audit_url: subId ? `/audit?submission=${subId}` : "/audit",
-      };
-    },
+    run: (a) => auditSearch(a, { submissionIdFor, loadTimeline }),
   },
   {
     name: "rate_versions",
     description: "The rate tables: every rate version (label, status active/draft/retired, when activated, notes) and which one new ratings use.",
     input_schema: { type: "object", properties: {} },
     run: async () => {
-      const res = await fetch(`${RATING_SERVICE_URL}/rate-versions`, { cache: "no-store", signal: AbortSignal.timeout(8000) });
-      if (!res.ok) return { error: `Rating service answered ${res.status}` };
-      const versions = (await res.json()) as { id: number; label: string; status: string; notes: string; created_by: string; created_at: string; activated_at: string | null; based_on: number | null }[];
+      const versions = await listRateVersions();
       return { active: versions.find((v) => v.status === "active")?.label ?? null, versions: versions.map((v) => ({ ...v, url: `/admin/versions/${v.id}` })), rate_tables_url: "/admin" };
     },
   },
@@ -383,14 +365,15 @@ export const APP_TOOLS: AppTool[] = [
     name: "underwriters",
     description: "Who works here: every underwriter login with their submissions, prior-system book and UW Desktop policies.",
     input_schema: { type: "object", properties: {} },
-    run: async () => {
+    run: async (_a, ctx) => {
       const [subs, book, written] = await Promise.all([
         customerDb.query<{ name: string; n: number }>("SELECT received_by AS name, count(*)::int AS n FROM submissions GROUP BY 1"),
-        policyDb.query<{ name: string; n: number; premium: number }>("SELECT underwriter AS name, count(*)::int AS n, sum(premium)::float8 AS premium FROM book_policies WHERE expiration_date >= CURRENT_DATE GROUP BY 1"),
-        policyDb.query<{ name: string; n: number; premium: number }>("SELECT bound_by AS name, count(*)::int AS n, sum(premium)::float8 AS premium FROM policies GROUP BY 1"),
+        policyDb.query<{ name: string; n: number; premium: number }>("SELECT underwriter AS name, count(*)::int AS n, sum(premium)::float8 AS premium FROM book_policies WHERE effective_date <= $1::date AND expiration_date >= $1::date GROUP BY 1", [ctx.today]),
+        policyDb.query<{ submission_id: string; premium: number }>("SELECT submission_id, premium::float8 AS premium FROM policies"),
       ]);
-      const names = await underwriterNames();
-      return { underwriters: names.map((n) => ({ login: n, submissions: subs.rows.find((r) => r.name === n)?.n ?? 0, prior_system_policies_in_force: book.rows.find((r) => r.name === n)?.n ?? 0, prior_system_premium: money(book.rows.find((r) => r.name === n)?.premium ?? 0), uw_desktop_policies: written.rows.find((r) => r.name === n)?.n ?? 0, uw_desktop_premium: money(written.rows.find((r) => r.name === n)?.premium ?? 0), desk_url: "/" })) };
+      const [names, owners] = await Promise.all([underwriterNames(ctx.today), submissionOwners(written.rows.map((p) => p.submission_id))]);
+      const mine = (n: string) => written.rows.filter((p) => owners.get(p.submission_id) === n);
+      return { underwriters: names.map((n) => ({ login: n, submissions: subs.rows.find((r) => r.name === n)?.n ?? 0, prior_system_policies_in_force: book.rows.find((r) => r.name === n)?.n ?? 0, prior_system_premium: money(book.rows.find((r) => r.name === n)?.premium ?? 0), uw_desktop_policies: mine(n).length, uw_desktop_premium: money(mine(n).reduce((s, p) => s + p.premium, 0)), desk_url: "/" })) };
     },
   },
 ];

@@ -2,8 +2,7 @@ import { glDate } from "@/lib/gl-journal";
 import { glMcpServer } from "@/lib/gl-mcp";
 import { addressedToUs, requestOrigin } from "@/lib/http";
 import { serveMcpHttp } from "@/lib/mcp";
-import { noteApiLogin } from "@/lib/login-events";
-import { currentUser, signedInUser } from "@/lib/user";
+import { currentUser } from "@/lib/user";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +16,6 @@ async function serve(req: Request) {
   // its Origin would match its own Host, so the Origin check alone can't tell.
   if (!addressedToUs(req.headers)) return Response.json({ error: "Forbidden: this request was not addressed to this server" }, { status: 403 });
   const origin = requestOrigin(req.headers);
-  noteApiLogin(await signedInUser(), req.headers);   // the sign-in report counts MCP clients' logins too
   const ctx = { actor: await currentUser(), origin, today: glDate(new Date()) };
   const body = req.method === "POST" ? await req.text() : null;
   const out = await serveMcpHttp(server, { method: req.method, headers: req.headers, body }, ctx, { origin, path: "/api/mcp" });

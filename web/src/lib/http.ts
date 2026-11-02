@@ -1,5 +1,16 @@
 // HTTP helpers. Pure module so node:test can load it.
 
+/** A page's search params as Next delivers them: a repeated key arrives as an array. */
+export type RawParams<T> = { [K in keyof T]?: string | string[] };
+
+/**
+ * Each query parameter's first value, so `?q=a&q=b` is `a` rather than an array that crashes the
+ * page's `.trim()` with a 500 (CR-056).
+ */
+export function firstParams<T extends Record<string, string | undefined>>(raw: RawParams<T>): T {
+  return Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, Array.isArray(v) ? v[0] : v])) as T;
+}
+
 /**
  * Content-Disposition safe for any filename. Header values must be Latin-1, so send an
  * ASCII fallback plus the real name RFC 5987-encoded (browsers prefer filename*).

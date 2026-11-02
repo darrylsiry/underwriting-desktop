@@ -1,5 +1,5 @@
 import { isUuid } from "./text.ts";
-import { whenDate } from "./time.ts";
+import { todayIso, whenDate } from "./time.ts";
 import { audit } from "./audit";
 import { bindBlockers, policyNumbers, subjectivityStatus, type SubjectivityStatus } from "./bind-rules";
 import { customerDb, policyDb } from "./db";
@@ -44,15 +44,19 @@ export async function getPolicy(id: string): Promise<(PolicyRow & PolicyTerms) |
   return rows[0] ?? null;
 }
 
-export type PolicyFilter = { submissionIds?: string[] | null; inForce?: boolean };
+export type PolicyFilter = { submissionIds?: string[] | null; inForce?: boolean; newBusiness?: boolean };
 
-/** Bound policies, newest first; optionally only those from given submissions and/or still in force today. */
+/**
+ * Bound policies, newest first; optionally only those from given submissions, those in force today
+ * (effective and unexpired), and/or the desk's new business (unexpired and not a renewal).
+ */
 export async function listPolicies(f: PolicyFilter = {}): Promise<PolicyRow[]> {
   const { rows } = await policyDb.query<PolicyRow>(
     `SELECT ${COLUMNS} FROM policies p JOIN quotes q ON q.id = p.quote_id
      WHERE ($1::text[] IS NULL OR p.submission_id::text = ANY($1))
-       AND ($2::boolean IS NOT TRUE OR p.expiration_date >= CURRENT_DATE)
-     ORDER BY p.bound_at DESC`, [f.submissionIds ?? null, f.inForce ?? false]);
+       AND ($2::boolean IS NOT TRUE OR (p.effective_date <= $4::date AND p.expiration_date >= $4::date))
+       AND ($3::boolean IS NOT TRUE OR (p.renewed_from IS NULL AND p.expiration_date >= $4::date))
+     ORDER BY p.bound_at DESC`, [f.submissionIds ?? null, f.inForce ?? false, f.newBusiness ?? false, todayIso()]);
   return rows;
 }
 
@@ -83,7 +87,7 @@ type QuoteForBinding = {
  */
 export async function bindQuote(quoteId: string, received: Set<number>, actor: string, at: Date | null = null): Promise<PolicyRow> {
   const boundAt = at ?? new Date();
-  const today = boundAt.toISOString().slice(0, 10);
+  const today = todayIso(boundAt);
   const correlationId = crypto.randomUUID();   // shared by the bind's audit events and its ledger journal
   const client = await policyDb.connect();
   let policyId: string;

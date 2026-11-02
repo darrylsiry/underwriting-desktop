@@ -10,6 +10,7 @@ import { clearanceStatus } from "@/lib/referrals";
 import { policiesForSubmission } from "@/lib/policies";
 import { getQuote, quotesForSubmission } from "@/lib/quotes";
 import { getSubmission } from "@/lib/submissions";
+import { todayIso } from "@/lib/time";
 import { currentUser } from "@/lib/user";
 import {
   INPUT_DEFS, MAX_CATEGORY_PCT, SCHEDULE_CATEGORIES, UW_AUTHORITY_PCT, inputChanges, inputUnit, inputsHash, scheduleMod, scheduleTotal,
@@ -63,7 +64,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
     ? ["Signed renewal application or no-change confirmation", ...suggestedSubjectivities(flags, sub.data).slice(1)]
     : suggestedSubjectivities(flags, sub.data));
   const [policy] = await policiesForSubmission(id);
-  const bindIssues = latest ? bindBlockers(latest, new Date().toISOString().slice(0, 10)) : [];
+  const bindIssues = latest ? bindBlockers(latest, todayIso()) : [];
   // CR-100: a bound file shows what was bound, frozen on its quote; the worksheet may have moved on after that quote was issued.
   const boundQuote = policy ? await getQuote(policy.quote_id) : null;
   const rating = boundQuote?.rating ?? ws.last_rating;

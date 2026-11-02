@@ -3,7 +3,26 @@
  * lists and the accounting page all format through here so the same event shows
  * the same wall-clock time, with the zone named, wherever it appears.
  */
+import { glDate } from "./gl-journal.ts";
+
 export const DISPLAY_TIME_ZONE = process.env.DISPLAY_TZ || "America/New_York";
+
+/**
+ * "Today" for the desk, quote validity, bind and the renewal window: the date in the books' time
+ * zone, so an evening bind on Dec 31 Eastern is still Dec 31 and agrees with Accounting (CR-035).
+ * `now` lets back-dated work (seeded history) and tests ask about another instant.
+ */
+export const todayIso = (now: Date = new Date()) => glDate(now);
+
+/**
+ * A real calendar date as `YYYY-MM-DD`. The round trip refuses `2026-02-30`, which Date.parse lets
+ * through and Postgres then fails on with a 500 (CR-068). Year 0000 is refused too: Postgres has none.
+ */
+export function isIsoDate(s: unknown): s is string {
+  if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s) || s.startsWith("0000")) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
 
 /** `Oct 31, 2026, 11:30 PM EDT` */
 export const when = (d: Date | string) =>

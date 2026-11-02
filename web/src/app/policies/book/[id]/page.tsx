@@ -3,9 +3,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { Empty, Pill, RowLink, Section, money, when, whenDate } from "@/components/ui";
+import { LOSS_RATIO_BASIS, lossRatio } from "@/lib/book-metrics";
 import { RENEWAL_WINDOW_DAYS, daysUntil } from "@/lib/dashboard";
 import { inputText } from "@/lib/renewal-compare";
 import { getBookPolicy, renewalOfPolicy } from "@/lib/renewals";
+import { todayIso } from "@/lib/time";
 import { INPUT_DEFS, SCHEDULE_CATEGORIES } from "@/lib/worksheet";
 import { startRenewalAction } from "../../actions";
 import { StartRenewalForm } from "../../start-renewal-form";
@@ -28,10 +30,10 @@ export default async function BookPolicyPage({ params, searchParams }: Props) {
   const { error } = await searchParams;
   const p = await load(id);
   if (!p) notFound();
-  const daysLeft = daysUntil(p.expiration_date, new Date().toISOString().slice(0, 10));   // UX-023
+  const daysLeft = daysUntil(p.expiration_date, todayIso());   // UX-023
   const renewal = await renewalOfPolicy(p.renewal_submission_id);
   const inputs = p.rating_inputs;
-  const lossRatio = Number(p.premium) ? Number(p.incurred) / Number(p.premium) : 0;
+  const ratio = lossRatio(Number(p.incurred), Number(p.premium));
   const categoryLabel = (key: string) => SCHEDULE_CATEGORIES.find((c) => c.key === key)?.label ?? key;
 
   return (
@@ -68,7 +70,7 @@ export default async function BookPolicyPage({ params, searchParams }: Props) {
             <dt className="text-slate-500">Claims</dt><dd className="text-right tabular-nums">{p.claims}</dd>
             <dt className="text-slate-500">Incurred</dt><dd className="text-right tabular-nums">{money(p.incurred)}</dd>
             <dt className="text-slate-500">Open claims</dt><dd className="text-right tabular-nums">{p.open_claims}</dd>
-            <dt className="text-slate-500">Loss ratio (incurred / premium)</dt><dd className="text-right tabular-nums">{Math.round(lossRatio * 100)}%</dd>
+            <dt className="text-slate-500">Loss ratio ({LOSS_RATIO_BASIS})</dt><dd className="text-right tabular-nums">{ratio === null ? "—" : `${Math.round(ratio * 100)}%`}</dd>
           </dl>
         </Section>
         <Section title="Rating basis (expiring)">

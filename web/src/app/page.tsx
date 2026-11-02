@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { DaysChip, when, whenDate } from "@/components/ui";
-import { daysUntil, loadDashboard, RENEWAL_WINDOW_DAYS, type Task } from "@/lib/dashboard";
+import { lossRatio } from "@/lib/book-metrics";
+import { daysUntil, loadDashboard, plural, RENEWAL_WINDOW_DAYS, type Task } from "@/lib/dashboard";
 import { systemHealth } from "@/lib/health";
 import { iso } from "@/lib/time";
 import { currentUser } from "@/lib/user";
@@ -39,9 +41,27 @@ function Tile({ label, value, sub, href }: { label: string; value: string; sub: 
   );
 }
 
+/** Live probes, behind Suspense: the desk shows at once, and a stopped service only leaves this panel waiting, briefly (CR-085). */
+const DESK_PROBE_MS = 3_000;
+
+async function SystemStatus() {
+  const components = await systemHealth({ serviceTimeoutMs: DESK_PROBE_MS });
+  return (
+    <ul className="divide-y divide-slate-100 text-sm">
+      {components.map((c) => (
+        <li key={c.name} className="flex items-center gap-2 px-4 py-2" title={c.detail}>
+          <span className={`h-2 w-2 shrink-0 rounded-full ${c.ok ? "bg-emerald-500" : c.timedOut ? "bg-amber-500" : "bg-rose-500"}`} />
+          <span className="font-medium">{c.name}</span>
+          <span className="ml-auto truncate text-xs text-slate-500">{c.ok ? "ok" : c.timedOut ? "no answer" : "down"}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default async function Home() {
   const user = await currentUser();
-  const [d, components] = await Promise.all([loadDashboard(user), systemHealth()]);
+  const d = await loadDashboard(user);
   const k = d.kpis;
   const maxClass = Math.max(1, ...d.premiumByClass.map((c) => c.premium));
   const todayLabel = new Date(`${d.today}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
@@ -75,10 +95,16 @@ export default async function Home() {
       <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-label="Book summary">
         <Tile href="/book" label="In-force premium" value={usdShort(k.inForcePremium)} sub={`${k.policies} policies in force`} />
         <Tile href="/book?due=90" label="Renewals · 90 days" value={String(k.renewalsDue90)} sub={`${usdShort(k.renewalPremium90)} expiring premium`} />
-        <Tile href="/book?view=losses" label="Book loss ratio (incurred)" value={pct(k.lossRatio)} sub={`${k.openClaims} open claim${k.openClaims === 1 ? "" : "s"} · prior-system book`} />
-        <Tile href={`/policies?underwriter=${encodeURIComponent(user)}&in_force=1`} label="New business" value={usdShort(k.newBusinessPremium)} sub={`${k.newBusinessPolicies} bound in the UW Desktop`} />
+        <Tile href="/book?view=losses" label="Book loss ratio (incurred)" value={pct(k.lossRatio)} sub={`Five-year losses on current premium · ${plural(k.openClaims, "open claim")}`} />
+        <Tile href={`/policies?underwriter=${encodeURIComponent(user)}&new_business=1`} label="New business" value={usdShort(k.newBusinessPremium)} sub={`${k.newBusinessPolicies} bound in the UW Desktop`} />
         <Tile href={`/quotes?status=issued&underwriter=${encodeURIComponent(user)}`} label="Quotes out" value={String(k.quotesOut)} sub={k.hitRatio === null ? "hit ratio: no decided quotes yet" : `hit ratio ${pct(k.hitRatio)} of decided quotes`} />
       </section>
+      {k.boundNotEffectivePolicies > 0 && (
+        <Link href="/book#bound-not-effective" className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-lg border border-slate-200 bg-white px-4 py-2 shadow-sm transition hover:border-indigo-300">
+          <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Bound, not yet effective</span>
+          <span className="text-sm tabular-nums text-slate-900">{k.boundNotEffectivePolicies} polic{k.boundNotEffectivePolicies === 1 ? "y" : "ies"} · {usdShort(k.boundNotEffectivePremium)} premium, not counted as in force</span>
+        </Link>
+      )}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:col-span-2">
@@ -149,7 +175,7 @@ export default async function Home() {
             </thead>
             <tbody>
               {d.renewals.map((p) => {
-                const lr = p.premium ? p.incurred / p.premium : 0;
+                const lr = lossRatio(p.incurred, p.premium) ?? 0;
                 return (
                   <tr key={p.id} className="border-t border-slate-100 hover:bg-slate-50">
                     <td className="whitespace-nowrap px-4 py-2"><span className="mr-2 tabular-nums">{whenDate(p.expiration_date)}</span><DaysChip days={daysUntil(p.expiration_date, d.today)} /></td>
@@ -196,15 +222,9 @@ export default async function Home() {
             <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">System status</h2>
             <a href="/api/health" className="text-xs text-slate-500 hover:underline">JSON</a>
           </div>
-          <ul className="divide-y divide-slate-100 text-sm">
-            {components.map((c) => (
-              <li key={c.name} className="flex items-center gap-2 px-4 py-2" title={c.detail}>
-                <span className={`h-2 w-2 shrink-0 rounded-full ${c.ok ? "bg-emerald-500" : "bg-rose-500"}`} />
-                <span className="font-medium">{c.name}</span>
-                <span className="ml-auto truncate text-xs text-slate-500">{c.ok ? "ok" : "down"}</span>
-              </li>
-            ))}
-          </ul>
+          <Suspense fallback={<p className="px-4 py-3 text-sm text-slate-500">Checking…</p>}>
+            <SystemStatus />
+          </Suspense>
         </section>
       </div>
     </main>

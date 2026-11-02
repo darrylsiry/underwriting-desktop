@@ -81,7 +81,7 @@ export const GL_TOOLS: ToolDef[] = [
   },
   {
     name: "gl_push", title: "Push to the general ledger",
-    description: "Push a period's lines to the general ledger, exactly as the button on the Accounting page does: lines not pushed before are stamped with a new batch (GLX-YYYYMMDD-NNN), the push is recorded in the audit trail, and the result names the batch with URLs of the file. Changes the books' push status and is not idempotent: call it only when the user asks to push, export or send the sub-ledger to the GL.",
+    description: "Push a period's lines to the general ledger, exactly as the button on the Accounting page does: lines not pushed before are stamped with a new batch (GLX-YYYYMMDD-NNN), the push is recorded in the audit trail, and the result names the batch with URLs of the file. Changes the books' push status and is not idempotent: call it only when the user asks to push, export or send the sub-ledger to the GL. A filter with no lines is refused as an error, and no batch is opened.",
     inputSchema: { type: "object", properties: { ...FILTER_PROPS, format: { type: "string", enum: [...EXPORT_FORMATS], description: "The file the GL receives; default xlsx" } }, additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     run: async (a, ctx) => {

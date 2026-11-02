@@ -45,7 +45,7 @@ test.describe("desk, lists, search and audit", () => {
     await page.goto(`/quotes?status=issued&underwriter=${USER}`);
     await expect(page.getByText(/Quotes out: issued and not yet bound or superseded/)).toBeVisible();
     for (const s of ["superseded", "bound"]) { await page.goto(`/quotes?status=${s}`); await expect(page.getByRole("heading", { name: "Quotes", level: 1 })).toBeVisible(); }
-    await page.goto(`/policies?underwriter=${USER}&in_force=1`);
+    await page.goto(`/policies?underwriter=${USER}&new_business=1`);
     await expect(page.getByRole("link", { name: need("policyNumber") })).toBeVisible();
   });
 

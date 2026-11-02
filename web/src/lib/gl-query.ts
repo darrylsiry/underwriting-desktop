@@ -3,6 +3,7 @@
 import {
   EXPORT_FORMATS, PERIOD_PRESETS, TRANSACTION_LABEL, presetRange, type ExportFormat, type PeriodPreset, type TransactionType,
 } from "./gl-journal.ts";
+import { isIsoDate } from "./time.ts";
 
 export type LedgerQuery = {
   period: PeriodPreset;
@@ -14,8 +15,6 @@ export type LedgerQuery = {
 };
 
 export type ParsedQuery = { query: LedgerQuery; errors: string[] };
-
-const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`));
 
 /**
  * Validate and resolve. Unknown or malformed values are reported in `errors` and replaced by the
@@ -36,14 +35,15 @@ export function parseLedgerQuery(p: Record<string, string | undefined | null>, t
   const custom = { from: null as string | null, to: null as string | null };
   for (const k of ["from", "to"] as const) {
     if (!get(k)) continue;
-    if (isDate(get(k))) custom[k] = get(k);
+    if (isIsoDate(get(k))) custom[k] = get(k);
     else errors.push(`${k} must be a date formatted YYYY-MM-DD`);
   }
   if (custom.from && custom.to && custom.from > custom.to) errors.push("from must not be after to");
 
   let type: TransactionType | "" = "";
   if (get("type")) {
-    if (get("type") in TRANSACTION_LABEL) type = get("type") as TransactionType;
+    // Not `in`: that also accepts inherited names such as constructor and toString (CR-107).
+    if (Object.hasOwn(TRANSACTION_LABEL, get("type"))) type = get("type") as TransactionType;
     else errors.push(`type must be one of ${Object.keys(TRANSACTION_LABEL).join(", ")}`);
   }
   let format: ExportFormat = "json";
@@ -58,17 +58,53 @@ export function parseLedgerQuery(p: Record<string, string | undefined | null>, t
   return { query: { period, from: range.from, to: range.to, type, batch: /^[A-Za-z0-9-]{1,40}$/.test(batch) ? batch : "", format }, errors };
 }
 
+/** A push that found no lines to send: no batch is opened and nothing is audited (CR-119). */
+export class NothingToPushError extends Error {
+  readonly code = "nothing_to_push";
+  constructor() {
+    super("No lines match this filter, so there is nothing to push. No batch was opened.");
+    this.name = "NothingToPushError";
+  }
+}
+
 /**
- * Where the Accounting page lands after a push (UX-022): the same filter the user was looking at,
- * narrowed to the new batch when it stamped anything, plus `pushed` and `format` for the banner
- * and the download. `p` is the posted form (period, from, to, type, batch).
+ * The query that reads a filter's lines back from GET /api/gl/postings. With no dates it must say
+ * `period=all`, or the API falls back to this month (UAT-F1, CR-114). `download` asks for JSON as a file (UAT-F2).
+ */
+export function ledgerFileQuery(f: Pick<LedgerQuery, "from" | "to" | "type" | "batch">, format: ExportFormat, opts: { download?: boolean } = {}): string {
+  const qs = new URLSearchParams();
+  if (!f.from && !f.to) qs.set("period", "all");
+  if (f.from) qs.set("from", f.from);
+  if (f.to) qs.set("to", f.to);
+  if (f.type) qs.set("type", f.type);
+  if (f.batch) qs.set("batch", f.batch);
+  qs.set("format", format);
+  if (opts.download) qs.set("download", "1");
+  return qs.toString();
+}
+
+const accountingFilter = (p: Record<string, string | undefined | null>) => {
+  const qs = new URLSearchParams();
+  for (const k of ["period", "from", "to", "type", "batch"] as const) if (p[k]) qs.set(k, String(p[k]));
+  return qs;
+};
+
+/**
+ * Where the Accounting page lands after a push (UX-022): the filter the user was looking at, so the
+ * file holds the same lines as the page and the audit row (CR-127), plus `pushed_batch`, `pushed`
+ * and `format` for the banner and the download. `p` is the posted form (period, from, to, type, batch).
  */
 export function pushedAccountingPath(p: Record<string, string | undefined | null>, batch: string, fresh: number, format: ExportFormat): string {
-  const qs = new URLSearchParams();
-  for (const k of ["period", "from", "to", "type"] as const) if (p[k]) qs.set(k, String(p[k]));
-  const keep = fresh > 0 ? batch : (p.batch ?? "");
-  if (keep) qs.set("batch", keep);
+  const qs = accountingFilter(p);
+  if (fresh > 0) qs.set("pushed_batch", batch);
   qs.set("pushed", String(fresh));
   qs.set("format", format);
+  return `/accounting?${qs}`;
+}
+
+/** Back to the same filter, saying why nothing happened: the lines were gone by the time the push ran (CR-119). */
+export function nothingToPushPath(p: Record<string, string | undefined | null>): string {
+  const qs = accountingFilter(p);
+  qs.set("msg", "Nothing to push: no lines match this filter, so no batch was opened.");
   return `/accounting?${qs}`;
 }
