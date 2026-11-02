@@ -14,10 +14,11 @@ const border = (bad: boolean) => (bad ? "border-rose-400 bg-rose-50" : "border-s
  * UX-001: dates are date inputs (the browser refuses "12/1/2026"), and a rejected submit
  * comes back as typed with the message under the field. UX-003: `primary` false when
  * binding the issued quote is the more likely next step. CR-113: policies are annual, so
- * changing the effective date moves the expiration with it.
+ * changing the effective date moves the expiration with it. CR-148: `ratingId` is the rating
+ * the button's price came from, so a re-rate in another tab can't issue at a price nobody saw.
  */
-export function IssueQuoteForm({ action, effective, expiration, subjectivities, label, primary = true }: {
-  action: FormAction; effective: string; expiration: string; subjectivities: string[]; label: string; primary?: boolean;
+export function IssueQuoteForm({ action, effective, expiration, subjectivities, label, ratingId, primary = true }: {
+  action: FormAction; effective: string; expiration: string; subjectivities: string[]; label: string; ratingId?: string; primary?: boolean;
 }) {
   const [raw, dispatch] = useActionState<FormState, FormData>(action, {});
   const state = raw ?? {};   // undefined after a successful redirect
@@ -30,6 +31,7 @@ export function IssueQuoteForm({ action, effective, expiration, subjectivities, 
     ? <span className="text-rose-700" role="alert">{state.error}</span> : null;
   return (
     <form action={dispatch} className="space-y-3">
+      {ratingId && <input type="hidden" name="_rating_id" value={ratingId} />}
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1 text-xs text-slate-500">Effective
           <input type="date" name="effective_date" defaultValue={v("effective_date", effective)} required onChange={(e) => followEffective(e.target.value)}

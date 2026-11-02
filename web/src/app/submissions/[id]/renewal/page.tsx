@@ -236,13 +236,13 @@ export default async function RenewalPage({ params, searchParams }: Props) {
                   <details>
                     <summary className="cursor-pointer text-xs text-indigo-600">Revise renewal quote (v{latest.version + 1})</summary>
                     <div className="mt-3">
-                      <IssueQuoteForm action={issueRenewalQuoteAction.bind(null, id)} effective={effective} expiration={expiration} subjectivities={subjectivities}
+                      <IssueQuoteForm action={issueRenewalQuoteAction.bind(null, id)} effective={effective} expiration={expiration} subjectivities={subjectivities} ratingId={ws.last_rating?.rating_id}
                         label={`Issue revised renewal quote (v${latest.version + 1})`} primary={false} />
                     </div>
                   </details>
                 </>
               ) : !policy && (ready ? (
-                <IssueQuoteForm action={issueRenewalQuoteAction.bind(null, id)} effective={effective} expiration={expiration} subjectivities={subjectivities}
+                <IssueQuoteForm action={issueRenewalQuoteAction.bind(null, id)} effective={effective} expiration={expiration} subjectivities={subjectivities} ratingId={ws.last_rating?.rating_id}
                   label={latest ? `Issue revised renewal quote (v${latest.version + 1})` : `Issue renewal quote · ${money(ws.last_rating!.total)}`} />
               ) : (
                 <p className="text-slate-500">

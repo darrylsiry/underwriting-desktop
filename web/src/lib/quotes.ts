@@ -8,7 +8,7 @@ import { QUOTE_VALID_DAYS, addDays, formsFor, parseSubjectivities, producerField
 import { rateOn } from "./rating-api";
 import type { SubmissionRow } from "./submissions";
 import { todayIso } from "./time";
-import type { RatingInputs, ScheduleItem } from "./worksheet";
+import { StaleWorksheetError, type RatingInputs, type ScheduleItem } from "./worksheet";
 import { activeRateVersion, getWorksheet, money, readiness, type Rating } from "./worksheets";
 
 export type QuoteRow = {
@@ -60,7 +60,10 @@ export async function getQuotePdf(id: string) {
   return rows[0] ?? null;
 }
 
-export type QuoteForm = { effective_date: string; expiration_date: string; subjectivities: string };
+export type QuoteForm = {
+  effective_date: string; expiration_date: string; subjectivities: string;
+  rating_id?: string;   // the rating the form's price came from (CR-148); absent for seeded history
+};
 
 /**
  * Issue a quote from a ready-to-quote worksheet. Rates again through the rating API,
@@ -78,6 +81,9 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
   if (!rated) throw new Error("The worksheet changed since it was rated. Save & rate first.");
   if (!ready) throw new Error(`Clear open referrals first: ${openReferrals.map((f) => f.title).join(", ")}`);
   const seen = ws.last_rating!;
+  if (form.rating_id && form.rating_id !== seen.rating_id) {
+    throw new StaleWorksheetError(`${sub.reference} was rated again since you opened it, and now totals ${money(seen.total)}. No quote was issued: reload to see what changed, then issue it if it's right.`);
+  }
 
   const previous = (await quotesForSubmission(sub.id))[0];
   if (previous?.status === "bound") throw new Error(`${previous.quote_number} is already bound; changes now need a policy endorsement`);

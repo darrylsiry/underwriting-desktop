@@ -110,14 +110,31 @@ async function insuredWithoutFein(name: string, state: string, client: { query: 
 
 /**
  * The renewal a policy points at, or null when that submission doesn't exist: a claim stranded by a failed
- * start from before CR-084, which 404ed for good. It's released here so the renewal can start again.
+ * start from before CR-084, which 404ed for good. It's released here, on the record (CR-140), so the renewal can start again.
  */
-async function liveRenewal(table: string, policyId: string, submissionId: string | null): Promise<string | null> {
+async function liveRenewal(source: "book" | "desktop", policyId: string, policyNumber: string, submissionId: string | null, actor: string): Promise<string | null> {
   if (!submissionId) return null;
   if ((await customerDb.query("SELECT 1 FROM submissions WHERE id = $1", [submissionId])).rowCount) return submissionId;
-  await policyDb.query(
-    `UPDATE ${table} SET renewal_status = 'not_started', renewal_submission_id = NULL WHERE id = $1 AND renewal_submission_id = $2`,
-    [policyId, submissionId]);
+  const client = await policyDb.connect();
+  try {
+    await client.query("BEGIN");
+    const released = await client.query<{ renewal_status: string }>(
+      `UPDATE ${source === "book" ? "book_policies" : "policies"} SET renewal_status = 'not_started', renewal_submission_id = NULL WHERE id = $1 AND renewal_submission_id = $2 RETURNING renewal_status`,
+      [policyId, submissionId]);
+    if (released.rowCount) {
+      await audit([{
+        actor, action: "renewal.released", entityType: source === "book" ? "book_policy" : "policy", entityId: policyId,
+        summary: `${policyNumber}: renewal claim released, its submission ${submissionId} doesn't exist`,
+        before: { renewal_status: "in_progress", renewal_submission_id: submissionId }, after: { renewal_status: "not_started", renewal_submission_id: null },
+      }], client);
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
   return null;
 }
 
@@ -137,7 +154,7 @@ export async function startRenewal(source: "book" | "desktop", policyId: string,
   if (source === "book") {
     const p = await getBookPolicy(policyId);
     if (!p) throw new Error("Policy not found");
-    existing = await liveRenewal(table, policyId, p.renewal_submission_id);
+    existing = await liveRenewal(source, policyId, p.policy_number, p.renewal_submission_id, actor);
     if (!existing) {
       if (!p.rating_inputs) throw new Error(`${p.policy_number} has no rating inputs on file; it can't be re-rated`);
       const versionId = await rateVersionId(p.rate_version ?? "");
@@ -149,7 +166,7 @@ export async function startRenewal(source: "book" | "desktop", policyId: string,
   } else {
     const p = await desktopPolicyForRenewal(policyId);
     if (!p) throw new Error("Policy not found");
-    existing = await liveRenewal(table, policyId, p.renewal_submission_id);
+    existing = await liveRenewal(source, policyId, p.policy_number, p.renewal_submission_id, actor);
     if (!existing) {
       original = (await customerDb.query<{ data: SubmissionData }>("SELECT data FROM submissions WHERE id = $1", [p.submission_id])).rows[0]?.data ?? null;
       exp = expiringFromDesktop(p, original);

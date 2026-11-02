@@ -48,7 +48,7 @@ export async function clearReferralAction(id: string, code: string, form: FormDa
   const sub = await getSubmission(id);
   if (!sub) back(id, { error: "Submission not found" });
   try {
-    await clearReferral(sub, code, String(form.get("note") ?? ""), await currentUser());
+    await clearReferral(sub, code, String(form.get("note") ?? ""), await currentUser(), null, String(form.get("detail") ?? "") || undefined);
   } catch (err) {
     back(id, { error: (err as Error).message });
   }
@@ -63,7 +63,7 @@ export async function issueQuoteAction(id: string, _prev: FormState, form: FormD
   const f = formFields(form);
   let q: QuoteRow;
   try {
-    q = await issueQuote(sub, { effective_date: f.effective_date ?? "", expiration_date: f.expiration_date ?? "", subjectivities: f.subjectivities ?? "" }, await currentUser());
+    q = await issueQuote(sub, { effective_date: f.effective_date ?? "", expiration_date: f.expiration_date ?? "", subjectivities: f.subjectivities ?? "", rating_id: f._rating_id }, await currentUser());
   } catch (err) {
     return { error: (err as Error).message, field: quoteField((err as Error).message), values: f };
   }

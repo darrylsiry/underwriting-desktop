@@ -133,9 +133,11 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
        renewedFrom ? { source: renewedFrom.source, policy_id: renewedFrom.policy_id, policy_number: renewedFrom.policy_number } : null],
     )).rows[0].id;
     await client.query("UPDATE quotes SET status = 'bound' WHERE id = $1", [q.id]);
+    let renewalWas: string | undefined;
     if (renewedFrom) {  // the expiring policy is now renewed
-      await client.query(
-        `UPDATE ${renewedFrom.source === "book" ? "book_policies" : "policies"} SET renewal_status = 'renewed' WHERE id = $1`, [renewedFrom.policy_id]);
+      const table = renewedFrom.source === "book" ? "book_policies" : "policies";
+      renewalWas = (await client.query<{ renewal_status: string }>(`SELECT renewal_status FROM ${table} WHERE id = $1 FOR UPDATE`, [renewedFrom.policy_id])).rows[0]?.renewal_status;
+      await client.query(`UPDATE ${table} SET renewal_status = 'renewed' WHERE id = $1`, [renewedFrom.policy_id]);
     }
     // Book the premium to the sub-ledger in the same transaction: no bound policy without its journal.
     const journal = await postPolicyBound(client, {
@@ -167,6 +169,12 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
         summary: `${journal.journal_no}: ${money(q.total)} booked to the premium sub-ledger for ${doc.policyNumber} (${renewedFrom ? "renewal" : "new business"}, period ${accountingPeriod(boundAt)})`,
         after: { journal_no: journal.journal_no, lines: journal.lines.map((l) => ({ account: l.account_code, debit: l.debit, credit: l.credit })) }, correlationId, occurredAt: at ?? undefined,
       },
+      // The expiring policy's own trail, which renewal.started began (CR-140).
+      ...(renewedFrom ? [{
+        actor, action: "renewal.completed", entityType: renewedFrom.source === "book" ? "book_policy" as const : "policy" as const, entityId: renewedFrom.policy_id,
+        summary: `${renewedFrom.policy_number}: renewed as ${doc.policyNumber}`, before: { renewal_status: renewalWas }, after: { renewal_status: "renewed", renewal_policy: doc.policyNumber },
+        correlationId, occurredAt: at ?? undefined,
+      }] : []),
     ], client);
     await client.query("COMMIT");
   } catch (err) {

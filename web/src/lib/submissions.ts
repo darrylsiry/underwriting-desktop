@@ -175,7 +175,7 @@ export function dataFingerprint(data: SubmissionData): string {
  * `fingerprint` is the data the form showed: if someone saved since, refuse rather than revert their edits.
  */
 export async function saveReview(id: string, inputs: Record<string, string>, actor: string, fingerprint?: string): Promise<number> {
-  const { reference, changes } = await withReviewLock(id, async (client, sub) => {
+  return withReviewLock(id, async (client, sub) => {
     if (fingerprint && fingerprint !== dataFingerprint(sub.data)) {
       throw new Error(`${sub.reference} was changed by someone else since you opened it. Reload to see their edits, then save again.`);
     }
@@ -197,24 +197,21 @@ export async function saveReview(id: string, inputs: Record<string, string>, act
          WHERE id = $1 AND status = 'needs_review'`,
         [id, data, corrected, (data.applicant?.name as string) ?? ""],
       );
+      // Under the lock and before COMMIT, so a failure leaves no unaudited correction and a retry isn't told someone else changed it (CR-144).
+      const correlationId = crypto.randomUUID();
+      await audit(...changes.map((c) => ({
+        actor, action: "submission.field_corrected", entityType: "submission" as const, entityId: id,
+        summary: `${sub.reference}: ${c.path} corrected`, before: { [c.path]: c.before }, after: { [c.path]: c.after },
+        correlationId,
+      })));
     }
-    return { reference: sub.reference, changes };
+    return changes.length;
   });
-
-  if (changes.length) {
-    const correlationId = crypto.randomUUID();
-    await audit(...changes.map((c) => ({
-      actor, action: "submission.field_corrected", entityType: "submission" as const, entityId: id,
-      summary: `${reference}: ${c.path} corrected`, before: { [c.path]: c.before }, after: { [c.path]: c.after },
-      correlationId,
-    })));
-  }
-  return changes.length;
 }
 
 /** Accept the intake: link (or create) the insured and lock the extracted data for underwriting. `at` back-dates it (seeded history). */
 export async function acceptSubmission(id: string, actor: string, at: Date | null = null): Promise<void> {
-  const r = await withReviewLock(id, async (client, sub) => {
+  await withReviewLock(id, async (client, sub) => {
     const missing = missingForRating(sub.data);
     if (missing.length) throw new Error(`Fill in before accepting: ${missing.join(", ")}`);
     const a = sub.data.applicant;
@@ -235,20 +232,20 @@ export async function acceptSubmission(id: string, actor: string, at: Date | nul
        WHERE id = $1 AND status = 'needs_review'`,
       [id, insuredId, actor, at],
     );
-    return { sub, insuredId, created: !!made, name, fein, state };
-  });
 
-  const correlationId = crypto.randomUUID();
-  await audit(
-    ...(r.created ? [{
-      actor, action: "insured.created", entityType: "insured" as const, entityId: r.insuredId,
-      summary: `Insured ${r.name} created from ${r.sub.reference}`, after: { name: r.name, fein: r.fein, state: r.state }, correlationId,
-      occurredAt: at ?? undefined,
-    }] : []),
-    {
-      actor, action: "submission.accepted", entityType: "submission", entityId: id,
-      summary: `${r.sub.reference} intake accepted (${plural(r.sub.corrected_fields.length, "field")} corrected)`,
-      after: { insured_id: r.insuredId, corrected_fields: r.sub.corrected_fields }, correlationId, occurredAt: at ?? undefined,
-    },
-  );
+    // Under the lock and before COMMIT, so a failure leaves no unaudited acceptance (CR-144).
+    const correlationId = crypto.randomUUID();
+    await audit(
+      ...(made ? [{
+        actor, action: "insured.created", entityType: "insured" as const, entityId: insuredId,
+        summary: `Insured ${name} created from ${sub.reference}`, after: { name, fein, state }, correlationId,
+        occurredAt: at ?? undefined,
+      }] : []),
+      {
+        actor, action: "submission.accepted", entityType: "submission", entityId: id,
+        summary: `${sub.reference} intake accepted (${plural(sub.corrected_fields.length, "field")} corrected)`,
+        after: { insured_id: insuredId, corrected_fields: sub.corrected_fields }, correlationId, occurredAt: at ?? undefined,
+      },
+    );
+  });
 }

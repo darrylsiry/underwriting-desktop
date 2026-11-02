@@ -17,7 +17,7 @@ import {
   INPUT_DEFS, MAX_CATEGORY_PCT, SCHEDULE_CATEGORIES, UW_AUTHORITY_PCT, inputChanges, inputUnit, inputsHash, scheduleMod, scheduleTotal,
   worksheetChips, worksheetFingerprint, type RatingInputs,
 } from "@/lib/worksheet";
-import { activeRateVersion, money, openWorksheet, readiness } from "@/lib/worksheets";
+import { activeRateVersion, flagsFor, money, openWorksheet, readiness } from "@/lib/worksheets";
 import { inputText } from "@/lib/renewal-compare";
 import { expiringOf } from "@/lib/renewals";
 import { ActionDirtyHint, ActionError, ActionForm, ActionFormProvider, ActionInput, ActionSelect, ActionSubmit, FieldMessage, WaitForSave } from "../action-form";
@@ -89,13 +89,15 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
 
   const exp = expiringOf(sub);
   const issueForm = (
-    <IssueQuoteForm action={issueQuoteAction.bind(null, id)} effective={effective} expiration={expiration} subjectivities={subjectivities}
+    <IssueQuoteForm action={issueQuoteAction.bind(null, id)} effective={effective} expiration={expiration} subjectivities={subjectivities} ratingId={ws.last_rating?.rating_id}
       label={latest ? `Issue revised ${exp ? "renewal " : ""}quote (v${latest.version + 1})` : `Issue ${exp ? "renewal " : ""}quote · ${rating ? money(rating.total) : ""}`} />
   );
 
-  const refers = flags.filter((f) => f.severity === "refer");
+  // CR-138: a bound file's panel judges the terms that were bound, like the inputs beside it, not a worksheet edited after the quote.
+  const panelFlags = boundQuote ? flagsFor(sub, { ...ws, rating_inputs: boundQuote.rating_inputs, schedule: boundQuote.schedule }) : flags;
+  const refers = panelFlags.filter((f) => f.severity === "refer");
   const openRefers = refers.filter((f) => clearanceStatus(f, ws.referral_clearances[f.code]) !== "cleared").length;
-  const warns = flags.length - refers.length;
+  const warns = panelFlags.length - refers.length;
   // A file can't bind with a referral open, so one that is unresolved on a bound file comes from a rule added or changed since.
   const unresolved = policy ? "since bind" : "open";
   const referralsTitle = `Referrals · ${openRefers} ${unresolved}${refers.length - openRefers ? ` · ${refers.length - openRefers} cleared` : ""}${warns ? ` · ${warns} warn` : ""}`;
@@ -331,7 +333,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
             {/* UX-036: the same numbers as the header chip: what is still open, what was cleared, what only warns. */}
             <Card title={referralsTitle}>
               <ul className="divide-y divide-slate-100">
-                {flags.map((f) => {
+                {panelFlags.map((f) => {
                   const clearance = ws.referral_clearances[f.code];
                   const status = clearanceStatus(f, clearance);
                   return (
@@ -361,6 +363,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                         // UX-002: Clear waits for unsaved rating edits, so a flag isn't cleared against stale facts.
                         <WaitForSave hint={WAIT} className="mt-2">
                           <form action={clearReferralAction.bind(null, id, f.code)} className="flex gap-2">
+                            <input type="hidden" name="detail" value={f.detail} />
                             <input name="note" aria-label={`Why "${f.title}" is acceptable`} required minLength={10} placeholder="Why this is acceptable (authority, mitigation)"
                               className="min-w-0 flex-1 rounded border border-slate-300 px-2 py-1 text-xs" />
                             <SubmitButton pending="Clearing…" className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50">Clear</SubmitButton>
@@ -370,7 +373,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                     </li>
                   );
                 })}
-                {!flags.length && <li className="p-4 text-sm text-emerald-700">No referral rules triggered.</li>}
+                {!panelFlags.length && <li className="p-4 text-sm text-emerald-700">No referral rules triggered.</li>}
               </ul>
             </Card>
 

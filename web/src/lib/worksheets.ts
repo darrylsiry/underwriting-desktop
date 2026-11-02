@@ -1,3 +1,4 @@
+import type { PoolClient } from "pg";
 import { moneyExact as money } from "./format";
 import { audit } from "./audit";
 import { customerDb, policyDb } from "./db";
@@ -30,6 +31,25 @@ export type WorksheetRow = {
   updated_at: Date;
 };
 
+/**
+ * `fn` in one customer-database transaction. The audit trail is in the other database, so it can't share it:
+ * write the audit inside `fn`, under the row lock and before COMMIT, so a failure leaves no unaudited change (CR-017, CR-144).
+ */
+async function inTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await customerDb.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export async function getWorksheet(submissionId: string): Promise<WorksheetRow | null> {
   const { rows } = await customerDb.query<WorksheetRow>("SELECT * FROM worksheets WHERE submission_id = $1", [submissionId]);
   return rows[0] ?? null;
@@ -41,17 +61,19 @@ export async function openWorksheet(sub: SubmissionRow, actor: string, at: Date 
   const existing = await getWorksheet(sub.id);
   if (existing) return existing;
   const inputs = inputsFromSubmission(sub.data);
-  const { rowCount } = await customerDb.query(
-    `INSERT INTO worksheets (submission_id, rating_inputs, updated_by, created_at, updated_at)
-     VALUES ($1, $2, $3, coalesce($4, now()), coalesce($4, now())) ON CONFLICT DO NOTHING`,
-    [sub.id, inputs, actor, at],
-  );
-  if (rowCount) {
-    await audit({
-      actor, action: "worksheet.opened", entityType: "submission", entityId: sub.id,
-      summary: `${sub.reference}: underwriting worksheet opened`, after: inputs, occurredAt: at ?? undefined,
-    });
-  }
+  await inTransaction(async (client) => {
+    const { rowCount } = await client.query(
+      `INSERT INTO worksheets (submission_id, rating_inputs, updated_by, created_at, updated_at)
+       VALUES ($1, $2, $3, coalesce($4, now()), coalesce($4, now())) ON CONFLICT DO NOTHING`,
+      [sub.id, inputs, actor, at],
+    );
+    if (rowCount) {
+      await audit({
+        actor, action: "worksheet.opened", entityType: "submission", entityId: sub.id,
+        summary: `${sub.reference}: underwriting worksheet opened`, after: inputs, occurredAt: at ?? undefined,
+      });
+    }
+  });
   return (await getWorksheet(sub.id))!;
 }
 
@@ -115,9 +137,7 @@ export async function saveAndRate(sub: SubmissionRow, form: Record<string, strin
   const schedule = parseSchedule(form);
   const correlationId = crypto.randomUUID();
 
-  const client = await customerDb.connect();
-  try {
-    await client.query("BEGIN");
+  await inTransaction(async (client) => {
     const ws = (await client.query<Pick<WorksheetRow, "rating_inputs" | "schedule">>(
       "SELECT rating_inputs, schedule FROM worksheets WHERE submission_id = $1 FOR UPDATE", [sub.id])).rows[0];
     if (form._fingerprint && form._fingerprint !== worksheetFingerprint(ws.rating_inputs, ws.schedule)) {
@@ -129,8 +149,7 @@ export async function saveAndRate(sub: SubmissionRow, form: Record<string, strin
       "UPDATE worksheets SET rating_inputs = $2, schedule = $3, updated_by = $4, updated_at = coalesce($5, now()) WHERE submission_id = $1",
       [sub.id, inputs, JSON.stringify(schedule), actor, at],
     );
-    // The audit trail is in the other database, so it can't share this transaction. Written under the lock and
-    // before COMMIT: its "before" values are the ones replaced, and a failure leaves no unaudited change.
+    // Its "before" values are the ones replaced.
     await audit(
       ...changed.map((d) => ({
         actor, action: "worksheet.input_changed", entityType: "submission" as const, entityId: sub.id,
@@ -146,13 +165,7 @@ export async function saveAndRate(sub: SubmissionRow, form: Record<string, strin
         before: ws.schedule, after: schedule, correlationId, occurredAt: at ?? undefined,
       }] : []),
     );
-    await client.query("COMMIT");
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw err;
-  } finally {
-    client.release();
-  }
+  });
 
   return rateAndStore(sub, inputs, schedule, actor, correlationId, at);
 }
@@ -176,34 +189,46 @@ async function rateAndStore(sub: SubmissionRow, inputs: RatingInputs, schedule: 
     }
     throw err;
   }
-  await customerDb.query(
-    "UPDATE worksheets SET last_rating = $2, rated_inputs_hash = $3, bridge_rating = $4 WHERE submission_id = $1",
-    [sub.id, rating, inputsHash(inputs, schedule), await bridgeRating(sub, inputs, schedule, rating, actor)],
-  );
-  await audit({
-    actor, action: "worksheet.rated", entityType: "submission", entityId: sub.id,
-    summary: `${sub.reference}: rated ${money(rating.premium)} premium, ${money(rating.total)} total on rates ${rating.rate_version}`,
-    after: { rating_id: rating.rating_id, premium: rating.premium, total: rating.total, schedule_mod: scheduleMod(schedule) },
-    correlationId, occurredAt: at ?? undefined,
+  const bridge = await bridgeRating(sub, inputs, schedule, rating, actor);   // a network call, so before the transaction
+  await inTransaction(async (client) => {
+    await client.query(
+      "UPDATE worksheets SET last_rating = $2, rated_inputs_hash = $3, bridge_rating = $4 WHERE submission_id = $1",
+      [sub.id, rating, inputsHash(inputs, schedule), bridge],
+    );
+    await audit({
+      actor, action: "worksheet.rated", entityType: "submission", entityId: sub.id,
+      summary: `${sub.reference}: rated ${money(rating.premium)} premium, ${money(rating.total)} total on rates ${rating.rate_version}`,
+      after: { rating_id: rating.rating_id, premium: rating.premium, total: rating.total, schedule_mod: scheduleMod(schedule) },
+      correlationId, occurredAt: at ?? undefined,
+    });
   });
   return rating;
 }
 
-/** Record why a referral is acceptable. Only flags that currently apply can be cleared. `at` back-dates it (seeded history). */
-export async function clearReferral(sub: SubmissionRow, code: string, note: string, actor: string, at: Date | null = null): Promise<void> {
+/**
+ * Record why a referral is acceptable. Only flags that currently apply can be cleared. `at` back-dates it (seeded history).
+ * `shownDetail` is the flag as the page showed it: a clearance covers only the facts it was given for, so if they moved, refuse (CR-148).
+ */
+export async function clearReferral(sub: SubmissionRow, code: string, note: string, actor: string, at: Date | null = null, shownDetail?: string): Promise<void> {
   await refuseIfBound(sub);
-  const ws = await openWorksheet(sub, actor, at);
-  const flag = flagsFor(sub, ws).find((f) => f.code === code);
-  if (!flag) throw new Error(`No ${code} flag applies to ${sub.reference}`);
-  if (note.trim().length < 10) throw new Error("Write a note explaining why this is acceptable");
-  const clearance: Clearance = { by: actor, at: (at ?? new Date()).toISOString(), note: note.trim(), detail: flag.detail };
-  await customerDb.query(
-    "UPDATE worksheets SET referral_clearances = referral_clearances || jsonb_build_object($2::text, $3::jsonb) WHERE submission_id = $1",
-    [sub.id, code, clearance],
-  );
-  await audit({
-    actor, action: "referral.cleared", entityType: "submission", entityId: sub.id,
-    summary: `${sub.reference}: referral "${flag.title}" cleared`, ...clearanceAudit(flag, clearance), occurredAt: at ?? undefined,
+  await openWorksheet(sub, actor, at);
+  await inTransaction(async (client) => {
+    const ws = (await client.query<WorksheetRow>("SELECT * FROM worksheets WHERE submission_id = $1 FOR UPDATE", [sub.id])).rows[0];
+    const flag = flagsFor(sub, ws).find((f) => f.code === code);
+    if (!flag) throw new Error(`No ${code} flag applies to ${sub.reference}`);
+    if (shownDetail && shownDetail !== flag.detail) {
+      throw new StaleWorksheetError(`${sub.reference} changed since you opened it, and "${flag.title}" now reads: ${flag.detail} Nothing was cleared: reload to see it, then clear it if it's still acceptable.`);
+    }
+    if (note.trim().length < 10) throw new Error("Write a note explaining why this is acceptable");
+    const clearance: Clearance = { by: actor, at: (at ?? new Date()).toISOString(), note: note.trim(), detail: flag.detail };
+    await client.query(
+      "UPDATE worksheets SET referral_clearances = referral_clearances || jsonb_build_object($2::text, $3::jsonb) WHERE submission_id = $1",
+      [sub.id, code, clearance],
+    );
+    await audit({
+      actor, action: "referral.cleared", entityType: "submission", entityId: sub.id,
+      summary: `${sub.reference}: referral "${flag.title}" cleared`, ...clearanceAudit(flag, clearance), occurredAt: at ?? undefined,
+    });
   });
 }
 

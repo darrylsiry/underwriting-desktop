@@ -35,7 +35,7 @@ export async function issueRenewalQuoteAction(id: string, _prev: FormState, form
   const f = Object.fromEntries([...form.entries()].filter(([, v]) => typeof v === "string") as [string, string][]);
   let q: QuoteRow;
   try {
-    q = await issueQuote(sub, { effective_date: f.effective_date ?? "", expiration_date: f.expiration_date ?? "", subjectivities: f.subjectivities ?? "" }, await currentUser());
+    q = await issueQuote(sub, { effective_date: f.effective_date ?? "", expiration_date: f.expiration_date ?? "", subjectivities: f.subjectivities ?? "", rating_id: f._rating_id }, await currentUser());
   } catch (err) {
     const message = (err as Error).message;
     const field = /^Effective date/.test(message) ? "effective_date" : /^Expiration/.test(message) ? "expiration_date" : undefined;
