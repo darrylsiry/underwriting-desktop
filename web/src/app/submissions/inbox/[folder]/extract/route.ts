@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { CROSS_SITE_REFUSED, sameOrigin } from "@/lib/http";
 import { inboxFiles, listInbox } from "@/lib/inbox";
+import { ServiceError, describeServiceError, errorDetailOf } from "@/lib/service-errors";
 import { INGESTION_SERVICE_URL } from "@/lib/services";
 import { filesForm, storeSubmission } from "@/lib/submissions";
 import type { Extraction } from "@/lib/submission";
@@ -38,7 +39,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ folder:
           method: "POST", body: filesForm(files),
           signal: AbortSignal.any([req.signal, AbortSignal.timeout(300_000)]),
         });
-        if (!res.ok || !res.body) throw new Error(`Ingestion service returned ${res.status}: ${await res.text()}`);
+        if (!res.ok) throw new Error(describeServiceError(new ServiceError(res.status, errorDetailOf(await res.text())), "document reader"));
+        if (!res.body) throw new Error(describeServiceError(new ServiceError(502), "document reader"));
         const offset = (Date.now() - started) / 1000;
 
         let extraction: Extraction | null = null;

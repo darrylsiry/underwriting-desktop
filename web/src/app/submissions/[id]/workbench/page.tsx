@@ -96,7 +96,9 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
   const refers = flags.filter((f) => f.severity === "refer");
   const openRefers = refers.filter((f) => clearanceStatus(f, ws.referral_clearances[f.code]) !== "cleared").length;
   const warns = flags.length - refers.length;
-  const referralsTitle = `Referrals · ${openRefers} open${refers.length - openRefers ? ` · ${refers.length - openRefers} cleared` : ""}${warns ? ` · ${warns} warn` : ""}`;
+  // A file can't bind with a referral open, so one that is unresolved on a bound file comes from a rule added or changed since.
+  const unresolved = policy ? "since bind" : "open";
+  const referralsTitle = `Referrals · ${openRefers} ${unresolved}${refers.length - openRefers ? ` · ${refers.length - openRefers} cleared` : ""}${warns ? ` · ${warns} warn` : ""}`;
 
   return (
     <main className="mx-auto max-w-7xl p-8">
@@ -335,8 +337,8 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                   return (
                     <li key={f.code} className="p-4 text-sm">
                       <div className="flex items-center gap-2">
-                        <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${status === "cleared" ? "bg-slate-100 text-slate-500" : f.severity === "refer" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}`}>
-                          {status === "cleared" ? "cleared" : f.severity}
+                        <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${status === "cleared" || (policy && f.severity === "refer") ? "bg-slate-100 text-slate-500" : f.severity === "refer" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}`}>
+                          {status === "cleared" ? "cleared" : policy && f.severity === "refer" ? "since bind" : f.severity}
                         </span>
                         <span className="font-medium">{f.title}</span>
                       </div>
@@ -347,7 +349,10 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                           <span className="font-medium text-slate-700">{clearance.by}</span> · {when(clearance.at)}: “{clearance.note}”
                         </p>
                       )}
-                      {status === "stale" && clearance && (
+                      {status !== "cleared" && f.severity === "refer" && policy && (
+                        <p className="mt-2 text-xs text-slate-500">Raised by the current rules, not the rules at bind. Nothing to clear on a bound policy.</p>
+                      )}
+                      {status === "stale" && clearance && !policy && (
                         <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
                           {clearance.by} cleared this for {clearance.detail ? `“${clearance.detail}”` : "earlier facts"} on {when(clearance.at)}; the facts changed, so it needs clearing again.
                         </p>
