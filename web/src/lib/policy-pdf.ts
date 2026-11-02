@@ -1,5 +1,5 @@
 import type { SubjectivityStatus } from "./bind-rules";
-import { MUTED, createDocument, masthead, money, parties, premiumBlock, surplusLinesNotice, usDate, type Writer } from "./pdf-writer";
+import { MUTED, createDocument, masthead, money, parties, premiumBlock, surplusLinesNotice, usDate, type Writer } from "./pdf-writer.ts";   // .ts so node:test can load this module
 
 export type PolicyDocument = {
   policyNumber: string;
@@ -39,6 +39,19 @@ function limitsBlock(w: Writer, p: PolicyDocument) {
   w.row("Deductible (bodily injury and property damage, per occurrence)", p.deductible ? money(p.deductible) : "None");
 }
 
+const STATUS_COLUMN = 110;   // room for "OPEN - due 12/31/2026" in bold at 9pt
+
+/** CR-109: the underwriter's free text wraps clear of its status, so a long one can't overprint it or run off the page. */
+export function subjectivitiesBlock(w: Writer, subjectivities: SubjectivityStatus[]) {
+  for (const [i, s] of subjectivities.entries()) {
+    const status = s.status === "received" ? "Received" : `OPEN - due ${usDate(s.due_date!)}`;
+    w.ensure(14);
+    w.text(status, { right: 558, size: 9, bold: s.status === "open" });
+    w.para(`${i + 1}.  ${s.text}`, { size: 9, width: 558 - STATUS_COLUMN - 54 });
+    w.y -= 2;
+  }
+}
+
 /** One-page binder: temporary evidence that coverage is bound, with any open subjectivities. */
 export async function renderBinderPdf(p: PolicyDocument): Promise<Uint8Array> {
   const { doc, w } = await createDocument({
@@ -67,13 +80,7 @@ export async function renderBinderPdf(p: PolicyDocument): Promise<Uint8Array> {
   premiumBlock(w, p);
 
   w.heading("Subjectivities");
-  for (const [i, s] of p.subjectivities.entries()) {
-    const status = s.status === "received" ? "Received" : `OPEN - due ${usDate(s.due_date!)}`;
-    w.ensure(14);
-    w.text(`${i + 1}.  ${s.text}`, { size: 9 });
-    w.text(status, { right: 558, size: 9, bold: s.status === "open" });
-    w.y -= 14;
-  }
+  subjectivitiesBlock(w, p.subjectivities);
   const open = p.subjectivities.filter((s) => s.status === "open").length;
   w.y -= 4;
   w.para(open

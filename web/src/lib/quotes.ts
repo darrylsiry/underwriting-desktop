@@ -98,7 +98,7 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
   const inputs = ws.rating_inputs;
   const terms = {
     insured_address: [String(a.street ?? ""), [a.city, a.state].filter(Boolean).join(", ") + (a.zip ? ` ${a.zip}` : "")].filter((l) => l.trim()),
-    producer: [String(p.agency ?? ""), String(p.contact ?? ""), [p.email, p.phone].filter(Boolean).join("  ·  ")].filter((l) => l.trim()),
+    producer: [p.agency, p.contact, p.email, p.phone].map((v) => String(v ?? "")).filter((l) => l.trim()),   // CR-118: one line each, so a long email can't push the phone off the page
     limits: [
       { label: "Each occurrence", amount: inputs.occurrence_limit },
       { label: "General aggregate", amount: inputs.aggregate_limit },
