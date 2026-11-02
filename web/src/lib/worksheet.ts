@@ -3,6 +3,9 @@
 // Pure module (type-only imports) so node:test can load it directly.
 import type { SubmissionData } from "./submission";
 
+/** RatingInput.gross_receipts' cap in the rating service (services/rating/app/engine.py). */
+export const MAX_GROSS_RECEIPTS = 10_000_000_000;
+
 export type RatingInputs = {
   class_code: string;
   gross_receipts: number;
@@ -137,6 +140,7 @@ export function parseInputs(form: Record<string, string>): RatingInputs {
         out[def.key] = Math.round(n);
         // Checked here so it lands under the field; the rating service would refuse it with a banner of raw validation (CR-130).
         if (def.key === "gross_receipts" && out[def.key] === 0) throw new FieldError(`${label} must be more than zero`, def.key);
+        if (def.key === "gross_receipts" && n > MAX_GROSS_RECEIPTS) throw new FieldError(`${label} must be $${MAX_GROSS_RECEIPTS.toLocaleString("en-US")} or less`, def.key);   // CR-150
       }
     }
   }

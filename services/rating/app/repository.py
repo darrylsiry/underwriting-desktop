@@ -141,6 +141,9 @@ def _check_storable(edit: Edit, column: str, value: Decimal) -> None:
         raise ValueError(f"{what} must be a number")
     if value <= 0:
         raise ValueError(f"{_entity(edit)}: values must be greater than zero")
+    # The screen holds a fraction, so 5 typed for 5% would tax every quote in that state at 500% (CR-143).
+    if edit.kind == "parameter" and edit.ident[0].startswith("sl_tax.") and value >= 1:
+        raise ValueError(f"{_entity(edit)}: enter a fraction: 0.05 for 5%")
     limit = 10 ** (precision - scale)
     if value >= limit:
         raise ValueError(f"{what} must be below {limit:,}")
@@ -279,6 +282,17 @@ def apply_edits(version_id: int, edits: list[Edit], actor: str, reason: str) -> 
     return changed
 
 
+def _check_mod_bounds(conn, version_id: int) -> None:
+    """A mod of 1 means none applied, so its range must include 1 or the version can't rate an ordinary file (CR-143)."""
+    rows = conn.execute("SELECT name, value FROM parameters WHERE version_id = %s AND name LIKE %s",
+                        (version_id, r"%\_mod\_%")).fetchall()
+    for row in rows:
+        if row["name"].endswith("_mod_min") and row["value"] > 1:
+            raise ValueError(f"{row['name']} is {row['value']}: a minimum mod can't be above 1. Nothing was activated.")
+        if row["name"].endswith("_mod_max") and row["value"] < 1:
+            raise ValueError(f"{row['name']} is {row['value']}: a maximum mod can't be below 1. Nothing was activated.")
+
+
 def activate(version_id: int, actor: str, reason: str) -> None:
     """Make a draft the active version and retire the previously active one."""
     if not reason.strip():
@@ -286,6 +300,7 @@ def activate(version_id: int, actor: str, reason: str) -> None:
     try:
         with _transaction() as conn:
             version = _lock_draft(conn, version_id)
+            _check_mod_bounds(conn, version_id)
             # CR-036: this waits for an activation in progress, and finds nothing to retire if that one commits.
             # one_active_version then refuses ours below, so of two at once exactly one wins.
             previous = conn.execute(

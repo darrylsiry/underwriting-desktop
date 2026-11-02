@@ -17,7 +17,8 @@ class RatingError(ValueError):
 
 class RatingInput(BaseModel):
     class_code: str
-    gross_receipts: Decimal = Field(gt=0)
+    # The cap keeps a typo from overflowing the arithmetic or, at the seeded rates' highest, quotes.premium numeric(12,2) (CR-150).
+    gross_receipts: Decimal = Field(gt=0, le=Decimal("10000000000"))
     states: list[str] = Field(min_length=1, description="States of operation; the worst territory applies")
     home_state: str = Field(description="Insured's home state; drives surplus lines tax")
     occurrence_limit: int

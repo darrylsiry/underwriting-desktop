@@ -246,3 +246,33 @@ def test_read_endpoints_declare_what_they_return(client):
     entry = client.get(f"/ratings/{summary['id']}").json()
     assert set(entry) == {"id", "version_id", "reference", "requested_by", "request", "result", "created_at", "recorded_at"}
     assert entry["request"]["class_code"] == summary["class_code"]
+
+
+def parameter(client, version_id: int, name: str) -> float:
+    return next(p["value"] for p in client.get(f"/rate-versions/{version_id}").json()["parameters"] if p["name"] == name)
+
+
+def edit_parameter(client, version_id: int, name: str, value):
+    return client.post(f"/rate-versions/{version_id}/edits", json={
+        "reason": "test", "edits": [{"kind": "parameter", "name": name, "value": value}]}, headers=AS_PAT)
+
+
+def test_a_tax_typed_as_a_percentage_is_refused(client):
+    """CR-143: the screen holds a fraction, so 5 means 500% on every quote in that state."""
+    vid = new_draft(client)
+    was = parameter(client, vid, "sl_tax.FL")
+    res = edit_parameter(client, vid, "sl_tax.FL", 5)
+    assert res.status_code == 422 and "enter a fraction: 0.05 for 5%" in res.text
+    assert parameter(client, vid, "sl_tax.FL") == was
+    assert edit_parameter(client, vid, "sl_tax.FL", 0.05).status_code == 200
+
+
+def test_a_mod_range_without_1_cant_be_activated(client):
+    """CR-143: once active it would refuse every ordinary rating, so the previous version stays active."""
+    active = next(v["id"] for v in client.get("/rate-versions").json() if v["status"] == "active")
+    for name, value, message in [("schedule_mod_min", 1.5, "can't be above 1"), ("experience_mod_max", 0.9, "can't be below 1")]:
+        vid = new_draft(client)
+        assert edit_parameter(client, vid, name, value).status_code == 200
+        res = client.post(f"/rate-versions/{vid}/activate", json={"reason": "test"}, headers=AS_PAT)
+        assert res.status_code in (400, 409, 422) and message in res.text
+        assert next(v["id"] for v in client.get("/rate-versions").json() if v["status"] == "active") == active

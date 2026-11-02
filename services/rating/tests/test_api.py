@@ -175,3 +175,10 @@ def test_feeds_refuse_a_date_that_is_not_on_the_calendar(client):
     assert client.get("/ratings", params={"until": "2026-02-30"}).status_code == 422
     assert client.get("/rate-table-audit", params={"since": "2026-02-30"}).status_code == 422
     assert client.get("/rate-table-audit", params={"until": "2026-13-01T00:00:00"}).status_code == 422
+
+
+def test_gross_receipts_past_the_cap_are_a_refused_input_not_a_fault(client):
+    """CR-150: 1e31 overflowed the money arithmetic into a 500; a smaller typo overflowed quotes.premium at issue."""
+    res = client.post("/rate", json=ELECTRICAL | {"gross_receipts": 1e31}, headers=AS_TEST)
+    assert res.status_code == 422
+    assert client.post("/rate", json=ELECTRICAL | {"gross_receipts": 10_000_000_000}, headers=AS_TEST).status_code == 200

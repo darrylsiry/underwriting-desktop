@@ -86,3 +86,9 @@ test("the worksheet fingerprint survives jsonb and notices any edit, reasons inc
   assert.notEqual(worksheetFingerprint(inputs, [{ ...schedule[0], rationale: "Different reason" }]), fingerprint);
   assert.notEqual(worksheetFingerprint(inputs, []), fingerprint);
 });
+
+test("gross receipts past the rating service's cap land under the field (CR-150)", () => {
+  assert.throws(() => parseInputs({ ...form, gross_receipts: "1e31" }), (err: unknown) =>
+    err instanceof FieldError && err.field === "gross_receipts" && /\$10,000,000,000 or less/.test(err.message));
+  assert.equal(parseInputs({ ...form, gross_receipts: "$10,000,000,000" }).gross_receipts, 10_000_000_000);
+});
