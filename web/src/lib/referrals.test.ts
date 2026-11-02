@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clearanceStatus, isOpenLoss, lossRunYears, referralFlags, type ReferralContext } from "./referrals.ts";
+import { ROOFING_CLASSES, clearanceStatus, isOpenLoss, lossRunYears, referralFlags, type ReferralContext } from "./referrals.ts";
+import { formsFor } from "./quote-terms.ts";
 import { inputsHash, parseSchedule, scheduleKey, scheduleMod } from "./worksheet.ts";
 import type { SubmissionData } from "./submission.ts";
 
@@ -121,4 +122,12 @@ test("a clearance stops covering a flag whose facts changed (CR-005)", () => {
   const at120 = referralFlags(ctx({ inputs: { ...inputs, max_height_ft: 120 } })).find((f) => f.code === "HEIGHT")!;
   assert.equal(clearanceStatus(at120, clearance), "stale");
   assert.equal(clearanceStatus(at120, undefined), "open");
+});
+
+test("every roofing class refers and gets the endorsement; the wording existing clearances hold is unchanged (CR-061)", () => {
+  for (const class_code of ROOFING_CLASSES) {
+    assert.deepEqual(codes(ctx({ inputs: { ...inputs, class_code } })), ["refer:ROOFING"]);
+    assert.ok(formsFor({ ...inputs, class_code }).some((f) => f.startsWith("Roofing Operations Endorsement")));
+  }
+  assert.equal(referralFlags(ctx({ inputs: { ...inputs, class_code: "98677" } }))[0].detail, "Roofing (98677) is written only with manager approval");
 });

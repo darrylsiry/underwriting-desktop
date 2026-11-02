@@ -119,7 +119,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
             </dl>
           </Section>
           <Section title="Subjectivities">
-            <ol className="list-decimal space-y-1 p-4 pl-8 text-sm">{q.subjectivities.map((s) => <li key={s}>{s}</li>)}</ol>
+            <ol className="list-decimal space-y-1 p-4 pl-8 text-sm">{q.subjectivities.map((s, i) => <li key={i}>{s}</li>)}</ol>
           </Section>
           <Section title="Versions">
             <ul className="p-4 text-sm">

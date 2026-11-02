@@ -217,7 +217,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                     </p>
                     {policy.subjectivities.some((s) => s.status === "open") && (
                       <ul className="mt-2 space-y-0.5 text-xs text-amber-800">
-                        {policy.subjectivities.filter((s) => s.status === "open").map((s) => <li key={s.text}>Open: {s.text}{s.due_date && <> (due {whenDate(s.due_date)})</>}</li>)}
+                        {policy.subjectivities.filter((s) => s.status === "open").map((s, i) => <li key={i}>Open: {s.text}{s.due_date && <> (due {whenDate(s.due_date)})</>}</li>)}
                       </ul>
                     )}
                   </div>

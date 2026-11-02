@@ -71,7 +71,7 @@ export default async function ReviewPage({ params, searchParams }: Props) {
             Missing before this can be rated: {missing.join(", ")}. Fill them in or ask the broker.
           </p>
         )}
-        {ex.warnings.map((w) => <p key={w} className="mt-2 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">{w}</p>)}
+        {ex.warnings.map((w, i) => <p key={i} className="mt-2 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">{w}</p>)}
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
           <ActionForm className="space-y-6">
@@ -103,8 +103,8 @@ export default async function ReviewPage({ params, searchParams }: Props) {
                   </thead>
                 )}
                 <tbody>
-                  {sub.data.loss_history.map((l) => (
-                    <tr key={`${l.date}-${l.incurred}`} className="border-t border-slate-100">
+                  {sub.data.loss_history.map((l, i) => (
+                    <tr key={i} className="border-t border-slate-100">
                       <td className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500">{dateText(l.date)}</td>
                       <td className="px-4 py-2">{l.description}</td>
                       <td className="px-4 py-2 text-right tabular-nums">${l.incurred.toLocaleString("en-US")}</td>
@@ -152,8 +152,8 @@ export default async function ReviewPage({ params, searchParams }: Props) {
                 ))}
               </ul>
               <ul className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-xs text-slate-500">
-                {ex.documents.map((d) => (
-                  <li key={d.filename}>
+                {ex.documents.map((d, i) => (
+                  <li key={i}>
                     <span className="font-medium text-slate-700">{d.doc_type.replaceAll("_", " ")}</span>: {d.filename}
                     {d.parent && <> (in email)</>} · {d.method === "form_field" ? "form fields" : "Claude"}
                   </li>
@@ -163,7 +163,7 @@ export default async function ReviewPage({ params, searchParams }: Props) {
 
             {ex.notes.length > 0 && (
               <Panel title="Underwriting notes from Claude">
-                <ul className="list-disc space-y-2 pl-4 text-sm text-slate-700">{ex.notes.map((n) => <li key={n}>{n}</li>)}</ul>
+                <ul className="list-disc space-y-2 pl-4 text-sm text-slate-700">{ex.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
               </Panel>
             )}
 

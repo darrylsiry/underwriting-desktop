@@ -98,8 +98,8 @@ export default async function PolicyPage({ params, searchParams }: Props) {
         </Section>
         <Section title={`Subjectivities · ${open.length ? `${open.length} open` : "all received"}`}>
           <ul className="divide-y divide-slate-100 text-sm">
-            {p.subjectivities.map((s) => (
-              <li key={s.text} className="flex items-center gap-3 px-4 py-2">
+            {p.subjectivities.map((s, i) => (
+              <li key={i} className="flex items-center gap-3 px-4 py-2">
                 <span className="flex-1">{s.text}</span>
                 {s.status === "open" && <span className="text-xs text-amber-800">due {whenDate(s.due_date!)}</span>}
                 <Pill status={s.status} />

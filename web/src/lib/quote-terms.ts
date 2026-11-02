@@ -1,6 +1,6 @@
 // Quote terms that don't need the database: suggested subjectivities and dates.
 // Pure module (type-only imports) so node:test can load it.
-import { lossRunYears, type Flag } from "./referrals.ts";   // .ts so node:test can load this pure module too
+import { ROOFING_CLASSES, lossRunYears, type Flag } from "./referrals.ts";   // .ts so node:test can load this pure module too
 import type { SubmissionData } from "./submission";
 import type { RatingInputs } from "./worksheet";
 
@@ -55,6 +55,6 @@ export function formsFor(inputs: Pick<RatingInputs, "states" | "subcontracted_pc
   if (inputs.subcontracted_pct > 0) forms.push("Independent Contractors Conditions (subcontractors must carry equal limits and name the insured)");
   if (inputs.residential_pct > 0) forms.push("Residential Construction Limitation (no new tract or condominium construction)");
   if (inputs.states.includes("NY")) forms.push("Action Over / Labor Law Exclusion (New York)");
-  if (inputs.class_code === "98677") forms.push("Roofing Operations Endorsement (no hot tar or torch-down work)");
+  if (ROOFING_CLASSES.includes(inputs.class_code)) forms.push("Roofing Operations Endorsement (no hot tar or torch-down work)");
   return forms;
 }

@@ -16,6 +16,9 @@ export type ReferralContext = {
 
 const money = (n: number) => `$${n.toLocaleString("en-US")}`;
 
+/** Class codes that are roofing: the referral below, the quote's endorsement and the synthetic book all read this (CR-061). */
+export const ROOFING_CLASSES: readonly string[] = ["98677"];
+
 export const LIMITS = {
   largeOpenClaim: 100_000,
   claimCount: 3,
@@ -76,8 +79,8 @@ export function referralFlags(ctx: ReferralContext): Flag[] {
   if (inputs.max_height_ft >= LIMITS.heightFt) {
     add("HEIGHT", "refer", "Work at height", `Maximum working height ${inputs.max_height_ft} ft (limit ${LIMITS.heightFt} ft)`);
   }
-  if (inputs.class_code === "98677") {
-    add("ROOFING", "refer", "Roofing class", "Roofing (98677) is written only with manager approval");
+  if (ROOFING_CLASSES.includes(inputs.class_code)) {
+    add("ROOFING", "refer", "Roofing class", `Roofing (${inputs.class_code}) is written only with manager approval`);
   }
   if (inputs.gross_receipts > LIMITS.receipts) {
     add("LARGE_ACCOUNT", "refer", "Above receipts authority", `${money(inputs.gross_receipts)} gross receipts (authority ${money(LIMITS.receipts)})`);
