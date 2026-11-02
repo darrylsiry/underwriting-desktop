@@ -2,20 +2,25 @@
 // throttle, and the email the owner receives. Pure, so node:test drives it; the action stores
 // the request, then sends the email through lib/mailer.ts.
 
+import { addressKey } from "./login-meta.ts";
 import { when } from "./time.ts";
 
 /** Where requests go unless ACCESS_REQUEST_TO says otherwise. */
 export const ACCESS_REQUEST_TO = "darryl@siryous.com";
 
-/** A public form that sends email: at most this many from one address an hour, and in all a day. */
-export const LIMITS = { perAddressPerHour: 3, perDay: 30 };
+/** A public form that sends email: at most this many from one network an hour, and emails to the owner a day. */
+export const LIMITS = { perAddressPerHour: 3, emailsPerDay: 30 };
+
+/** Recorded instead of sending once the day's emails are used up; the request itself is kept. */
+export const DAILY_MAIL_CAP = "daily mail cap";
 
 export type AccessRequestInput = { name: string; email: string; company: string };
 export type AccessRequestErrors = Partial<Record<keyof AccessRequestInput, string>>;
 
 // A plain address only: no quotes, comments, angle brackets, commas or semicolons, so nothing a
-// mail library's address parser could read as a second recipient.
-const EMAIL = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+// mail library's address parser could read as a second recipient, and no ? & = % that would mean
+// something in a mailto: link (CR-098).
+const EMAIL = /^[A-Za-z0-9._+-]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
 
 /** One line of text: control characters (CR and LF among them) become spaces, runs of space collapse, capped. */
 const line = (v: unknown, max: number) => String(v ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
@@ -30,12 +35,22 @@ export function readAccessRequest(form: { get(name: string): unknown }): { input
   return { input, errors };
 }
 
-/** Why this request can't go through now, or null when it can. */
-export function throttled(counts: { fromAddressLastHour: number; lastDay: number }): string | null {
-  if (counts.fromAddressLastHour >= LIMITS.perAddressPerHour) return "There have been several requests from your network in the last hour. Please try again later.";
-  if (counts.lastDay >= LIMITS.perDay) return "We've had a lot of access requests today. Please try again tomorrow.";
-  return null;
+/**
+ * What happens to a request, from what is already on file. Too many from the sender's own network
+ * (an IPv6 /64 counts as one) and it is refused. Once the day's emails are used up it is still kept
+ * and the requester still hears "sent", so one sender filling the cap can't turn real people away:
+ * the owner finds them under Admin → Sign-ins.
+ */
+export function admission(ip: string | null, recent: { addressesLastHour: (string | null)[]; emailsLastDay: number }): { refused: string | null; email: boolean } {
+  const network = addressKey(ip);
+  if (recent.addressesLastHour.filter((a) => addressKey(a) === network).length >= LIMITS.perAddressPerHour) {
+    return { refused: "There have been several requests from your network in the last hour. Please try again later.", email: false };
+  }
+  return { refused: null, email: recent.emailsLastDay < LIMITS.emailsPerDay };
 }
+
+/** A mailto: link to a stored address, whatever it holds: nothing in it can add recipients or a body (CR-098). */
+export const mailtoHref = (email: string) => `mailto:${email.split("@").map(encodeURIComponent).join("@")}`;
 
 export type AccessRequestEmail = { to: string; replyTo: { name: string; address: string }; subject: string; text: string };
 

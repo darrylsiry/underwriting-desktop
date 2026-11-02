@@ -2,13 +2,15 @@
 // and hand the parsed result to the page. Reads on every request, so the page is as current as
 // the files: in a checkout that is docs/ itself, rewritten by every review run; on Fly it is the
 // copy scripts/fly-deploy.sh bakes into the image (refreshed whenever a report change is pushed).
+// That copy leaves out the security report, whose reproduction steps stay in the repository
+// (CR-097): there the page shows security's findings from the ledger and /app-tests/security is a 404.
 
 import { existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { activityView, readLedger, type ActivityView } from "./agent-ledger";
-import { AGENTS, parseReport, type AgentKey, type ParsedReport } from "./agent-reports";
-import { DISPLAY_TIME_ZONE } from "./time";
+import { activityView, readLedger, type ActivityView } from "./agent-ledger.ts";
+import { AGENTS, parseReport, type AgentKey, type ParsedReport } from "./agent-reports.ts";
+import { DISPLAY_TIME_ZONE } from "./time.ts";
 
 /** docs/ when the app runs from a checkout; else agent-reports/ beside the server (the Fly image, or compose's mount). */
 export function reportsDir(): string {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { fromInput } from "./submission.ts";
-import { isIsoDate, todayIso, when, whenDate, whenShort } from "./time.ts";
+import { isIsoDate, resolveTimeZone, todayIso, when, whenDate, whenShort } from "./time.ts";
 
 // UX-006: every on-screen timestamp carries the display zone's name.
 test("when renders the display zone with its abbreviation", () => {
@@ -45,4 +45,16 @@ test("an intake date field refuses a date that isn't on the calendar (CR-068)", 
   const field = { path: "policy.effective_date", label: "Effective", type: "date" as const };
   assert.equal(fromInput(field, "2026-02-28"), "2026-02-28");
   assert.throws(() => fromInput(field, "2026-02-30"), /Effective: use YYYY-MM-DD/);
+});
+
+test("a misspelt DISPLAY_TZ falls back with a logged error instead of throwing on every page (CR-094)", (t) => {
+  const logged = t.mock.method(console, "error", () => {});
+  assert.equal(resolveTimeZone("America/Chicago"), "America/Chicago");
+  assert.equal(resolveTimeZone("america/chicago"), "America/Chicago", "the spelling the other services need");
+  assert.equal(resolveTimeZone(undefined), "America/New_York");
+  assert.equal(resolveTimeZone(""), "America/New_York");
+  assert.equal(logged.mock.callCount(), 0);
+  for (const bad of ["Not/AZone", "America/NewYork", "+05:30", "-08:00"]) assert.equal(resolveTimeZone(bad), "America/New_York", bad);
+  assert.equal(logged.mock.callCount(), 4);
+  assert.match(String(logged.mock.calls[0].arguments[0]), /DISPLAY_TZ "Not\/AZone"/);
 });

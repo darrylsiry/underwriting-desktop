@@ -11,6 +11,7 @@ the mutating endpoints rather than leaving them open.
 """
 import os
 import secrets
+from urllib.parse import unquote
 
 from fastapi import HTTPException, Request
 
@@ -34,11 +35,16 @@ def trusted_caller(request: Request) -> bool:
     return bool(presented) and secrets.compare_digest(presented.encode(), token.encode())
 
 
+def decode_user(header: str | None) -> str:
+    """The name in an x-uw-user header: the web app percent-encodes it, so any name fits in a header (CR-072)."""
+    return "".join(c for c in unquote(header or "") if c.isprintable()).strip()[:60]
+
+
 def acting_user(request: Request) -> str | None:
     """The UW Desktop user named by a trusted caller; None otherwise."""
     if not trusted_caller(request):
         return None
-    return (request.headers.get("x-uw-user") or "").strip()[:60] or None
+    return decode_user(request.headers.get("x-uw-user")) or None
 
 
 def require_admin(request: Request) -> None:

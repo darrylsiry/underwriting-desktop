@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ServiceError, describeServiceError, errorDetailOf } from "./service-errors.ts";
+import { ServiceError, describeServiceError, errorDetailOf, proxyFailurePage } from "./service-errors.ts";
 
 // UX-008: the words a user sees when the ingestion or rating service fails.
 test("no answer at all reads as 'not responding'", () => {
@@ -29,4 +29,22 @@ test("FastAPI's validation list reads as its messages, not as JSON (CR-130)", ()
   const two = JSON.stringify({ detail: [{ loc: ["body", "a"], msg: "one" }, { msg: "two" }] });
   assert.equal(errorDetailOf(two), "a: one; two");
   assert.equal(errorDetailOf(JSON.stringify({ detail: "plain" })), "plain");
+});
+
+test("the admin proxy says why a stopped or slow service failed, with a way back (CR-108)", () => {
+  const refused = proxyFailurePage(new TypeError("fetch failed"), "rating service", "GET", "/admin/versions/3?section=territory");
+  assert.equal(refused.status, 502);
+  assert.ok(refused.html.includes("The rating service isn't responding."));
+  assert.ok(refused.html.includes('href="/admin/versions/3?section=territory"'), "the retry reopens the same page");
+
+  const slow = Object.assign(new Error("signal timed out"), { name: "TimeoutError" });
+  assert.equal(proxyFailurePage(slow, "rating service", "GET", "/admin").status, 504);
+
+  const post = proxyFailurePage(slow, "rating service", "POST", "/admin/versions/3/sections/territory");
+  assert.equal(post.status, 504);
+  assert.ok(post.html.includes("may or may not have been saved"), "a timed-out save may have gone through");
+  assert.ok(post.html.includes('class="retry" href="/admin"'), "a post's own address can't be reopened");
+  assert.ok(proxyFailurePage(new TypeError("fetch failed"), "rating service", "POST", "/admin/x").html.includes("Nothing was saved"));
+
+  assert.ok(!proxyFailurePage(new TypeError("fetch failed"), "rating service", "GET", '/admin"><script>').html.includes("<script>"), "the address is escaped");
 });

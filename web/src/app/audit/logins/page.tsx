@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { Empty, RowLink, Section, when as whenAt } from "@/components/ui";
 import { listAccessRequests, type AccessRequestRow } from "@/lib/access-request-store";
+import { mailtoHref } from "@/lib/access-requests";
 import { loginReport } from "@/lib/login-events";
-import { browserLabel, place, shortIp, type LoginEvent, type UserSummary } from "@/lib/login-meta";
+import { browserLabel, languageTag, place, shortIp, type LoginEvent, type UserSummary } from "@/lib/login-meta";
 import { iso, whenShort } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
@@ -85,7 +86,7 @@ function EventsTable({ events }: { events: LoginEvent[] }) {
             <td className="px-2 py-2 text-xs text-slate-600">{e.geo?.isp ?? "—"}</td>
             <td className="px-2 py-2 text-xs text-slate-600">{e.edge_region ?? "—"}</td>
             <td className="px-2 py-2 text-xs text-slate-600" title={e.user_agent ?? ""}>{browserLabel(e.user_agent) || "—"}</td>
-            <td className="px-2 py-2 text-xs text-slate-600">{e.accept_language?.split(",")[0] ?? "—"}</td>
+            <td className="px-2 py-2 text-xs text-slate-600">{languageTag(e.accept_language) || "—"}</td>
           </tr>
         ))}
       </tbody>
@@ -108,7 +109,7 @@ function AccessRequestsTable({ requests }: { requests: AccessRequestRow[] }) {
           <tr key={r.id} className="border-t border-slate-100">
             <td className="whitespace-nowrap px-4 py-2 text-slate-600"><Stamp at={r.created_at} /></td>
             <td className="px-2 py-2 font-medium text-slate-900">{r.name}</td>
-            <td className="px-2 py-2"><a href={`mailto:${r.email}`} className="text-indigo-600 hover:underline">{r.email}</a></td>
+            <td className="px-2 py-2"><a href={mailtoHref(r.email)} className="text-indigo-600 hover:underline">{r.email}</a></td>
             <td className="px-2 py-2 text-slate-600">{r.company || "—"}</td>
             <td className="whitespace-nowrap px-2 py-2 text-slate-600"><Address ip={r.ip} /></td>
             <td className="px-2 py-2 text-xs">{r.emailed_at
@@ -129,6 +130,7 @@ export default async function LoginsPage({ searchParams }: { searchParams: Promi
   const [r, requests] = await Promise.all([loginReport({ windowHours: hours }), listAccessRequests()]);
   const recentUsers = r.last_24h.users.filter((u) => u.logins).length;
   const allUsers = r.all_time.users.filter((u) => u.logins).length;
+  const inWindow = r.last_24h.logins + r.last_24h.failures;
   return (
     <main className="mx-auto max-w-6xl p-8">
       <RowLink href="/audit">← Audit trail</RowLink>
@@ -155,7 +157,7 @@ export default async function LoginsPage({ searchParams }: { searchParams: Promi
       <div className="mt-6 space-y-6">
         <Section title={`Who signed in · last ${hours} hours`}><UsersTable users={r.last_24h.users} /></Section>
         <Section title={`Access requests · ${requests.length}${requests.length === 50 ? " newest" : ""}`}><AccessRequestsTable requests={requests} /></Section>
-        <Section title={`Every attempt · last ${hours} hours`}><EventsTable events={r.last_24h.events} /></Section>
+        <Section title={`Every attempt · last ${hours} hours${inWindow > r.last_24h.events.length ? ` (newest ${num(r.last_24h.events.length)} of ${num(inWindow)})` : ""}`}><EventsTable events={r.last_24h.events} /></Section>
         <Section title="Who has signed in · all time">
           <UsersTable users={r.all_time.users} />
           {r.never_signed_in.length > 0 && <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">Never signed in: {r.never_signed_in.join(", ")}</p>}

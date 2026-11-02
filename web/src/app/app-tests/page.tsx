@@ -87,7 +87,7 @@ function uatTotals(a: AgentView) {
 }
 
 function AgentCard({ a, selected, now }: { a: AgentView; selected: boolean; now: number }) {
-  const r = a.report;
+  const last = a.latest;
   const uat = a.info.key === "uat" ? uatTotals(a) : null;
   return (
     <Link href={`/app-tests?agent=${a.info.key}#findings`} aria-current={selected ? "true" : undefined}
@@ -102,7 +102,7 @@ function AgentCard({ a, selected, now }: { a: AgentView; selected: boolean; now:
           <div><span className={`text-2xl font-semibold tabular-nums ${uat.failed ? "text-rose-700" : "text-emerald-700"}`}>{uat.passed}</span>
             <span className="ml-1 text-xs text-slate-500">passed · {uat.failed} failed</span></div>
         ) : (
-          <div><span className="text-2xl font-semibold tabular-nums text-slate-900">{a.open.length}</span><span className="ml-1 text-xs text-slate-500">open</span></div>
+          <div><span className="text-2xl font-semibold tabular-nums text-slate-900">{last?.open ?? a.open.length}</span><span className="ml-1 text-xs text-slate-500">open</span></div>
         )}
         <div><span className="text-2xl font-semibold tabular-nums text-emerald-700">{a.resolved.length}</span><span className="ml-1 text-xs text-slate-500">resolved</span></div>
       </div>
@@ -112,7 +112,7 @@ function AgentCard({ a, selected, now }: { a: AgentView; selected: boolean; now:
           : a.openBySeverity.map((s) => <Severity key={s.severity} s={s.severity} count={s.count} />)}
       </div>
       <p className="mt-auto pt-3 text-xs text-slate-500">
-        {r?.runAt ? <>Last run <Stamp at={r.runAt} /> · {ago(r.runAt, now)}{r.commit && <> · <Commit sha={r.commit} /></>}</> : "No report yet"}
+        {last?.runAt ? <>Last run <Stamp at={last.runAt} /> · {ago(last.runAt, now)}{last.commit && <> · <Commit sha={last.commit} /></>}</> : "No report yet"}
         <span className="block">{a.runs.length} run{a.runs.length === 1 ? "" : "s"} recorded</span>
       </p>
     </Link>
@@ -184,6 +184,7 @@ function Findings({ a, mockups }: { a: AgentView; mockups: Set<string> }) {
         <div className="flex items-center gap-4 text-sm">
           <span className="text-xs text-slate-500">Runs with <code className="rounded bg-slate-100 px-1">{a.info.command}</code></span>
           {r && <Link href={`/app-tests/${a.info.key}`} className="text-indigo-600 hover:underline">Full report →</Link>}
+          {a.reportWithheld && <span className="text-xs text-slate-500">The full {a.info.name.toLowerCase()} report stays in the repository.</span>}
         </div>
       </div>
       {r?.headline && <p className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">

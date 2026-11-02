@@ -93,7 +93,7 @@
       </details>
     </nav>
     <form action="/search"><input name="q" placeholder="Search insureds, SUB-, Q-, GL-…" aria-label="Search"></form>
-    {% if request.headers.get("x-uw-user") %}<span class="who"><span>Signed in as <b style="color:var(--ink)">{{ request.headers.get("x-uw-user")[:60] }}</b></span><form method="post" action="/signout"><button>Sign out</button></form></span>{% endif %}
+    {% if request.headers.get("x-uw-user") %}<span class="who"><span>Signed in as <b style="color:var(--ink)">{{ request.headers.get("x-uw-user")|uw_user }}</b></span><form method="post" action="/signout"><button>Sign out</button></form></span>{% endif %}
   </header>
   {% else %}
   <header>

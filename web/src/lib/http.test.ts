@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addressedToUs, configuredOrigin, configuredOrigins, contentDisposition, firstParams, requestOrigin, safeReturnPath, sameOrigin } from "./http.ts";
+import { addressedToUs, configuredOrigin, configuredOrigins, contentDisposition, firstParams, requestOrigin, safeNextPath, safeReturnPath, sameOrigin } from "./http.ts";
 
 test("a repeated query parameter counts as its first value (CR-056)", () => {
   const p = firstParams<{ q?: string; actor?: string; all?: string }>({ q: ["a", "b"], actor: "x" });
@@ -13,6 +13,25 @@ test("non-Latin-1 filenames are header-safe (CR-002)", () => {
   const value = contentDisposition('Submission – ACME "final".pdf', "inline");
   assert.equal(value, `inline; filename="Submission _ ACME final.pdf"; filename*=UTF-8''Submission%20%E2%80%93%20ACME%20%22final%22.pdf`);
   assert.doesNotThrow(() => new Response("x", { headers: { "Content-Disposition": value } }));
+});
+
+test("the RFC 8187 name percent-encodes its delimiters too (CR-063)", () => {
+  const value = contentDisposition("O'Brien (final)*!.pdf", "attachment");
+  assert.ok(value.endsWith("filename*=UTF-8''O%27Brien%20%28final%29%2A%21.pdf"), value);
+  assert.ok(value.includes(`filename="O'Brien (final)*!.pdf"`), value);
+  assert.doesNotThrow(() => new Response("x", { headers: { "Content-Disposition": value } }));
+});
+
+test("after sign-in, only a local path: no trick a URL parser would turn into another host (CR-116)", () => {
+  for (const hostile of ["/\t/evil.example", "/\n/evil.example", "/\r/evil.example", "/\t\\evil.example", "//evil.example", "/\\evil.example", "///evil.example",
+    "/.//evil.example", "/..//evil.example", "/a/../..//evil.example", "/./\t/evil.example", "https://evil.example/", "http://local/quotes", "javascript:alert(1)", "evil.example", "\t//evil.example", "", null, undefined]) {
+    assert.equal(safeNextPath(hostile), "/", JSON.stringify(hostile));
+  }
+  for (const loop of ["/signin", "/signin?next=/x", "/./signin", "/signout/../signin"]) assert.equal(safeNextPath(loop), "/", loop);
+  assert.equal(safeNextPath("/quotes?status=issued"), "/quotes?status=issued");
+  assert.equal(safeNextPath("/audit?submission=abc&correlation=x#top"), "/audit?submission=abc&correlation=x#top");
+  assert.equal(safeNextPath("/foo//bar"), "/foo//bar");
+  assert.equal(safeNextPath("/"), "/");
 });
 
 test("return path after a header form stays local (CR-007)", () => {

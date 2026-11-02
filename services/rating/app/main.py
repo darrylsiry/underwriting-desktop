@@ -3,6 +3,7 @@ import uuid
 from contextlib import asynccontextmanager
 from decimal import Decimal
 from typing import Annotated, Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -275,10 +276,19 @@ def _real_time(name: str, value: str | None) -> None:
         raise HTTPException(status_code=422, detail=f"{name} is not a real date and time: {value}") from None
 
 
+def _zone(tz: str = Query("UTC", pattern=_TZ)) -> str:
+    """A zone Postgres can use: an unknown name is the caller's error, not a 500 from AT TIME ZONE (CR-094)."""
+    try:
+        ZoneInfo(tz)
+    except (ZoneInfoNotFoundError, ValueError, OSError) as err:
+        raise HTTPException(422, f"Unknown time zone: {tz}") from err
+    return tz
+
+
 @app.get("/rate-table-audit", response_model=list[RateTableAuditEntry])
 def rate_table_audit(version_id: int | None = None, limit: int = Query(200, ge=1, le=1000),
                      since: str | None = Query(None, pattern=_WALL), until: str | None = Query(None, pattern=_WALL),
-                     tz: str = Query("UTC", pattern=_TZ), before: str | None = Query(None, pattern=_INSTANT)):
+                     tz: str = Depends(_zone), before: str | None = Query(None, pattern=_INSTANT)):
     """Rate-table changes, newest first; `since`/`until` are wall-clock bounds in `tz` (UX-044),
     `before` an exclusive instant the audit trail pages by (CR-095)."""
     for name, value in (("since", since), ("until", until), ("before", before)):
@@ -289,7 +299,7 @@ def rate_table_audit(version_id: int | None = None, limit: int = Query(200, ge=1
 @app.get("/ratings", response_model=list[RatingSummary])
 def list_ratings(reference_prefix: str | None = None, limit: int = Query(200, ge=1, le=1000),
                  since: str | None = Query(None, pattern=_WALL), until: str | None = Query(None, pattern=_WALL),
-                 tz: str = Query("UTC", pattern=_TZ), before: str | None = Query(None, pattern=_INSTANT)):
+                 tz: str = Depends(_zone), before: str | None = Query(None, pattern=_INSTANT)):
     """Rating calls, newest first: who rated what, on which rate version, for which reference (SUB-/Q-).
     `reference_prefix` is one whole reference, with or without what follows it after a space (CR-045).
     `since`/`until` are wall-clock bounds in `tz` (UX-044), `before` an exclusive instant the audit trail pages by (CR-095)."""

@@ -163,6 +163,10 @@ export type AgentView = {
   declined: LedgerItem[];
   accepted: LedgerItem[];
   runs: LedgerRun[];
+  /** The latest run for the card: from the report on disk, or the ledger's record of it when this copy has no report file. */
+  latest: { runAt: string | null; commit: string | null; open: number } | null;
+  /** This agent's full report stays in the repository and this copy doesn't have it (CR-097). */
+  reportWithheld: boolean;
   openBySeverity: { severity: string; count: number }[];
   /** Fix commits that landed after the latest run for items it still lists: the next run will check them. */
   pendingFixes: Record<string, LedgerCommit[]>;
@@ -193,18 +197,22 @@ export function activityView(stored: Ledger, reports: Partial<Record<AgentKey, P
     const open = mine.filter((i) => i.status === "open")
       .sort((a, b) => severityRank(info, a.severity) - severityRank(info, b.severity) || idNumber(a.id) - idNumber(b.id));
     const byClosed = (a: LedgerItem, b: LedgerItem) => (b.closedAt ?? "").localeCompare(a.closedAt ?? "") || idNumber(a.id) - idNumber(b.id);
+    const runs = l.runs.filter((x) => x.agent === info.key);
+    const lastRun = runs.at(-1);
+    const latest = report ? { runAt: report.runAt, commit: report.commit, open: open.length }
+      : lastRun ? { runAt: lastRun.runAt, commit: lastRun.commit, open: lastRun.open } : null;
     const pendingFixes: Record<string, LedgerCommit[]> = {};
-    const runAt = report?.runAt ?? null;
+    const runAt = latest?.runAt ?? null;
     if (runAt) for (const i of open) {
       const later = i.commits.filter((c) => c.date > runAt && !isReportRefresh(c.subject));
       if (later.length) pendingFixes[i.key] = later;
     }
     return {
-      info, report, open, pendingFixes,
+      info, report, open, pendingFixes, runs, latest,
+      reportWithheld: !report && !!info.repositoryOnly,
       resolved: mine.filter((i) => i.status === "resolved").sort(byClosed),
       declined: mine.filter((i) => i.status === "declined").sort(byClosed),
       accepted: mine.filter((i) => i.status === "accepted").sort(byClosed),
-      runs: l.runs.filter((x) => x.agent === info.key),
       openBySeverity: info.severities.map((severity) => ({ severity, count: open.filter((i) => i.severity === severity).length })).filter((s) => s.count),
     };
   });

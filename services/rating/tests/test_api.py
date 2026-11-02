@@ -56,6 +56,22 @@ def test_a_non_ascii_bearer_token_is_refused_not_a_crash(client, monkeypatch):
     assert client.get(f"/ratings/{res.json()['rating_id']}").json()["requested_by"] == "anonymous"
 
 
+def test_acting_user_is_percent_decoded(client):
+    """CR-072: the web app percent-encodes the name, so a name outside Latin-1 fits in the header."""
+    res = client.post("/rate", json=ELECTRICAL, headers={"x-uw-user": "%C5%81ukasz%20K%0D%0A"})
+    assert client.get(f"/ratings/{res.json()['rating_id']}").json()["requested_by"] == "Łukasz K"
+
+
+def test_unknown_time_zone_is_refused_not_a_500(client):
+    """CR-094: the pattern lets a misspelt zone through; it must not reach AT TIME ZONE."""
+    for path in ("/ratings", "/rate-table-audit"):
+        assert client.get(path, params={"tz": "Not/AZone"}).status_code == 422
+        assert client.get(path, params={"tz": "America/NewYork", "since": "2026-01-01"}).status_code == 422
+        assert client.get(path, params={"tz": "America"}).status_code == 422
+        assert client.get(path, params={"tz": "America/New_York"}).status_code == 200
+        assert client.get(path).status_code == 200
+
+
 def test_rated_at_backdates_the_log_entry(client):
     res = client.post("/rate", json=ELECTRICAL | {"reference": "SUB-0099", "rated_at": "2026-03-30T18:13:00Z"})
     assert res.status_code == 200, res.text

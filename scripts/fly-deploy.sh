@@ -144,10 +144,11 @@ step "Deploy web (public)"
 find "$ROOT/web/inbox" -mindepth 1 ! -name .gitkeep -exec rm -rf {} +
 cp -R "$ROOT/samples/submissions/." "$ROOT/web/inbox/"
 # App Tests (step 26) reads the review agents' reports and their ledger; on Fly they are baked into the
-# web image from docs/, so the page shows what was committed when this deploy ran.
+# web image from docs/, so the page shows what was committed when this deploy ran. Not the security
+# report: its reproduction steps stay in the repository, and the ledger carries its findings (CR-097).
 find "$ROOT/web/agent-reports" -mindepth 1 ! -name .gitkeep -exec rm -rf {} +
 mkdir -p "$ROOT/web/agent-reports/ux-mockups"
-for f in CODE_REVIEW.md SECURITY_REVIEW.md UX_REVIEW.md UAT_REPORT.md AGENT_LEDGER.json; do
+for f in CODE_REVIEW.md UX_REVIEW.md UAT_REPORT.md AGENT_LEDGER.json; do
   if [ -f "$ROOT/docs/$f" ]; then cp "$ROOT/docs/$f" "$ROOT/web/agent-reports/"; fi
 done
 find "$ROOT/docs/ux-mockups" -maxdepth 1 -name 'UX-*.html' -exec cp {} "$ROOT/web/agent-reports/ux-mockups/" \; 2>/dev/null || true

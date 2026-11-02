@@ -43,7 +43,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO we
 -- Evidence tables: add rows, read rows, and change only the columns a later step fills in.
 REVOKE UPDATE, DELETE, TRUNCATE ON audit_events, gl_postings, login_events FROM web_app;
 GRANT UPDATE (export_batch, exported_at, exported_by) ON gl_postings TO web_app;
-GRANT UPDATE (geo, geo_source) ON login_events TO web_app;
+GRANT UPDATE (geo, geo_source, geo_attempts) ON login_events TO web_app;
 REVOKE ALL ON schema_migrations FROM web_app;
 GRANT SELECT ON schema_migrations TO web_app;
 
