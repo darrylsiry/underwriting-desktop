@@ -57,12 +57,20 @@ async function ratingPost<T>(path: string, body: unknown, actor?: string): Promi
   return JSON.parse(text) as T;
 }
 
-/** The rating service's id for a rate version label ("2026.1"), or null if it has no such version. */
-export async function rateVersionId(label: string): Promise<number | null> {
+export type RateVersion = {
+  id: number; label: string; status: string; notes: string; created_by: string; created_at: string; activated_at: string | null; based_on: number | null;
+};
+
+/** Every rate version the rating service holds. */
+export async function listRateVersions(): Promise<RateVersion[]> {
   const res = await fetch(`${RATING_SERVICE_URL}/rate-versions`, { cache: "no-store", signal: AbortSignal.timeout(RATING_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`Rating service returned ${res.status} listing rate versions`);
-  const versions: { id: number; label: string }[] = await res.json();
-  return versions.find((v) => v.label === label)?.id ?? null;
+  return res.json();
+}
+
+/** The rating service's id for a rate version label ("2026.1"), or null if it has no such version. */
+export async function rateVersionId(label: string): Promise<number | null> {
+  return (await listRateVersions()).find((v) => v.label === label)?.id ?? null;
 }
 
 /**

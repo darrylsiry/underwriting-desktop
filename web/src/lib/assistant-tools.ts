@@ -3,6 +3,7 @@
 // trail, rate tables, the inbox), each answering with the URLs of the records it names so the
 // assistant can link its answers. Everyone is treated as an admin: nothing is filtered by user.
 import type Anthropic from "@anthropic-ai/sdk";
+import { auditSearch } from "./assistant-audit.ts";
 import { LOSS_RATIO_BASIS, teamSummary } from "./book-metrics.ts";
 import { daysUntil, loadDashboard } from "./dashboard";
 import { customerDb, policyDb } from "./db";
@@ -15,10 +16,9 @@ import { getQuote, listQuotes, quoteVersions, quotesForSubmission, type QuoteRow
 import { expiringOf, getBookPolicy } from "./renewals";
 import { search } from "./search";
 import { parseQuery } from "./search-terms";
-import { RATING_SERVICE_URL } from "./services";
+import { listRateVersions } from "./rating-api";
 import { getSubmission, submissionIdsReceivedBy } from "./submissions";
 import { loadTimeline } from "./timeline";
-import { applyFilters } from "./timeline-merge";
 import { activeRateVersion, flagsFor, getWorksheet, readiness } from "./worksheets";
 
 export type AssistantContext = { actor: string; origin: string; today: string };
@@ -55,11 +55,6 @@ async function submissionIdFor(ref: string): Promise<string | null> {
   const { rows } = await customerDb.query<{ id: string }>("SELECT id FROM submissions WHERE upper(reference) = upper($1)", [ref]);
   return rows[0]?.id ?? null;
 }
-
-const entityUrl = (type: string, id: string) => ({
-  submission: `/submissions/${id}`, quote: `/quotes/${id}`, policy: `/policies/${id}`, insured: `/insureds/${id}`,
-  book_policy: `/policies/book/${id}`, ledger: `/accounting?batch=${id}`, rate_version: `/admin/versions/${id}`,
-} as Record<string, string>)[type] ?? `/audit?q=${encodeURIComponent(id)}`;
 
 const UNDERWRITER = { type: "string", description: "An underwriter's login (underwriter1 … underwriter9). Leave out for everyone." };
 
@@ -316,31 +311,20 @@ export const APP_TOOLS: AppTool[] = [
   })),
   {
     name: "audit_search",
-    description: "The audit trail across the UW Desktop, the rating engine and the rate tables: who did what and when. Filter by free text, actor, entity type (submission, quote, policy, insured, rate_version, rating, ledger), dates, or one submission's case history. Use for 'who changed', 'when was', 'what happened to' questions.",
+    description: "The audit trail across the UW Desktop, the rating engine and the rate tables: who did what and when. Filter by free text, actor, entity type (submission, quote, policy, insured, rate_version, rating, ledger), dates, or one submission's case history. Use for 'who changed', 'when was', 'what happened to' questions. Each source returns its newest 500 rows: when capped is true the history was cut at oldest_loaded_at, so say so rather than reporting that nothing happened, and narrow from/to to look further back.",
     input_schema: { type: "object", properties: {
       q: { type: "string", description: "Text to look for in summaries and references" }, actor: { type: "string" },
       entity_type: { type: "string", enum: ["submission", "quote", "policy", "insured", "rate_version", "rating", "ledger", "book_policy"] },
       submission_id: { type: "string", description: "Only this submission's case history (id or SUB- reference)" },
       from: { type: "string", description: "YYYY-MM-DD" }, to: { type: "string", description: "YYYY-MM-DD" }, limit: { type: "integer", description: "Default 50, max 200" } } },
-    run: async (a) => {
-      const subId = str(a.submission_id) ? await submissionIdFor(str(a.submission_id)) : undefined;
-      const t = await loadTimeline(subId ?? undefined);
-      const events = applyFilters(t.events, { q: str(a.q) || undefined, actor: str(a.actor) || undefined, entityType: str(a.entity_type) || undefined, from: str(a.from) || undefined, to: str(a.to) || undefined }).slice(0, int(a.limit, 50));
-      return {
-        scope: t.scope, warnings: t.warnings, count: events.length,
-        events: events.map((e) => ({ at: e.at, source: e.source, actor: e.actor, action: e.action, entity: `${e.entityType} ${t.labels.get(`${e.entityType}:${e.entityId}`) ?? e.entityLabel ?? e.entityId}`, summary: e.summary, url: entityUrl(e.entityType, e.entityId), correlation_id: e.correlationId })),
-        audit_url: subId ? `/audit?submission=${subId}` : "/audit",
-      };
-    },
+    run: (a) => auditSearch(a, { submissionIdFor, loadTimeline }),
   },
   {
     name: "rate_versions",
     description: "The rate tables: every rate version (label, status active/draft/retired, when activated, notes) and which one new ratings use.",
     input_schema: { type: "object", properties: {} },
     run: async () => {
-      const res = await fetch(`${RATING_SERVICE_URL}/rate-versions`, { cache: "no-store", signal: AbortSignal.timeout(8000) });
-      if (!res.ok) return { error: `Rating service answered ${res.status}` };
-      const versions = (await res.json()) as { id: number; label: string; status: string; notes: string; created_by: string; created_at: string; activated_at: string | null; based_on: number | null }[];
+      const versions = await listRateVersions();
       return { active: versions.find((v) => v.status === "active")?.label ?? null, versions: versions.map((v) => ({ ...v, url: `/admin/versions/${v.id}` })), rate_tables_url: "/admin" };
     },
   },

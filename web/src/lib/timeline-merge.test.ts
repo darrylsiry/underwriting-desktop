@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyFilters, changes, display, fromDesktop, fromRateAdmin, fromRating, groupByCorrelation, merge } from "./timeline-merge.ts";
+import { applyFilters, changes, display, fromDesktop, fromRateAdmin, fromRating, groupByCorrelation, isSubmissionId, merge, onPage, pageEnd, type TimelineEvent } from "./timeline-merge.ts";
 
 const desktop = (id: number, at: string, correlation: string, action = "submission.field_corrected") => fromDesktop({
   id, occurred_at: new Date(at), actor: "pat", action, entity_type: "submission", entity_id: "s1",
@@ -65,4 +65,70 @@ test("from/to bucket days in the display zone, not UTC", () => {
   assert.equal(applyFilters(lateOct31Eastern, { from: "2026-10-31", to: "2026-10-31" }, "America/New_York").length, 1);
   assert.equal(applyFilters(lateOct31Eastern, { from: "2026-11-01" }, "America/New_York").length, 0);
   assert.equal(applyFilters(lateOct31Eastern, { from: "2026-11-01" }, "UTC").length, 1);
+});
+
+test("only a whole uuid is looked up as a submission (CR-018)", () => {
+  assert.equal(isSubmissionId("0f8fad5b-d9cb-469f-a165-70867728950e"), true);
+  for (const bad of ["junk", "", "-".repeat(36), "0f8fad5b-d9cb-469f-a165-70867728950"]) assert.equal(isSubmissionId(bad), false, bad);
+});
+
+// CR-095: walk a timeline page by page, each source returning its newest LIMIT rows under the cursor, as the queries do.
+const rated = (i: number, at: number): TimelineEvent => fromRating({ id: `r${i}`, created_at: new Date(at).toISOString(), requested_by: "pat", reference: null, rate_version: "1", class_code: null, premium: null, total: null });
+const desk = (i: number, at: number): TimelineEvent => fromDesktop({ id: i, occurred_at: new Date(at), actor: "pat", action: "a", entity_type: "quote", entity_id: "q", summary: "", before: null, after: null, correlation_id: "c" });
+
+function walk(all: { label: string; events: TimelineEvent[] }[], limit: number) {
+  const pages: { keys: string[]; cappedBy: string[] }[] = [];
+  let before: string | null = null;
+  for (let guard = 0; guard < 100; guard++) {
+    const top = before;
+    const sources = all.map((s) => ({
+      label: s.label,
+      events: s.events.filter((e) => !top || Date.parse(e.at) < Date.parse(top)).sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, limit),
+    }));
+    const { cappedBy, cursor } = pageEnd(sources, limit, before);
+    pages.push({ keys: onPage(sources.flatMap((s) => s.events), cursor, before).map((e) => e.key), cappedBy });
+    if (!cursor) return pages;
+    before = cursor;
+  }
+  throw new Error("paging did not finish");
+}
+
+test("paging: no row repeats and none falls between pages, whichever source hits the cap (CR-095)", () => {
+  const start = Date.parse("2026-01-01T00:00:00Z");
+  const minutes = (n: number) => start + n * 60_000;
+  const all = [
+    // The rating engine is busy and recent; the desk is sparse and reaches much further back.
+    { label: "Rating engine", events: Array.from({ length: 23 }, (_, i) => rated(i, minutes(1000 + i))) },
+    { label: "UW Desktop", events: [desk(1, minutes(1010)), desk(2, minutes(300)), desk(3, minutes(200)), desk(4, minutes(100))] },
+  ];
+  const pages = walk(all, 5);
+  const keys = pages.flatMap((p) => p.keys);
+  assert.equal(new Set(keys).size, keys.length, "a row repeated across pages");
+  assert.deepEqual([...keys].sort(), all.flatMap((s) => s.events.map((e) => e.key)).sort(), "a row was lost between pages");
+  assert.deepEqual(pages[0].cappedBy, ["Rating engine"], "the notice names the source that hit the cap");
+  assert.equal(pages.at(-1)?.cappedBy.length, 0);
+});
+
+test("paging: rows sharing the cut's exact time stay together on the next page (CR-095)", () => {
+  const t = Date.parse("2026-03-01T12:00:00Z");
+  const all = [{ label: "UW Desktop", events: [desk(1, t + 2000), desk(2, t + 1000), desk(3, t), desk(4, t), desk(5, t), desk(6, t - 1000)] }];
+  const pages = walk(all, 3);
+  const keys = pages.flatMap((p) => p.keys);
+  assert.equal(new Set(keys).size, 6);
+  assert.equal(keys.length, 6);
+  const page = (key: string) => pages.findIndex((p) => p.keys.includes(key));
+  assert.equal(page("d-3"), page("d-4"));
+  assert.equal(page("d-4"), page("d-5"));
+});
+
+test("paging: a page that all shares one instant still moves on (CR-095)", () => {
+  const t = Date.parse("2026-03-01T12:00:00Z");
+  const pages = walk([{ label: "UW Desktop", events: [desk(1, t), desk(2, t), desk(3, t), desk(4, t - 1000)] }], 3);
+  assert.deepEqual(pages.flatMap((p) => p.keys).sort(), ["d-1", "d-2", "d-3", "d-4"]);
+});
+
+test("a page under the cap in every source is the last, and cuts nothing (CR-095)", () => {
+  const events = [desk(1, Date.parse("2026-01-01T00:00:00Z")), desk(2, Date.parse("2026-02-01T00:00:00Z"))];
+  assert.deepEqual(pageEnd([{ label: "UW Desktop", events }, { label: "Rating engine", events: [] }], 500), { cappedBy: [], cursor: null });
+  assert.equal(onPage(events, null, null).length, 2);
 });

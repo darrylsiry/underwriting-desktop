@@ -179,6 +179,7 @@ def activate(version_id: int, req: Activation, request: Request):
 
 _WALL = r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?)?$"   # a wall-clock timestamp, no zone (UX-044)
 _TZ = r"^[A-Za-z_]+(/[A-Za-z_+\-0-9]+)*$"
+_INSTANT = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$"   # an exact moment, zone included (CR-095)
 
 
 def _real_time(name: str, value: str | None) -> None:
@@ -194,19 +195,20 @@ def _real_time(name: str, value: str | None) -> None:
 @app.get("/rate-table-audit")
 def rate_table_audit(version_id: int | None = None, limit: int = Query(200, ge=1, le=1000),
                      since: str | None = Query(None, pattern=_WALL), until: str | None = Query(None, pattern=_WALL),
-                     tz: str = Query("UTC", pattern=_TZ)):
-    """Rate-table changes, newest first; `since`/`until` are wall-clock bounds in `tz` (UX-044)."""
-    _real_time("since", since)
-    _real_time("until", until)
-    return repository.audit_trail(version_id, limit, since, until, tz)
+                     tz: str = Query("UTC", pattern=_TZ), before: str | None = Query(None, pattern=_INSTANT)):
+    """Rate-table changes, newest first; `since`/`until` are wall-clock bounds in `tz` (UX-044),
+    `before` an exclusive instant the audit trail pages by (CR-095)."""
+    for name, value in (("since", since), ("until", until), ("before", before)):
+        _real_time(name, value)
+    return repository.audit_trail(version_id, limit, since, until, tz, before)
 
 
 @app.get("/ratings")
 def list_ratings(reference_prefix: str | None = None, limit: int = Query(200, ge=1, le=1000),
                  since: str | None = Query(None, pattern=_WALL), until: str | None = Query(None, pattern=_WALL),
-                 tz: str = Query("UTC", pattern=_TZ)):
+                 tz: str = Query("UTC", pattern=_TZ), before: str | None = Query(None, pattern=_INSTANT)):
     """Rating calls, newest first: who rated what, on which rate version, for which reference (SUB-/Q-).
-    `since`/`until` are wall-clock bounds in `tz` (UX-044)."""
-    _real_time("since", since)
-    _real_time("until", until)
-    return repository.list_ratings(reference_prefix, limit, since, until, tz)
+    `since`/`until` are wall-clock bounds in `tz` (UX-044), `before` an exclusive instant the audit trail pages by (CR-095)."""
+    for name, value in (("since", since), ("until", until), ("before", before)):
+        _real_time(name, value)
+    return repository.list_ratings(reference_prefix, limit, since, until, tz, before)

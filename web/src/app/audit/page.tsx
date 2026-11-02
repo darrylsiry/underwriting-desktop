@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { RowLink, when } from "@/components/ui";
+import { firstParams, type RawParams } from "@/lib/http";
 import { getSubmission } from "@/lib/submissions";
-import { DISPLAY_TIME_ZONE } from "@/lib/time";
+import { DISPLAY_TIME_ZONE, isIsoDate } from "@/lib/time";
 import { loadTimeline } from "@/lib/timeline";
-import { applyFilters, changes, display, groupByCorrelation, type TimelineEvent } from "@/lib/timeline-merge";
+import { applyFilters, changes, display, groupByCorrelation, isSubmissionId, type TimelineEvent } from "@/lib/timeline-merge";
 
 export const dynamic = "force-dynamic";
 
@@ -32,15 +33,17 @@ function entityHref(e: TimelineEvent): string | null {
 }
 
 // UX-010: "Case history SUB-0003" for one file, "Audit" for everything.
-export async function generateMetadata({ searchParams }: { searchParams: Promise<Params> }): Promise<Metadata> {
-  const { submission } = await searchParams;
-  const sub = submission ? await getSubmission(submission) : null;
+export async function generateMetadata({ searchParams }: { searchParams: Promise<RawParams<Params>> }): Promise<Metadata> {
+  const { submission } = firstParams<Params>(await searchParams);
+  const sub = submission && isSubmissionId(submission) ? await getSubmission(submission) : null;
   return { title: sub ? `Case history ${sub.reference}` : "Audit" };
 }
 
-export default async function AuditPage({ searchParams }: { searchParams: Promise<Params> }) {
-  const params = await searchParams;
-  const { events: all, labels, warnings, scope, capped, oldestDesktopAt } = await loadTimeline(params.submission, params);
+export default async function AuditPage({ searchParams }: { searchParams: Promise<RawParams<Params>> }) {
+  const raw = firstParams<Params>(await searchParams);
+  // A date that isn't on the calendar counts as not given (CR-068).
+  const params: Params = { ...raw, from: isIsoDate(raw.from) ? raw.from : undefined, to: isIsoDate(raw.to) ? raw.to : undefined };
+  const { events: all, labels, warnings, scope, capped, cappedBy, olderCursor } = await loadTimeline(params.submission, params);
   const withoutBefore = Object.fromEntries(Object.entries(params).filter(([k, v]) => v && k !== "before")) as Record<string, string>;
   const events = applyFilters(all, params);
   const groups = groupByCorrelation(events);
@@ -110,11 +113,11 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
       )}
       <p className="mt-4 text-xs text-slate-500">
         Showing {events.length} of {all.length} loaded events · {counts.map(([s, n]) => `${SOURCES[s].label} ${n}`).join(" · ")} · times in {DISPLAY_TIME_ZONE.replace("_", " ")}
-        {/* UX-044 / UX-048: say when the newest-500 cap (by time) bit, and offer the page before that instant. */}
-        {capped && oldestDesktopAt && (
+        {/* UX-044 / UX-048 / CR-095: say when a source's newest-500 cap (by time) bit, which one, and offer the page before that instant. */}
+        {capped && (
           <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-amber-800">
-            UW Desktop shows its newest 500 by time; everything before {when(oldestDesktopAt)} continues on the next page.
-            <Link href={`/audit?${new URLSearchParams({ ...withoutBefore, before: oldestDesktopAt })}`} className="ml-2 font-medium text-indigo-700 hover:underline">Older →</Link>
+            {cappedBy.join(" and ")} reached the limit of 500 rows{olderCursor ? <>; everything before {when(olderCursor)} continues on the next page.</> : "; older rows of this case are not shown."}
+            {olderCursor && <Link href={`/audit?${new URLSearchParams({ ...withoutBefore, before: olderCursor })}`} className="ml-2 font-medium text-indigo-700 hover:underline">Older →</Link>}
           </span>
         )}
       </p>

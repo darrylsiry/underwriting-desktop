@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { when, whenDate } from "@/components/ui";
+import { firstParams, type RawParams } from "@/lib/http";
 import { listPolicies } from "@/lib/policies";
 import { submissionIdsReceivedBy } from "@/lib/submissions";
 import { iso } from "@/lib/time";
@@ -16,8 +17,8 @@ type Params = { underwriter?: string; in_force?: string; new_business?: string }
  * Bound policies. `?underwriter=<name>` keeps those from that underwriter's submissions; `&in_force=1` only those in force today;
  * `&new_business=1` the desk's New business tile: unexpired and not renewals.
  */
-export default async function PoliciesPage({ searchParams }: { searchParams: Promise<Params> }) {
-  const p = await searchParams;
+export default async function PoliciesPage({ searchParams }: { searchParams: Promise<RawParams<Params>> }) {
+  const p = firstParams<Params>(await searchParams);
   const underwriter = p.underwriter?.trim() || null;
   const inForce = p.in_force === "1";
   const newBusiness = p.new_business === "1";

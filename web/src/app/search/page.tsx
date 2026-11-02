@@ -4,21 +4,23 @@ import { redirect } from "next/navigation";
 import { StageChip } from "@/components/stage-chip";
 import { Empty, Pill, RowLink, Section, money, whenDate } from "@/components/ui";
 import { submissionStagesById } from "@/lib/dashboard";
+import { firstParams, type RawParams } from "@/lib/http";
 import { directHit, search } from "@/lib/search";
 import { parseQuery } from "@/lib/search-terms";
 
 export const dynamic = "force-dynamic";
 
-type Props = { searchParams: Promise<{ q?: string; all?: string }> };
+type Params = { q?: string; all?: string };
+type Props = { searchParams: Promise<RawParams<Params>> };
 
 // UX-010
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
-  const { q = "" } = await searchParams;
+  const { q = "" } = firstParams<Params>(await searchParams);
   return { title: q.trim() ? `Search: ${q.trim()}` : "Search" };
 }
 
 export default async function SearchPage({ searchParams }: Props) {
-  const { q = "", all } = await searchParams;
+  const { q = "", all } = firstParams<Params>(await searchParams);
   const query = parseQuery(q);
   const results = query ? await search(query) : null;
   const stages = results ? await submissionStagesById(results.submissions.map((x) => x.id)) : new Map();   // UX-034

@@ -85,6 +85,19 @@ def test_ratings_feed_honours_a_day_range(client):
     assert client.get("/ratings", params={"tz": "Not a zone;drop"}).status_code == 422
 
 
+def test_feeds_page_below_an_exact_instant(client):
+    """CR-095: `before` is exclusive and carries its zone, so a page's last row isn't repeated on the next."""
+    client.post("/rate", json=ELECTRICAL | {"reference": "Q-2026-8888 v1"})
+    family = {"reference_prefix": "Q-2026-8888"}
+    at = client.get("/ratings", params=family).json()[0]["created_at"]
+    assert client.get("/ratings", params=family | {"before": at}).json() == []
+    assert len(client.get("/ratings", params=family | {"before": "2999-01-01T00:00:00Z"}).json()) == 1
+    assert client.get("/rate-table-audit", params={"before": "1970-01-01T00:00:00+00:00"}).json() == []
+    assert client.get("/rate-table-audit", params={"before": "2999-01-01T00:00:00Z"}).status_code == 200
+    for bad in ("2026-02-30T00:00:00Z", "2026-01-01T00:00:00", "yesterday"):
+        assert client.get("/ratings", params={"before": bad}).status_code == 422, bad
+
+
 def test_feeds_refuse_a_date_that_is_not_on_the_calendar(client):
     """CR-068: it fits the pattern, so it used to reach the ::timestamp cast and come back as a 500."""
     assert client.get("/ratings", params={"since": "2026-02-30T00:00:00"}).status_code == 422

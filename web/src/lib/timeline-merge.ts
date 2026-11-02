@@ -68,6 +68,36 @@ export function merge(...lists: TimelineEvent[][]): TimelineEvent[] {
   return lists.flat().sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : a.key.localeCompare(b.key)));
 }
 
+const SUBMISSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A well-formed submission id: anything else would fail the uuid column's cast with a 500 (CR-018). */
+export const isSubmissionId = (s: string) => SUBMISSION_ID.test(s);
+
+/**
+ * Where one page of the timeline ends (CR-095). Each source returns its newest `limit` rows under
+ * the same upper bound, so a source that hit the limit may hold more, and it is complete only down
+ * to its oldest row. The page therefore stops at the youngest of those: above it every source is
+ * complete, and everything below it waits for the next page, so no row repeats or falls between
+ * pages. The cursor is 1 ms past that row, because rows bound together can share its exact time
+ * and the limit may have split them: they all go to the next page, whose bound is exclusive. Only
+ * if a whole page shares one instant, so that would not move on, does the cut fall on that instant.
+ */
+export function pageEnd(sources: { label: string; events: TimelineEvent[] }[], limit: number, before: string | null = null): { cappedBy: string[]; cursor: string | null } {
+  const capped = sources.filter((s) => s.events.length >= limit);
+  if (!capped.length) return { cappedBy: [], cursor: null };
+  const oldest = (events: TimelineEvent[]) => Math.min(...events.map((e) => Date.parse(e.at)));
+  const youngest = Math.max(...capped.map((s) => oldest(s.events)));
+  const stuck = before !== null && youngest + 1 >= Date.parse(before);
+  return { cappedBy: capped.map((s) => s.label), cursor: new Date(stuck ? youngest : youngest + 1).toISOString() };
+}
+
+/** The events of the page between `cursor` (inclusive) and `before` (exclusive). */
+export function onPage(events: TimelineEvent[], cursor: string | null, before: string | null): TimelineEvent[] {
+  const low = cursor ? Date.parse(cursor) : -Infinity;
+  const high = before ? Date.parse(before) : Infinity;
+  return events.filter((e) => { const at = Date.parse(e.at); return at >= low && at < high; });
+}
+
 export type Change = { field: string; before: unknown; after: unknown };
 
 /** Field-level changes between two audit snapshots (objects compared key by key, anything else as a whole). */
