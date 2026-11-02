@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { attention, fromInput, FIELD_DEFS, missingForRating, openAttention, type FieldMeta, type SubmissionData } from "./submission.ts";
+import { attention, fromInput, FIELD_DEFS, isIsoDate, missingForRating, normalizeFein, openAttention, type FieldMeta, type SubmissionData } from "./submission.ts";
 
 const complete = () => ({
   applicant: { state: "TX" },
@@ -32,4 +32,17 @@ test("intake dates must exist on the calendar", () => {
   const effective = FIELD_DEFS.find((d) => d.path === "policy.effective_date")!;
   assert.equal(fromInput(effective, "2028-02-29"), "2028-02-29");
   assert.throws(() => fromInput(effective, "2026-02-30"), /use YYYY-MM-DD/);
+});
+
+test("only real calendar dates pass (CR-019)", () => {
+  for (const d of ["2026-11-02", "2028-02-29", "2026-12-31"]) assert.equal(isIsoDate(d), true, d);
+  for (const d of ["2026-02-30", "2027-02-29", "2026-13-01", "2026-00-10", "2026-1-1", "12/1/2026", "0000-01-01", ""]) assert.equal(isIsoDate(d), false, d);
+});
+
+test("FEIN formatting variants are one FEIN (CR-040)", () => {
+  for (const raw of ["74-3810922", "743810922", " 74 3810922 ", "74.381.0922", "EIN 74-3810922"]) assert.equal(normalizeFein(raw), "74-3810922", raw);
+  assert.equal(normalizeFein(""), "");
+  assert.equal(normalizeFein("  "), "");
+  assert.equal(normalizeFein("applied for"), "applied for");
+  assert.equal(normalizeFein("74-38109"), "74-38109");   // not nine digits: not ours to reformat
 });

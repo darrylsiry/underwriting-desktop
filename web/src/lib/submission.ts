@@ -113,6 +113,13 @@ export function missingForRating(data: SubmissionData): string[] {
   return REQUIRED_FOR_RATING.filter((p) => missingRequired(p, getPath(data, p)));
 }
 
+/** A FEIN as NN-NNNNNNN whatever its punctuation, so one company is one insured (CR-040). Anything that isn't nine digits stays as typed. */
+export function normalizeFein(raw: string): string {
+  const text = raw.trim();
+  const digits = text.replace(/\D/g, "");
+  return digits.length === 9 ? `${digits.slice(0, 2)}-${digits.slice(2)}` : text;
+}
+
 /** Text shown in an input for a stored value. */
 export function toInput(type: FieldType, v: Value): string {
   if (isEmpty(v)) return "";
