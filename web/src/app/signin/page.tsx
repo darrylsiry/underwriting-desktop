@@ -26,7 +26,9 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
         <form action={signInAction} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <input type="hidden" name="next" value={next} />
           {p.signedout && <p className="mb-4 rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-700">You&apos;re signed out.</p>}
-          {p.error && <p className="mb-4 rounded bg-rose-50 px-3 py-2 text-sm text-rose-700">That user ID or password isn&apos;t right.</p>}
+          {p.error && <p className="mb-4 rounded bg-rose-50 px-3 py-2 text-sm text-rose-700">{p.error === "limited"
+            ? "Too many failed sign-ins from your network. Please try again in a few minutes."
+            : "That user ID or password isn't right."}</p>}
           <label className="block text-xs font-medium uppercase tracking-wide text-slate-500" htmlFor="username">User ID</label>
           <input id="username" name="username" autoComplete="username" autoFocus required defaultValue={p.username ?? ""}
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" />

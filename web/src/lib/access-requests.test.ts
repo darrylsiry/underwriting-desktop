@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ACCESS_REQUEST_TO, accessRequestEmail, readAccessRequest, throttled } from "./access-requests.ts";
+import { ACCESS_REQUEST_TO, accessRequestEmail, admission, LIMITS, mailtoHref, readAccessRequest } from "./access-requests.ts";
 import { describeMailError, sendMail, senderOf } from "./mailer.ts";
 
 const form = (o: Record<string, string>) => ({ get: (k: string) => o[k] ?? null });
@@ -11,7 +11,7 @@ test("a request needs a name and a plain email address; company is optional", ()
   assert.deepEqual(ok.input, { name: "Pat Lee", email: "pat.lee+uw@broker.example.com", company: "" });
   assert.deepEqual(Object.keys(readAccessRequest(form({})).errors).sort(), ["email", "name"]);
   for (const bad of ["pat", "pat@", "@x.com", "pat@x", "a b@x.com", "\"x\"@x.com", "pat@x.com, eve@evil.example", "pat@x.com;eve@evil.example",
-    "Pat <pat@x.com>", "pat(c)@x.com", "pat@-x.com"]) {
+    "Pat <pat@x.com>", "pat(c)@x.com", "pat@-x.com", "a?cc=b@c.com", "a&body=x@c.com", "a=b@c.com", "a%40b@c.com", "o'brien@c.com", "a/b@c.com"]) {
     assert.ok(readAccessRequest(form({ name: "Pat", email: bad })).errors.email, `refused: ${bad}`);
   }
 });
@@ -25,10 +25,28 @@ test("line breaks and control characters never reach a header; long values are c
   assert.ok(!/[\r\n]/.test(mail.subject));
 });
 
-test("the throttle: a few an hour from one address, a cap a day in all", () => {
-  assert.equal(throttled({ fromAddressLastHour: 2, lastDay: 29 }), null);
-  assert.match(throttled({ fromAddressLastHour: 3, lastDay: 3 }) ?? "", /last hour/);
-  assert.match(throttled({ fromAddressLastHour: 0, lastDay: 30 }) ?? "", /tomorrow/);
+test("the throttle: a few an hour from one network; past the day's emails a request is kept, not refused (CR-098)", () => {
+  const ip = "203.0.113.9";
+  const from = (n: number, a: string | null = ip) => Array<string | null>(n).fill(a);
+  assert.deepEqual(admission(ip, { addressesLastHour: from(2), emailsLastDay: 29 }), { refused: null, email: true });
+  const limited = admission(ip, { addressesLastHour: from(3), emailsLastDay: 3 });
+  assert.match(limited.refused ?? "", /last hour/);
+  assert.equal(limited.email, false);
+  assert.deepEqual(admission(ip, { addressesLastHour: from(40, "198.51.100.1"), emailsLastDay: 2 }), { refused: null, email: true }, "another sender doesn't count against this one");
+  assert.deepEqual(admission(ip, { addressesLastHour: [], emailsLastDay: LIMITS.emailsPerDay }), { refused: null, email: false }, "one sender filling the cap can't turn a real person away");
+});
+
+test("an IPv6 sender can't rotate through its /64 past the limit (CR-098)", () => {
+  const block = ["2600:1702:82d0:bcf::1", "2600:1702:82d0:bcf:aaaa::2", "2600:1702:82d0:0bcf:b50c:5cac:848d:9d45"];
+  assert.match(admission("2600:1702:82d0:bcf::ffff", { addressesLastHour: block, emailsLastDay: 0 }).refused ?? "", /last hour/);
+  assert.equal(admission("2600:1702:82d0:bd0::1", { addressesLastHour: block, emailsLastDay: 0 }).refused, null, "the next /64 is someone else");
+  assert.match(admission(null, { addressesLastHour: [null, null, null], emailsLastDay: 0 }).refused ?? "", /last hour/, "with no address on record (local) they share one limit, as before");
+});
+
+test("a mailto: link can't pick up extra recipients or a body from a stored address (CR-098)", () => {
+  assert.equal(mailtoHref("pat.lee+uw@broker.example.com"), "mailto:pat.lee%2Buw@broker.example.com");
+  assert.equal(mailtoHref("a?cc=b@c.com"), "mailto:a%3Fcc%3Db@c.com", "a row stored before the stricter check");
+  assert.equal(new URL(mailtoHref("a?cc=b@c.com&body=x")).search, "");
 });
 
 test("the owner's email: to the owner, reply goes to the requester, everything they entered", () => {

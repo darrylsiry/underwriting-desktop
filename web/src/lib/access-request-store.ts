@@ -1,28 +1,47 @@
 import { policyDb } from "./db";
-import type { AccessRequestInput } from "./access-requests";
+import { admission, DAILY_MAIL_CAP, type AccessRequestInput } from "./access-requests";
 import type { SendResult } from "./mailer";
 
 // policy.access_requests (step 27): every request from the sign-in page, kept whether or not the
-// email went out, and the counts the throttle needs.
+// email went out, and the throttle's check, made in one step with the insert.
 
 export type AccessRequestRow = AccessRequestInput & {
   id: number; created_at: Date; ip: string | null; emailed_at: Date | null; email_error: string | null;
 };
 
-/** Requests from this address in the last hour, and from anyone in the last day. */
-export async function recentRequestCounts(ip: string | null): Promise<{ fromAddressLastHour: number; lastDay: number }> {
-  const { rows } = await policyDb.query<{ hour: number; day: number }>(
-    `SELECT count(*) FILTER (WHERE ip IS NOT DISTINCT FROM $1 AND created_at > now() - interval '1 hour')::int AS hour,
-            count(*) FILTER (WHERE created_at > now() - interval '1 day')::int AS day
-     FROM access_requests WHERE created_at > now() - interval '1 day'`, [ip]);
-  return { fromAddressLastHour: rows[0]?.hour ?? 0, lastDay: rows[0]?.day ?? 0 };
-}
+/** Any fixed number: the one lock every request takes for its check and insert. */
+const ADMISSION_LOCK = 7_260_027;
 
-export async function storeAccessRequest(r: AccessRequestInput & { ip: string | null; userAgent: string | null }): Promise<number> {
-  const { rows } = await policyDb.query<{ id: number }>(
-    "INSERT INTO access_requests (name, email, company, ip, user_agent) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-    [r.name, r.email, r.company, r.ip, r.userAgent]);
-  return Number(rows[0].id);
+/**
+ * Check the throttle and keep the request as one step (CR-098). Parallel posts take turns on the
+ * lock, each one's count made after the last one's insert committed, so ten at once from one address
+ * keep exactly the three allowed. The lock ends with the transaction, before any email goes out.
+ */
+export async function admitAccessRequest(r: AccessRequestInput & { ip: string | null; userAgent: string | null }): Promise<{ refused: string } | { refused: null; id: number; email: boolean }> {
+  const client = await policyDb.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock($1)", [ADMISSION_LOCK]);
+    const { rows: [recent] } = await client.query<{ addresses: (string | null)[]; emails: number }>(
+      `SELECT coalesce(array_agg(ip) FILTER (WHERE created_at > now() - interval '1 hour'), '{}') AS addresses,
+              count(*) FILTER (WHERE email_error IS DISTINCT FROM $1)::int AS emails
+         FROM access_requests WHERE created_at > now() - interval '1 day'`, [DAILY_MAIL_CAP]);
+    const { refused, email } = admission(r.ip, { addressesLastHour: recent.addresses, emailsLastDay: recent.emails });
+    if (refused) {
+      await client.query("ROLLBACK");
+      return { refused };
+    }
+    const { rows: [{ id }] } = await client.query<{ id: string }>(
+      "INSERT INTO access_requests (name, email, company, ip, user_agent, email_error) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+      [r.name, r.email, r.company, r.ip, r.userAgent, email ? null : DAILY_MAIL_CAP]);
+    await client.query("COMMIT");
+    return { refused: null, id: Number(id), email };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function recordEmailResult(id: number, result: SendResult): Promise<void> {
