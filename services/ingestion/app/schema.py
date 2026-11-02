@@ -4,6 +4,7 @@ Every extractor, deterministic or Claude, produces `FieldValue`s keyed by a
 dotted path such as `operations.gross_receipts`; `normalize` turns raw strings
 ("$6,800,000", "12/01/2026", "Y", "35%") into the schema's types.
 """
+import math
 import re
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -113,7 +114,7 @@ def normalize(path: str, raw) -> object:
             raise NormalizeError(f"{path}: {text!r} is not a 2-letter state")
         return text.upper()
     if kind == "states":
-        states = [s.upper() for s in re.split(r"[\s,;/&]+|\band\b", text) if s.strip()]
+        states = [s.upper() for s in re.split(r"[\s,;/&]+|\band\b", text, flags=re.I) if s.strip()]
         if not states or not all(re.fullmatch(r"[A-Z]{2}", s) for s in states):
             raise NormalizeError(f"{path}: {text!r} is not a list of 2-letter states")
         return list(dict.fromkeys(states))
@@ -137,9 +138,13 @@ def to_int(text: str, path: str = "value") -> int:
     if m := re.fullmatch(r"([\d.]+)([KkMm])", cleaned):
         cleaned, multiplier = m.group(1), 1_000 if m.group(2) in "Kk" else 1_000_000
     try:
-        return round(float(cleaned) * multiplier)
+        value = float(cleaned) * multiplier
     except ValueError:
         raise NormalizeError(f"{path}: {text!r} is not a number") from None
+    # float() accepts "inf", "nan" and "1e999"; money, counts and percentages are never negative.
+    if not math.isfinite(value) or value < 0:
+        raise NormalizeError(f"{path}: {text!r} is not a valid amount")
+    return round(value)
 
 
 def to_date(text: str, path: str = "value") -> str:

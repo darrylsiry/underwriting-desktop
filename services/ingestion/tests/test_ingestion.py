@@ -7,7 +7,7 @@ from app import claude, pipeline
 from app.documents import load
 from app.main import app
 from app.schema import FieldValue, NormalizeError, normalize
-from tests.conftest import SAMPLES, case_files
+from tests.conftest import SAMPLES, case_files, fillable_pdf
 
 
 @pytest.mark.parametrize("case, expected", [
@@ -37,6 +37,7 @@ def test_email_attachment_records_parent():
     ("operations.subcontractor_coi_required", "Y", True),
     ("operations.states", "FL, GA", ["FL", "GA"]),
     ("operations.states", "AZ and NV", ["AZ", "NV"]),
+    ("operations.states", "AZ AND NV", ["AZ", "NV"]),  # CR-132
     ("policy.effective_date", "12/01/2026", "2026-12-01"),
     ("applicant.state", "tx", "TX"),
     ("applicant.dba", "  ", None),
@@ -48,6 +49,30 @@ def test_normalize(path, raw, value):
 def test_normalize_rejects_garbage():
     with pytest.raises(NormalizeError):
         normalize("policy.deductible", "see attached")
+    with pytest.raises(NormalizeError):
+        normalize("operations.states", "ZZZ")
+
+
+@pytest.mark.parametrize("raw", ["inf", "-inf", "Infinity", "nan", "1e999", "-5", "$-1,000", "-2.5M"])
+def test_normalize_rejects_non_finite_and_negative_numbers(raw):
+    """CR-106: "inf" and "1e999" used to raise OverflowError, which no extraction path catches."""
+    with pytest.raises(NormalizeError):
+        normalize("operations.gross_receipts", raw)
+
+
+def test_extract_survives_an_infinite_number_in_a_form_field():
+    """CR-106: one such value warns; the submission's other fields still come through."""
+    pdf = fillable_pdf("INSURANCE APPLICATION", {
+        "NamedInsured_FullName_A": "Acme LLC", "GeneralLiability_Hazard_Exposure_A": "1e999",
+        "LossHistory_OccurrenceDate_A": "01/02/2025", "LossHistory_TotalIncurredAmount_A": "inf",
+    })
+    res = TestClient(app).post("/extract", files=[("files", ("app.pdf", pdf))])
+    assert res.status_code == 200
+    body = res.json()
+    assert body["submission"]["applicant"]["name"] == "Acme LLC"
+    assert body["submission"]["operations"]["gross_receipts"] is None
+    assert any("app.pdf" in w and "1e999" in w for w in body["warnings"])
+    assert any("loss row A" in w and "inf" in w for w in body["warnings"])
 
 
 @pytest.mark.parametrize("case", ["01", "02", "08"])
