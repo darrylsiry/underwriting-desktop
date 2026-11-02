@@ -2,6 +2,9 @@
 // policy books, accounting periods and the period presets an accountant filters by. Pure module
 // (no imports) so node:test can load it.
 
+/** The version the GL API, its OpenAPI document and the MCP server all report. */
+export const GL_API_VERSION = "1.0.0";
+
 /** Where the books are kept: accounting periods and "today" follow this zone, not the server's. */
 export const GL_TIME_ZONE = "America/New_York";
 

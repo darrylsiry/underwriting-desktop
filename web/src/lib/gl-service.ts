@@ -1,6 +1,6 @@
 import { auditByCorrelation } from "./audit";
 import { journalEntry, ledgerDocument, type LedgerDocument } from "./gl-export-json";
-import { ACCOUNTS, GL_TIME_ZONE, PRESET_LABEL, TRANSACTION_LABEL, periodLabel, type ExportFormat, type TransactionType } from "./gl-journal";
+import { ACCOUNTS, GL_API_VERSION, GL_TIME_ZONE, PRESET_LABEL, TRANSACTION_LABEL, periodLabel, type ExportFormat, type TransactionType } from "./gl-journal";
 import type { LedgerQuery } from "./gl-query";
 import {
   byPeriod, exportLedger, getJournal, groupJournals, ledgerTotals, listBatches, listPeriods, listPostings, renderLedger,
@@ -9,8 +9,6 @@ import {
 
 // The sub-ledger as integration documents: what the REST API returns and what the MCP tools hand
 // an agent, built the same way so both show the same numbers as the Accounting page.
-
-export const GL_API_VERSION = "1.0.0";
 
 export type GlContext = { actor: string; origin: string };
 
