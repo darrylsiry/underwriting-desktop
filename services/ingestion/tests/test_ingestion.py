@@ -291,3 +291,66 @@ def test_clean_email_has_no_attachment_warnings():
     [(name, data)] = case_files("04")
     result = pipeline.run([(name, data)], classes=[], use_claude=False)
     assert not any("attachment" in w for w in result["warnings"])
+
+
+def fake_claude(monkeypatch, **reply):
+    """Claude "on" with a canned reply (ClaudeResult fields); returns the list of documents each call received."""
+    calls = []
+
+    def extract(docs, classes, **_):
+        calls.append([d.filename for d in docs])
+        return claude.ClaudeResult(reply.get("fields", []), reply.get("losses", []), [], "fake", {})
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setattr(claude, "extract", extract)
+    return calls
+
+
+@pytest.mark.parametrize("heading, doc_type", [
+    ("LOSS RUN", "loss_run"),
+    ("SUPPLEMENTAL QUESTIONNAIRE", "supplemental_questionnaire"),
+    ("INSURANCE APPLICATION", "acord_application_flattened"),  # Policy_Number_A isn't a field acord.py maps
+])
+def test_fillable_pdf_without_application_fields_goes_to_claude(monkeypatch, heading, doc_type):
+    """CR-126: one filled Policy_ field used to send a document to the form reader, which found nothing in it."""
+    files = [("carrier.pdf", fillable_pdf(heading, {"Policy_Number_A": "GL-1"}))]
+
+    off = pipeline.run(files, classes=[], use_claude=False)
+    assert off["documents"][0]["doc_type"] == doc_type
+    assert any("not read" in w and "carrier.pdf" in w for w in off["warnings"])
+
+    calls = fake_claude(monkeypatch)
+    pipeline.run(files, classes=[])
+    assert calls == [["carrier.pdf"]]
+
+
+def test_loss_run_with_mapped_field_names_is_still_read_by_claude(monkeypatch):
+    calls = fake_claude(monkeypatch)
+    pdf = fillable_pdf("LOSS RUN", {"NamedInsured_FullName_A": "Acme LLC", "LossHistory_OccurrenceDate_A": "01/02/2025"})
+    result = pipeline.run([("lr.pdf", pdf)], classes=[])
+    assert calls == [["lr.pdf"]] and result["documents"][0]["method"] == "claude"
+
+
+def test_form_read_that_finds_nothing_is_named_in_a_warning():
+    pdf = fillable_pdf("INSURANCE APPLICATION", {"GeneralLiability_Hazard_Exposure_A": "see attached"})
+    result = pipeline.run([("app.pdf", pdf)], classes=[])
+    assert result["documents"][0]["doc_type"] == "acord_application"
+    assert "app.pdf: no usable values could be read from its form fields" in result["warnings"]
+
+
+def test_document_method_says_who_actually_read_it(monkeypatch):
+    """CR-042: `claude` only once Claude has read it; `not_read` when it was off or its call failed."""
+    files = case_files("01")  # a fillable application plus a loss run only Claude can read
+    methods = lambda res: [d["method"] for d in res["documents"]]  # noqa: E731
+
+    assert methods(pipeline.run(files, classes=[], use_claude=False)) == ["form_field", "not_read"]
+    assert methods(pipeline.run(files, classes=[])) == ["form_field", "not_read"]  # no API key
+
+    fake_claude(monkeypatch)
+    assert methods(pipeline.run(files, classes=[])) == ["form_field", "claude"]
+
+    def fails(docs, classes, **_):
+        raise claude.ExtractionError("Claude API error 529: overloaded")
+
+    monkeypatch.setattr(claude, "extract", fails)
+    assert methods(pipeline.run(files, classes=[])) == ["form_field", "not_read"]

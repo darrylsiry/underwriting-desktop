@@ -3,8 +3,12 @@
 Form fields are read exactly as the broker typed them, so they get confidence
 1.0 and never cost an API call.
 """
-from app.documents import Document
+from typing import TYPE_CHECKING
+
 from app.schema import FieldValue, Loss, NormalizeError, normalize, to_date, to_int
+
+if TYPE_CHECKING:
+    from app.documents import Document  # documents.py imports this module to decide what reaches extract()
 
 FIELD_MAP = {
     "Producer_FullName_A": "producer.agency",
@@ -44,7 +48,12 @@ FIELD_MAP = {
 }
 
 
-def extract(doc: Document) -> tuple[list[FieldValue], list[Loss], list[str]]:
+def has_mapped_fields(form_fields: dict[str, str]) -> bool:
+    """Whether any field this module reads is filled, so extract() has something to return."""
+    return any(v and (k in FIELD_MAP or k.startswith("LossHistory_")) for k, v in form_fields.items())
+
+
+def extract(doc: "Document") -> tuple[list[FieldValue], list[Loss], list[str]]:
     """Return (field values, loss rows, warnings) from a fillable ACORD-style PDF."""
     values, warnings = [], []
     for name, path in FIELD_MAP.items():

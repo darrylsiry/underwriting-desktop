@@ -14,7 +14,9 @@ from docx import Document as DocxDocument
 from docx.table import Table
 from pypdf import PdfReader
 
-ACORD_FIELD_PREFIXES = ("NamedInsured_", "Producer_", "GeneralLiability_", "Policy_")
+from app import acord
+
+NOT_READ_FROM_FORM = ("loss_run", "supplemental_questionnaire")
 
 
 @dataclass
@@ -28,16 +30,17 @@ class Document:
     form_fields: dict[str, str] = field(default_factory=dict)
     parent: str | None = None    # email this came attached to
     skipped: list[str] = field(default_factory=list)  # an email's attachments that weren't read, as warnings
+    read_by_claude: bool = False  # set by the pipeline once a Claude call over this document succeeds
 
     @property
-    def has_form_fields(self) -> bool:
-        return any(k.startswith(ACORD_FIELD_PREFIXES) and v for k, v in self.form_fields.items())
+    def read_from_form(self) -> bool:
+        """Only a filled application is read from its fields. A fillable loss run or questionnaire, or a
+        PDF whose filled fields aren't ones acord.py maps, would yield nothing that way, so Claude reads it."""
+        return self.doc_type not in NOT_READ_FROM_FORM and acord.has_mapped_fields(self.form_fields)
 
     def summary(self) -> dict:
-        return {
-            "filename": self.filename, "doc_type": self.doc_type, "parent": self.parent,
-            "method": "form_field" if self.has_form_fields else "claude",
-        }
+        method = "form_field" if self.read_from_form else "claude" if self.read_by_claude else "not_read"
+        return {"filename": self.filename, "doc_type": self.doc_type, "parent": self.parent, "method": method}
 
 
 class UnsupportedDocument(ValueError):
@@ -67,7 +70,7 @@ def _pdf(filename: str, data: bytes, parent: str | None) -> Document:
     elif "SUPPLEMENTAL QUESTIONNAIRE" in first_page:
         doc.doc_type = "supplemental_questionnaire"
     elif "INSURANCE APPLICATION" in first_page or "ACORD" in first_page:
-        doc.doc_type = "acord_application" if doc.has_form_fields else "acord_application_flattened"
+        doc.doc_type = "acord_application" if doc.read_from_form else "acord_application_flattened"
     elif "APPLICATION" in first_page:
         doc.doc_type = "application"
     return doc

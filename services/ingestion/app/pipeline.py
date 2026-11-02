@@ -24,8 +24,8 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
             loaded = load(name, data)
             docs += loaded
             for d in loaded:
-                how = ("has filled form fields, reading them directly" if d.has_form_fields
-                       else "no form fields, Claude will read it")
+                how = ("has filled form fields, reading them directly" if d.read_from_form
+                       else "no application form fields, Claude will read it")
                 where = f" (attached to {d.parent})" if d.parent else ""
                 step("classify", f"{d.filename}{where}: {DOC_TYPE_LABELS.get(d.doc_type, d.doc_type)}; {how}")
                 warnings += d.skipped
@@ -37,7 +37,7 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
     candidates: list[FieldValue] = []
     losses: list[Loss] = []
     for doc in docs:
-        if doc.has_form_fields:
+        if doc.read_from_form:
             values, rows, w = acord.extract(doc)
             for fv in values:
                 emit({"type": "field", "path": fv.path, "value": fv.value, "basis": "stated",
@@ -49,8 +49,10 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
             candidates += values
             losses += rows
             warnings += w
+            if not values and not rows:
+                warnings.append(f"{doc.filename}: no usable values could be read from its form fields")
 
-    to_read = [d for d in docs if not d.has_form_fields]
+    to_read = [d for d in docs if not d.read_from_form]
     claude_info, notes = None, []
     if to_read and use_claude and claude.enabled():
         if not classes:
@@ -67,6 +69,8 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
             losses += result.losses
             notes, warnings = result.notes, warnings + result.warnings
             claude_info = {"model": result.model, "usage": result.usage}
+            for d in to_read:
+                d.read_by_claude = True
         except claude.ExtractionError as e:
             warnings.append(f"{e}; {len(to_read)} document(s) were not read")
     elif to_read:
