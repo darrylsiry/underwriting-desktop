@@ -4,7 +4,8 @@
 // assistant can link its answers. Everyone is treated as an admin: nothing is filtered by user.
 import type Anthropic from "@anthropic-ai/sdk";
 import { auditSearch } from "./assistant-audit.ts";
-import { LOSS_RATIO_BASIS, teamSummary } from "./book-metrics.ts";
+import { listMeta } from "./assistant-lists.ts";
+import { LOSS_RATIO_BASIS, lossTotals, teamSummary } from "./book-metrics.ts";
 import { daysUntil, loadDashboard } from "./dashboard";
 import { customerDb, policyDb } from "./db";
 import { GL_TOOLS } from "./gl-mcp";
@@ -17,6 +18,7 @@ import { expiringOf, getBookPolicy } from "./renewals";
 import { search } from "./search";
 import { parseQuery } from "./search-terms";
 import { listRateVersions } from "./rating-api";
+import type { Loss } from "./submission";
 import { getSubmission, submissionIdsReceivedBy } from "./submissions";
 import { isUuid } from "./text.ts";
 import { loadTimeline } from "./timeline";
@@ -71,10 +73,11 @@ async function underwriterNames(today: string): Promise<string[]> {
  * Who owns each submission. A policy written here belongs to the underwriter who picked its
  * submission up, as on the desk, whoever clicked Bind (CR-089). The two live in different databases.
  */
-async function submissionOwners(ids: string[]): Promise<Map<string, string>> {
+async function submissionOwners(ids: string[]): Promise<Map<string, { owner: string; losses: Loss[] | null }>> {
   if (!ids.length) return new Map();
-  const { rows } = await customerDb.query<{ id: string; received_by: string }>("SELECT id::text AS id, received_by FROM submissions WHERE id = ANY($1::uuid[])", [[...new Set(ids)]]);
-  return new Map(rows.map((r) => [r.id, r.received_by]));
+  const { rows } = await customerDb.query<{ id: string; received_by: string; losses: Loss[] | null }>(
+    "SELECT id::text AS id, received_by, data->'loss_history' AS losses FROM submissions WHERE id = ANY($1::uuid[])", [[...new Set(ids)]]);
+  return new Map(rows.map((r) => [r.id, { owner: r.received_by, losses: r.losses }]));
 }
 
 export const APP_TOOLS: AppTool[] = [
@@ -126,8 +129,8 @@ export const APP_TOOLS: AppTool[] = [
       status: { type: "string", enum: ["needs_review", "accepted"], description: "needs_review = still in intake review; accepted = with underwriting" },
       kind: { type: "string", enum: ["new", "renewal"] }, underwriter: UNDERWRITER, limit: { type: "integer", description: "Default 50, max 200" } } },
     run: async (a) => {
-      const { rows } = await customerDb.query<{ id: string; reference: string; applicant_name: string; status: string; kind: string; received_by: string; received_at: Date; class_code: string | null; state: string | null; gross_receipts: string | null; agency: string | null; rated_total: string | null; rate_version: string | null; open_referrals: number | null }>(
-        `SELECT s.id, s.reference, s.applicant_name, s.status, s.kind, s.received_by, s.received_at,
+      const { rows } = await customerDb.query<{ id: string; reference: string; applicant_name: string; status: string; kind: string; received_by: string; received_at: Date; class_code: string | null; state: string | null; gross_receipts: string | null; agency: string | null; rated_total: string | null; rate_version: string | null; total_matching: number }>(
+        `SELECT count(*) OVER ()::int AS total_matching, s.id, s.reference, s.applicant_name, s.status, s.kind, s.received_by, s.received_at,
                 s.data->'operations'->>'class_code' AS class_code, s.data->'applicant'->>'state' AS state, s.data->'operations'->>'gross_receipts' AS gross_receipts,
                 s.data->'producer'->>'agency' AS agency, w.last_rating->>'total' AS rated_total, w.last_rating->>'rate_version' AS rate_version
          FROM submissions s LEFT JOIN worksheets w ON w.submission_id = s.id
@@ -141,7 +144,7 @@ export const APP_TOOLS: AppTool[] = [
       const q = new Map(quotes.rows.map((r) => [r.submission_id, r]));
       const p = new Map(policies.rows.map((r) => [r.submission_id, r]));
       return {
-        count: rows.length,
+        ...listMeta(rows.length, rows[0]?.total_matching ?? 0, "submissions"),
         submissions: rows.map((s) => ({
           reference: s.reference, applicant: s.applicant_name, kind: s.kind, status: s.status,
           stage: p.has(s.id) ? `bound as ${p.get(s.id)!.policy_number}` : q.get(s.id)?.issued ? "quoted" : s.rated_total ? "rated" : s.status === "accepted" ? "accepted, not rated" : "intake review",
@@ -190,12 +193,13 @@ export const APP_TOOLS: AppTool[] = [
   },
   {
     name: "list_quotes",
-    description: "Quote versions newest first. status=issued are the quotes out (not yet bound or superseded); bound and superseded are history. Filter by the underwriter whose submissions they came from.",
-    input_schema: { type: "object", properties: { status: { type: "string", enum: ["issued", "superseded", "bound"] }, underwriter: UNDERWRITER, limit: { type: "integer", description: "Default 50, max 200" } } },
+    description: "Quote versions newest first. status=issued are not yet bound or superseded; add live=true for the quotes out, those still inside their valid-until date. Bound and superseded are history. `total` and `total_matching` cover every match even when the rows are cut by limit. Filter by the underwriter whose submissions they came from.",
+    input_schema: { type: "object", properties: { status: { type: "string", enum: ["issued", "superseded", "bound"] }, live: { type: "boolean", description: "Only quotes still inside their valid-until date" }, underwriter: UNDERWRITER, limit: { type: "integer", description: "Default 50, max 200" } } },
     run: async (a) => {
       const ids = str(a.underwriter) ? await submissionIdsReceivedBy(str(a.underwriter)) : null;
-      const rows = (await listQuotes({ status: (str(a.status) || null) as QuoteRow["status"] | null, submissionIds: ids })).slice(0, int(a.limit, 50));
-      return { count: rows.length, total: money(rows.reduce((n, q) => n + Number(q.total), 0)), quotes: rows.map(quoteSummary) };
+      const rows = await listQuotes({ status: (str(a.status) || null) as QuoteRow["status"] | null, live: a.live === true, submissionIds: ids });
+      const shown = rows.slice(0, int(a.limit, 50));
+      return { ...listMeta(shown.length, rows.length, "quote versions"), total: money(rows.reduce((n, q) => n + Number(q.total), 0)), quotes: shown.map(quoteSummary) };
     },
   },
   {
@@ -227,8 +231,9 @@ export const APP_TOOLS: AppTool[] = [
     input_schema: { type: "object", properties: { in_force: { type: "boolean" }, underwriter: UNDERWRITER, limit: { type: "integer", description: "Default 50, max 200" } } },
     run: async (a) => {
       const ids = str(a.underwriter) ? await submissionIdsReceivedBy(str(a.underwriter)) : null;
-      const rows = (await listPolicies({ submissionIds: ids, inForce: a.in_force === true })).slice(0, int(a.limit, 50));
-      return { count: rows.length, premium: money(rows.reduce((n, p) => n + Number(p.premium), 0)), policies: rows.map(policySummary) };
+      const rows = await listPolicies({ submissionIds: ids, inForce: a.in_force === true });
+      const shown = rows.slice(0, int(a.limit, 50));
+      return { ...listMeta(shown.length, rows.length, "policies"), premium: money(rows.reduce((n, p) => n + Number(p.premium), 0)), policies: shown.map(policySummary) };
     },
   },
   {
@@ -268,16 +273,16 @@ export const APP_TOOLS: AppTool[] = [
       if (uw) {
         const d = await loadDashboard(uw);
         return { underwriter: uw, as_of: d.today, kpis: d.kpis, loss_ratio_basis: LOSS_RATIO_BASIS, premium_by_class: d.premiumByClass, next_up: d.tasks.slice(0, 10), renewals_in_window: d.renewals.slice(0, 25).map((p) => ({ policy_number: p.policy_number, insured: p.insured_name, expiration_date: p.expiration_date, premium: money(p.premium), renewal_status: p.renewal_status, url: p.href })),
-          urls: { desk: "/", in_force_book: "/book", renewals_90_days: "/book?due=90", bound_not_effective: "/book#bound-not-effective", loss_ratio: "/book?view=losses", new_business: `/policies?underwriter=${encodeURIComponent(uw)}&new_business=1`, quotes_out: `/quotes?status=issued&underwriter=${encodeURIComponent(uw)}` } };
+          urls: { desk: "/", in_force_book: "/book", renewals_90_days: "/book?due=90", bound_not_effective: "/book#bound-not-effective", loss_ratio: "/book?view=losses", new_business: `/policies?underwriter=${encodeURIComponent(uw)}&new_business=1`, quotes_out: `/quotes?status=issued&live=1&underwriter=${encodeURIComponent(uw)}` } };
       }
       const names = await underwriterNames(ctx.today);
       const [desks, quotes] = await Promise.all([
         Promise.all(names.map(loadDashboard)),
-        policyDb.query<{ n: number; total: number }>("SELECT count(*)::int AS n, coalesce(sum(total), 0)::float8 AS total FROM quotes WHERE status = 'issued'"),
+        policyDb.query<{ n: number; total: number }>("SELECT count(*)::int AS n, coalesce(sum(total), 0)::float8 AS total FROM quotes WHERE status = 'issued' AND valid_until >= $1::date", [ctx.today]),
       ]);
       return {
         scope: "everyone", as_of: ctx.today, ...teamSummary(desks), quotes_out: quotes.rows[0].n, quotes_out_total: money(quotes.rows[0].total),
-        urls: { in_force_book: "/book", bound_not_effective: "/book#bound-not-effective", renewals: "/book?due=90", losses: "/book?view=losses", policies: "/policies?in_force=1", quotes_out: "/quotes?status=issued" },
+        urls: { in_force_book: "/book", bound_not_effective: "/book#bound-not-effective", renewals: "/book?due=90", losses: "/book?view=losses", policies: "/policies?in_force=1", quotes_out: "/quotes?status=issued&live=1" },
       };
     },
   },
@@ -299,7 +304,7 @@ export const APP_TOOLS: AppTool[] = [
       const owners = await submissionOwners(desk.rows.map((p) => p.submission_id));
       const all = [
         ...book.rows.map((p) => ({ source: "prior system", policy_number: p.policy_number, insured: p.insured_name, underwriter: p.underwriter, class: p.class_description, states: p.states, producer: p.producer, effective_date: p.effective_date, expiration_date: p.expiration_date, days_left: daysUntil(p.expiration_date, ctx.today), premium: money(p.premium), claims: p.claims, incurred: money(p.incurred), open_claims: p.open_claims, renewal_status: p.renewal_status, renewal_url: p.renewal_submission_id ? `/submissions/${p.renewal_submission_id}/renewal` : null, url: `/policies/book/${p.id}` })),
-        ...desk.rows.filter((p) => !uw || owners.get(p.submission_id) === uw).map((p) => ({ source: "UW Desktop", policy_number: p.policy_number, insured: p.insured_name, underwriter: owners.get(p.submission_id) ?? "", class: null, states: null, producer: null, effective_date: p.effective_date, expiration_date: p.expiration_date, days_left: daysUntil(p.expiration_date, ctx.today), premium: money(p.premium), claims: 0, incurred: 0, open_claims: 0, renewal_status: p.renewal_status, renewal_url: p.renewal_submission_id ? `/submissions/${p.renewal_submission_id}/renewal` : null, url: `/policies/${p.id}` })),
+        ...desk.rows.filter((p) => !uw || owners.get(p.submission_id)?.owner === uw).map((p) => ({ source: "UW Desktop", policy_number: p.policy_number, insured: p.insured_name, underwriter: owners.get(p.submission_id)?.owner ?? "", class: null, states: null, producer: null, effective_date: p.effective_date, expiration_date: p.expiration_date, days_left: daysUntil(p.expiration_date, ctx.today), premium: money(p.premium), ...lossTotals(owners.get(p.submission_id)?.losses), renewal_status: p.renewal_status, renewal_url: p.renewal_submission_id ? `/submissions/${p.renewal_submission_id}/renewal` : null, url: `/policies/${p.id}` })),
       ].sort((x, y) => x.expiration_date.localeCompare(y.expiration_date));
       const rows = all.filter((r) => r.renewal_status !== "renewed");
       return { window_days: days, as_of: ctx.today, count: rows.length, already_renewed: all.length - rows.length, expiring_premium: money(rows.reduce((s, r) => s + r.premium, 0)), policies: rows, list_url: `/book?due=${days}` };
@@ -368,11 +373,11 @@ export const APP_TOOLS: AppTool[] = [
     run: async (_a, ctx) => {
       const [subs, book, written] = await Promise.all([
         customerDb.query<{ name: string; n: number }>("SELECT received_by AS name, count(*)::int AS n FROM submissions GROUP BY 1"),
-        policyDb.query<{ name: string; n: number; premium: number }>("SELECT underwriter AS name, count(*)::int AS n, sum(premium)::float8 AS premium FROM book_policies WHERE effective_date <= $1::date AND expiration_date >= $1::date GROUP BY 1", [ctx.today]),
+        policyDb.query<{ name: string; n: number; premium: number }>("SELECT underwriter AS name, count(*)::int AS n, sum(premium)::float8 AS premium FROM book_policies WHERE effective_date <= $1::date AND expiration_date > $1::date GROUP BY 1", [ctx.today]),
         policyDb.query<{ submission_id: string; premium: number }>("SELECT submission_id, premium::float8 AS premium FROM policies"),
       ]);
       const [names, owners] = await Promise.all([underwriterNames(ctx.today), submissionOwners(written.rows.map((p) => p.submission_id))]);
-      const mine = (n: string) => written.rows.filter((p) => owners.get(p.submission_id) === n);
+      const mine = (n: string) => written.rows.filter((p) => owners.get(p.submission_id)?.owner === n);
       return { underwriters: names.map((n) => ({ login: n, submissions: subs.rows.find((r) => r.name === n)?.n ?? 0, prior_system_policies_in_force: book.rows.find((r) => r.name === n)?.n ?? 0, prior_system_premium: money(book.rows.find((r) => r.name === n)?.premium ?? 0), uw_desktop_policies: mine(n).length, uw_desktop_premium: money(mine(n).reduce((s, p) => s + p.premium, 0)), desk_url: "/" })) };
     },
   },

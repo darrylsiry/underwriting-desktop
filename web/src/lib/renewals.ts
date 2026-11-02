@@ -6,7 +6,7 @@ import { audit, type AuditEvent } from "./audit";
 import { customerDb, policyDb } from "./db";
 import { formsFor, quoteLimits, type ProducerFields } from "./quote-terms";
 import { rateOn, rateVersionId } from "./rating-api";
-import { isOpenLoss } from "./referrals";
+import { lossTotals } from "./book-metrics.ts";
 import type { ExpiringPolicy } from "./renewal-compare";
 import { renewalSubmissionData } from "./renewal-data.ts";
 import type { Extraction, SubmissionData } from "./submission";
@@ -77,7 +77,7 @@ async function desktopPolicyForRenewal(id: string): Promise<DesktopPolicyForRene
 
 /** Snapshot of a policy bound in the UW Desktop: everything is on its quote and the original submission. */
 export function expiringFromDesktop(p: DesktopPolicyForRenewal, original: SubmissionData | null): ExpiringPolicy {
-  const losses = original?.loss_history ?? [];
+  const losses = original?.loss_history;
   return {
     source: "desktop", policy_id: p.id, policy_number: p.policy_number, insured_name: p.insured_name, producer: p.terms.producer, producer_fields: p.terms.producer_fields,
     effective_date: p.effective_date, expiration_date: p.expiration_date, rate_version: p.rate_version,
@@ -85,8 +85,7 @@ export function expiringFromDesktop(p: DesktopPolicyForRenewal, original: Submis
     premium: Number(p.premium), policy_fee: Number(p.policy_fee), surplus_lines_tax: Number(p.surplus_lines_tax), total: Number(p.total),
     terms: { limits: p.terms.limits, deductible: p.terms.deductible, class_code: p.terms.class_code, class_description: p.terms.class_description,
       operations: p.terms.operations, forms: p.terms.forms },
-    losses: { claims: losses.length, incurred: losses.reduce((n, l) => n + l.incurred, 0),
-      open_claims: losses.filter((l) => isOpenLoss(l.status)).length },
+    losses: lossTotals(losses),
     quote_id: p.quote_id,
   };
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { dueWithin, isBoundNotEffective, isInForce, lossRatio, summarizeBook, teamSummary, type BookRow } from "./book-metrics.ts";
+import { dueWithin, isBoundNotEffective, isInForce, lossRatio, lossTotals, summarizeBook, teamSummary, type BookRow } from "./book-metrics.ts";
 
 const TODAY = "2026-11-02";
 
@@ -9,9 +9,10 @@ const row = (over: Partial<BookRow>): BookRow & { renewal_status: string } => ({
   premium: 10_000, incurred: 0, open_claims: 0, renewal_status: "not_started", source: "uw desktop", ...over,
 });
 
-test("in force means effective and unexpired, both ends included (CR-102)", () => {
+test("in force from the effective date up to, not including, the expiration date (CR-102, CR-136)", () => {
   assert.equal(isInForce({ effective_date: TODAY, expiration_date: "2027-11-02" }, TODAY), true);
-  assert.equal(isInForce({ effective_date: "2025-11-02", expiration_date: TODAY }, TODAY), true);
+  assert.equal(isInForce({ effective_date: "2025-11-02", expiration_date: "2026-11-03" }, TODAY), true);
+  assert.equal(isInForce({ effective_date: "2025-11-02", expiration_date: TODAY }, TODAY), false);
   assert.equal(isInForce({ effective_date: "2026-11-03", expiration_date: "2027-11-03" }, TODAY), false);
   assert.equal(isInForce({ effective_date: "2025-01-01", expiration_date: "2026-11-01" }, TODAY), false);
   assert.equal(isBoundNotEffective({ effective_date: "2026-11-03", expiration_date: "2027-11-03" }, TODAY), true);
@@ -99,4 +100,22 @@ test("the team's numbers are the sum of the desks, on the same definitions (CR-0
   assert.equal(team.book_loss_ratio_incurred, lossRatio(5_000, 40_000));
   assert.deepEqual(team.by_underwriter.map((u) => [u.underwriter, u.prior_system_policies, u.uw_desktop_policies]), [["underwriter1", 1, 1], ["underwriter2", 1, 0]]);
   assert.equal(team.by_underwriter[0].loss_ratio, 0.1);
+});
+
+test("on a renewal's effective date only the renewal counts, and the expiring one can still be worked (CR-136)", () => {
+  const expiring = row({ effective_date: "2025-11-02", expiration_date: TODAY, premium: 10_000 });
+  const renewal = row({ effective_date: TODAY, expiration_date: "2027-11-02", premium: 12_000, is_renewal: true });
+  const s = summarizeBook([expiring, renewal], TODAY);
+  assert.equal(s.kpis.inForcePremium, 12_000);
+  assert.equal(s.kpis.policies, 1);
+  assert.deepEqual(s.renewals, [expiring, renewal].filter((p) => p.expiration_date === TODAY));
+});
+
+test("loss totals count every row and only open ones as open (CR-135)", () => {
+  assert.deepEqual(lossTotals([
+    { incurred: 40_000, status: "Open" },
+    { incurred: 2_500, status: "Closed" },
+  ]), { claims: 2, incurred: 42_500, open_claims: 1 });
+  assert.deepEqual(lossTotals([]), { claims: 0, incurred: 0, open_claims: 0 });
+  assert.deepEqual(lossTotals(null), { claims: 0, incurred: 0, open_claims: 0 });
 });

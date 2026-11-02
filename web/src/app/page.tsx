@@ -96,7 +96,7 @@ export default async function Home() {
         <Tile href="/book?due=90" label="Renewals · 90 days" value={String(k.renewalsDue90)} sub={`${usdShort(k.renewalPremium90)} expiring premium`} />
         <Tile href="/book?view=losses" label="Book loss ratio (incurred)" value={pct(k.lossRatio)} sub={`Five-year losses on current premium · ${plural(k.openClaims, "open claim")}`} />
         <Tile href={`/policies?underwriter=${encodeURIComponent(user)}&new_business=1`} label="New business" value={usdShort(k.newBusinessPremium)} sub={`${k.newBusinessPolicies} bound in the UW Desktop`} />
-        <Tile href={`/quotes?status=issued&underwriter=${encodeURIComponent(user)}`} label="Quotes out" value={String(k.quotesOut)} sub={k.hitRatio === null ? "hit ratio: no decided quotes yet" : `hit ratio ${pct(k.hitRatio)} of decided quotes`} />
+        <Tile href={`/quotes?status=issued&live=1&underwriter=${encodeURIComponent(user)}`} label="Quotes out" value={String(k.quotesOut)} sub={k.hitRatio === null ? "hit ratio: no decided quotes yet" : `hit ratio ${pct(k.hitRatio)} of decided quotes`} />
       </section>
       {k.boundNotEffectivePolicies > 0 && (
         <Link href="/book#bound-not-effective" className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-lg border border-slate-200 bg-white px-4 py-2 shadow-sm transition hover:border-indigo-300">
@@ -188,7 +188,7 @@ export default async function Home() {
                     <td className="px-4 py-2 text-right tabular-nums">{usd(p.premium)}</td>
                     <td className="px-4 py-2 text-xs">
                       {p.claims ? <>{p.claims} claim{p.claims === 1 ? "" : "s"} · {usd(p.incurred)} · <span className={lr >= 0.65 ? "font-semibold text-rose-700" : ""}>{Math.round(lr * 100)}% LR</span>
-                        {p.open_claims > 0 && <span className="ml-1 rounded bg-amber-50 px-1 text-amber-800">{p.open_claims} open</span>}</> : <span className="text-slate-500">clean</span>}
+                        {p.open_claims > 0 && <span className="ml-1 rounded bg-amber-50 px-1 text-amber-800">{p.open_claims} open</span>}</> : <span className="text-slate-500">{p.source === "uw desktop" ? "none reported" : "clean"}</span>}
                     </td>
                     <td className="px-4 py-2 text-xs">{p.renewal_status === "in_progress" ? <span className="whitespace-nowrap rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-700">In progress</span> : <span className="whitespace-nowrap text-slate-500">Not started</span>}</td>
                   </tr>

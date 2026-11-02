@@ -1,6 +1,7 @@
 // What the book's numbers mean, in one place: which policies are in force, which are due for
 // renewal, what counts as new business, and the loss ratio. Used by the desk, the book page, the
 // policy page and the assistant so they can't drift apart. Pure module for node:test.
+import { isOpenLoss } from "./referrals.ts";
 
 export const RENEWAL_WINDOW_DAYS = 120;
 
@@ -9,8 +10,11 @@ export const daysUntil = (date: string, today: string) =>
 
 type Term = { effective_date: string; expiration_date: string };
 
-/** In force today: already effective and not yet expired (CR-102). */
-export const isInForce = (p: Term, today: string) => p.effective_date <= today && p.expiration_date >= today;
+/**
+ * In force today: already effective and not yet expired (CR-102). A period ends at 12:01 a.m. on its
+ * expiration date, the moment its renewal starts, so that day belongs to the renewal (CR-136).
+ */
+export const isInForce = (p: Term, today: string) => p.effective_date <= today && p.expiration_date > today;
 
 /** Bound ahead of its effective date, such as a renewal waiting for the expiring term to end (CR-102). */
 export const isBoundNotEffective = (p: Term, today: string) => p.effective_date > today && p.expiration_date >= today;
@@ -18,6 +22,12 @@ export const isBoundNotEffective = (p: Term, today: string) => p.effective_date 
 /** Expiring within `days` and still needing a renewal: a policy already renewed has nothing left to do (CR-066). */
 export const dueWithin = <T extends Term & { renewal_status: string }>(rows: T[], today: string, days: number): T[] =>
   rows.filter((p) => p.renewal_status !== "renewed" && daysUntil(p.expiration_date, today) <= days);
+
+/** Claims, incurred and open claims from a submission's loss rows, so the desk, the assistant and the renewal page agree (CR-135). */
+export function lossTotals(losses: { incurred: number; status: string }[] | null | undefined) {
+  const rows = losses ?? [];
+  return { claims: rows.length, incurred: rows.reduce((n, l) => n + l.incurred, 0), open_claims: rows.filter((l) => isOpenLoss(l.status)).length };
+}
 
 /** The years of losses the book's `incurred` covers. */
 export const LOSS_HISTORY_YEARS = 5;

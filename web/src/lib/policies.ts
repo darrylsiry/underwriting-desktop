@@ -54,7 +54,7 @@ export async function listPolicies(f: PolicyFilter = {}): Promise<PolicyRow[]> {
   const { rows } = await policyDb.query<PolicyRow>(
     `SELECT ${COLUMNS} FROM policies p JOIN quotes q ON q.id = p.quote_id
      WHERE ($1::text[] IS NULL OR p.submission_id::text = ANY($1))
-       AND ($2::boolean IS NOT TRUE OR (p.effective_date <= $4::date AND p.expiration_date >= $4::date))
+       AND ($2::boolean IS NOT TRUE OR (p.effective_date <= $4::date AND p.expiration_date > $4::date))
        AND ($3::boolean IS NOT TRUE OR (p.renewed_from IS NULL AND p.expiration_date >= $4::date))
      ORDER BY p.bound_at DESC`, [f.submissionIds ?? null, f.inForce ?? false, f.newBusiness ?? false, todayIso()]);
   return rows;

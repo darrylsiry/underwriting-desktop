@@ -46,7 +46,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
       <h1 className="mt-2 text-2xl font-semibold">{title}</h1>
       <p className="mt-1 text-sm text-slate-500">
         {losses
-          ? <>Incurred losses over the last five years against five years of current premium, for the policies {user} has in force from the prior policy system (the UW Desktop&apos;s own policies have no loss history yet). Sorted by incurred.</>
+          ? <>Incurred losses over the last five years against five years of current premium, for the policies {user} has in force from the prior policy system. Policies bound in the UW Desktop show the losses on their submission in the other views, and aren&apos;t part of this ratio. Sorted by incurred.</>
           : due !== null
             ? <>Policies for {user} expiring within {due} days and not yet renewed, as of {shortDate(d.today)}: written in the prior policy system or bound in the UW Desktop. Sorted by expiration.</>
             : <>Policies in force for {user} as of {shortDate(d.today)}: written in the prior policy system or bound in the UW Desktop, already effective and not yet expired. Sorted by expiration.</>}
@@ -93,7 +93,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
                     <td className="px-4 py-2 text-xs">
                       {x.claims ? <>{x.claims} claim{x.claims === 1 ? "" : "s"} · {money(x.incurred)} · <span className={lr >= 0.65 ? "font-semibold text-rose-700" : ""}>{Math.round(lr * 100)}% LR</span>
                         {x.open_claims > 0 && <span className="ml-1 rounded bg-amber-50 px-1 text-amber-800">{x.open_claims} open</span>}</>
-                        : <span className="text-slate-500">{x.source === "uw desktop" ? "no history yet" : "clean"}</span>}
+                        : <span className="text-slate-500">{x.source === "uw desktop" ? "none reported" : "clean"}</span>}
                     </td>
                     <td className="px-4 py-2 text-xs">
                       {x.renewal_status === "in_progress" ? <span className="whitespace-nowrap rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-700">In progress</span>

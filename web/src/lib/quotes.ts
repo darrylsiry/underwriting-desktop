@@ -34,14 +34,15 @@ export async function quotesForSubmission(submissionId: string): Promise<QuoteRo
   return rows;
 }
 
-export type QuoteFilter = { status?: QuoteRow["status"] | null; submissionIds?: string[] | null };
+export type QuoteFilter = { status?: QuoteRow["status"] | null; submissionIds?: string[] | null; live?: boolean };
 
 /** Every quote version, newest first; optionally one status (issued = out, not yet bound or superseded) and/or given submissions. */
 export async function listQuotes(f: QuoteFilter = {}): Promise<QuoteRow[]> {
   const { rows } = await policyDb.query<QuoteRow>(
     `SELECT ${COLUMNS} FROM quotes
      WHERE ($1::text IS NULL OR status = $1) AND ($2::text[] IS NULL OR submission_id::text = ANY($2))
-     ORDER BY issued_at DESC`, [f.status ?? null, f.submissionIds ?? null]);
+       AND ($3::boolean IS NOT TRUE OR valid_until >= $4::date)
+     ORDER BY issued_at DESC`, [f.status ?? null, f.submissionIds ?? null, f.live ?? false, todayIso()]);
   return rows;
 }
 

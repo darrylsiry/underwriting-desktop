@@ -1,7 +1,7 @@
 import { money } from "./format.ts";
 import { plural } from "./text.ts";
 export { plural };
-import { RENEWAL_WINDOW_DAYS, daysUntil, summarizeBook } from "./book-metrics.ts";
+import { RENEWAL_WINDOW_DAYS, daysUntil, lossTotals, summarizeBook } from "./book-metrics.ts";
 export { RENEWAL_WINDOW_DAYS, daysUntil };
 import { customerDb, policyDb } from "./db";
 import { listInbox } from "./inbox";
@@ -83,12 +83,13 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
   ]);
 
   // Every unexpired policy: prior-system ones plus those written here, in force or still to start.
+  const subById = new Map(subs.map((s) => [s.id, s]));
   const written: BookPolicy[] = policies.rows.filter((p) => p.expiration_date >= today).map((p) => ({
     id: p.id, policy_number: p.policy_number, insured_name: p.insured_name,
     class_code: p.terms?.class_code ?? "", class_description: p.terms?.class_description ?? "",
     states: p.states ?? [], producer: producerOf(p.terms ?? {}).agency,
     effective_date: p.effective_date, expiration_date: p.expiration_date, premium: p.premium,
-    claims: 0, incurred: 0, open_claims: 0, renewal_status: p.renewal_status, renewal_submission_id: p.renewal_submission_id,
+    ...lossTotals(subById.get(p.submission_id)?.data.loss_history), renewal_status: p.renewal_status, renewal_submission_id: p.renewal_submission_id,
     source: "uw desktop", href: `/policies/${p.id}`, is_renewal: p.is_renewal,
   }));
   const unexpired = [...legacy.rows.map((p) => ({ ...p, source: "prior system" as const, href: `/policies/book/${p.id}` })), ...written]
@@ -176,7 +177,7 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     user, today, book, boundNotEffective, unexpired, renewals, tasks, premiumByClass,
     kpis: {
       ...kpis,
-      quotesOut: quoteNumbers.filter((q) => q.status === "issued").length,
+      quotesOut: quoteNumbers.filter((q) => q.status === "issued" && q.valid_until >= today).length,   // an expired one is lost, below (CR-137)
       // Only decided quotes count: bound (won) or past their valid-until date unbound (lost).
       hitRatio: decided.length ? decided.filter((q) => q.status === "bound").length / decided.length : null,
     },
