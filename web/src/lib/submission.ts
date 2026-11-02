@@ -1,5 +1,6 @@
 // The canonical submission schema (see samples/README.md and the ingestion
 // service's app/schema.py) plus helpers for the intake review screen.
+import { isIsoDate } from "./time.ts";
 
 export type FieldType = "str" | "state" | "states" | "int" | "money" | "pct" | "bool" | "date";
 export type FieldDef = { path: string; label: string; type: FieldType };
@@ -133,7 +134,7 @@ export function fromInput(def: FieldDef, raw: string): Value {
       if (/^(n|no|false)$/i.test(text)) return false;
       throw new Error(`${def.label}: answer yes or no`);
     case "date":
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || Number.isNaN(Date.parse(text))) throw new Error(`${def.label}: use YYYY-MM-DD`);
+      if (!isIsoDate(text)) throw new Error(`${def.label}: use YYYY-MM-DD`);
       return text;
   }
 }

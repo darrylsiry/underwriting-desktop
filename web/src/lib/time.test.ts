@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { fromInput } from "./submission.ts";
 import { isIsoDate, todayIso, when, whenDate, whenShort } from "./time.ts";
 
 // UX-006: every on-screen timestamp carries the display zone's name.
@@ -38,4 +39,10 @@ test("isIsoDate takes real calendar dates only", () => {
   for (const bad of ["2026-02-30", "2026-02-29", "2026-13-01", "2026-00-10", "0000-01-01", "2026-2-3", "yesterday", "", undefined, null, ["2026-01-01"]]) {
     assert.equal(isIsoDate(bad), false, String(bad));
   }
+});
+
+test("an intake date field refuses a date that isn't on the calendar (CR-068)", () => {
+  const field = { path: "policy.effective_date", label: "Effective", type: "date" as const };
+  assert.equal(fromInput(field, "2026-02-28"), "2026-02-28");
+  assert.throws(() => fromInput(field, "2026-02-30"), /Effective: use YYYY-MM-DD/);
 });

@@ -6,7 +6,7 @@ import { renderRenewalMemoPdf } from "./renewal-memo-pdf";
 import { QUOTE_VALID_DAYS, addDays, addYears, formsFor, parseSubjectivities } from "./quote-terms";
 import { rateOn } from "./rating-api";
 import type { SubmissionRow } from "./submissions";
-import { todayIso } from "./time";
+import { isIsoDate, todayIso } from "./time";
 import type { RatingInputs, ScheduleItem } from "./worksheet";
 import { activeRateVersion, getWorksheet, money, readiness, type Rating } from "./worksheets";
 
@@ -77,9 +77,9 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
   const seen = ws.last_rating!;
 
   const effective = form.effective_date.trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(effective)) throw new Error("Effective date: use YYYY-MM-DD");
+  if (!isIsoDate(effective)) throw new Error("Effective date: use YYYY-MM-DD");
   const expiration = form.expiration_date.trim() || addYears(effective, 1);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(expiration) || expiration <= effective) throw new Error("Expiration must be a date after the effective date");
+  if (!isIsoDate(expiration) || expiration <= effective) throw new Error("Expiration must be a date after the effective date");
 
   const previous = (await quotesForSubmission(sub.id))[0];
   if (previous?.status === "bound") throw new Error(`${previous.quote_number} is already bound; changes now need a policy endorsement`);

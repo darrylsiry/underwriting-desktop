@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { DaysChip, when, whenDate } from "@/components/ui";
-import { LOSS_RATIO_BASIS, lossRatio } from "@/lib/book-metrics";
+import { lossRatio } from "@/lib/book-metrics";
 import { daysUntil, loadDashboard, plural, RENEWAL_WINDOW_DAYS, type Task } from "@/lib/dashboard";
 import { systemHealth } from "@/lib/health";
 import { iso } from "@/lib/time";
@@ -95,7 +95,7 @@ export default async function Home() {
       <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-label="Book summary">
         <Tile href="/book" label="In-force premium" value={usdShort(k.inForcePremium)} sub={`${k.policies} policies in force`} />
         <Tile href="/book?due=90" label="Renewals · 90 days" value={String(k.renewalsDue90)} sub={`${usdShort(k.renewalPremium90)} expiring premium`} />
-        <Tile href="/book?view=losses" label="Book loss ratio (incurred)" value={pct(k.lossRatio)} sub={`${LOSS_RATIO_BASIS[0].toUpperCase()}${LOSS_RATIO_BASIS.slice(1)} · ${plural(k.openClaims, "open claim")}`} />
+        <Tile href="/book?view=losses" label="Book loss ratio (incurred)" value={pct(k.lossRatio)} sub={`Five-year losses on current premium · ${plural(k.openClaims, "open claim")}`} />
         <Tile href={`/policies?underwriter=${encodeURIComponent(user)}&new_business=1`} label="New business" value={usdShort(k.newBusinessPremium)} sub={`${k.newBusinessPolicies} bound in the UW Desktop`} />
         <Tile href={`/quotes?status=issued&underwriter=${encodeURIComponent(user)}`} label="Quotes out" value={String(k.quotesOut)} sub={k.hitRatio === null ? "hit ratio: no decided quotes yet" : `hit ratio ${pct(k.hitRatio)} of decided quotes`} />
       </section>
