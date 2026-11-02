@@ -8,6 +8,7 @@ import { getPolicy } from "@/lib/policies";
 import { quotesForSubmission } from "@/lib/quotes";
 import { renewalOfPolicy } from "@/lib/renewals";
 import { listDocuments } from "@/lib/submissions";
+import { todayIso } from "@/lib/time";
 import { startRenewalAction } from "../actions";
 import { StartRenewalForm } from "../start-renewal-form";
 
@@ -31,7 +32,7 @@ export default async function PolicyPage({ params, searchParams }: Props) {
   const { error } = await searchParams;
   const p = await load(id);
   if (!p) notFound();
-  const daysLeft = daysUntil(p.expiration_date, new Date().toISOString().slice(0, 10));   // UX-023
+  const daysLeft = daysUntil(p.expiration_date, todayIso());   // UX-023
   const [quotes, uploads, renewal] = await Promise.all([
     quotesForSubmission(p.submission_id), listDocuments(p.submission_id), renewalOfPolicy(p.renewal_submission_id),
   ]);

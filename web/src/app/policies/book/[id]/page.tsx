@@ -6,6 +6,7 @@ import { Empty, Pill, RowLink, Section, money, when, whenDate } from "@/componen
 import { RENEWAL_WINDOW_DAYS, daysUntil } from "@/lib/dashboard";
 import { inputText } from "@/lib/renewal-compare";
 import { getBookPolicy, renewalOfPolicy } from "@/lib/renewals";
+import { todayIso } from "@/lib/time";
 import { INPUT_DEFS, SCHEDULE_CATEGORIES } from "@/lib/worksheet";
 import { startRenewalAction } from "../../actions";
 import { StartRenewalForm } from "../../start-renewal-form";
@@ -28,7 +29,7 @@ export default async function BookPolicyPage({ params, searchParams }: Props) {
   const { error } = await searchParams;
   const p = await load(id);
   if (!p) notFound();
-  const daysLeft = daysUntil(p.expiration_date, new Date().toISOString().slice(0, 10));   // UX-023
+  const daysLeft = daysUntil(p.expiration_date, todayIso());   // UX-023
   const renewal = await renewalOfPolicy(p.renewal_submission_id);
   const inputs = p.rating_inputs;
   const lossRatio = Number(p.premium) ? Number(p.incurred) / Number(p.premium) : 0;

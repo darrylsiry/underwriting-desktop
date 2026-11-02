@@ -1,4 +1,4 @@
-import { whenDate } from "./time.ts";
+import { todayIso, whenDate } from "./time.ts";
 import { audit } from "./audit";
 import { bindBlockers, policyNumbers, subjectivityStatus, type SubjectivityStatus } from "./bind-rules";
 import { customerDb, policyDb } from "./db";
@@ -81,7 +81,7 @@ type QuoteForBinding = {
  */
 export async function bindQuote(quoteId: string, received: Set<number>, actor: string, at: Date | null = null): Promise<PolicyRow> {
   const boundAt = at ?? new Date();
-  const today = boundAt.toISOString().slice(0, 10);
+  const today = todayIso(boundAt);
   const correlationId = crypto.randomUUID();   // shared by the bind's audit events and its ledger journal
   const client = await policyDb.connect();
   let policyId: string;

@@ -4,7 +4,7 @@ import { customerDb, policyDb } from "./db";
 import { listInbox } from "./inbox";
 import { missingForRating, type SubmissionRow } from "./submissions";
 import { stageOf, type Stage } from "./stage";
-import { whenDate } from "./time";
+import { todayIso, whenDate } from "./time";
 import { activeRateVersion, readiness, type WorksheetRow } from "./worksheets";
 
 // Everything the home page shows for one underwriter. An underwriter owns the submissions they
@@ -52,7 +52,7 @@ export const daysUntil = (date: string, today: string) =>
 export const RENEWAL_WINDOW_DAYS = 120;
 
 export async function loadDashboard(user: string): Promise<Dashboard> {
-  const today = iso(new Date());
+  const today = todayIso();
   const { rows: subs } = await customerDb.query<SubmissionRow & { ws: WorksheetRow | null }>(
     `SELECT s.*, to_jsonb(w) AS ws FROM submissions s LEFT JOIN worksheets w ON w.submission_id = s.id
      WHERE s.received_by = $1 ORDER BY s.received_at`, [user]);
