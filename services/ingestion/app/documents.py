@@ -14,7 +14,9 @@ from docx import Document as DocxDocument
 from docx.table import Table
 from pypdf import PdfReader
 
-ACORD_FIELD_PREFIXES = ("NamedInsured_", "Producer_", "GeneralLiability_", "Policy_")
+from app import acord
+
+NOT_READ_FROM_FORM = ("loss_run", "supplemental_questionnaire")
 
 
 @dataclass
@@ -27,16 +29,18 @@ class Document:
     text: str = ""               # plain text (emails, Word files)
     form_fields: dict[str, str] = field(default_factory=dict)
     parent: str | None = None    # email this came attached to
+    skipped: list[str] = field(default_factory=list)  # an email's attachments that weren't read, as warnings
+    read_by_claude: bool = False  # set by the pipeline once a Claude call over this document succeeds
 
     @property
-    def has_form_fields(self) -> bool:
-        return any(k.startswith(ACORD_FIELD_PREFIXES) and v for k, v in self.form_fields.items())
+    def read_from_form(self) -> bool:
+        """Only a filled application is read from its fields. A fillable loss run or questionnaire, or a
+        PDF whose filled fields aren't ones acord.py maps, would yield nothing that way, so Claude reads it."""
+        return self.doc_type not in NOT_READ_FROM_FORM and acord.has_mapped_fields(self.form_fields)
 
     def summary(self) -> dict:
-        return {
-            "filename": self.filename, "doc_type": self.doc_type, "parent": self.parent,
-            "method": "form_field" if self.has_form_fields else "claude",
-        }
+        method = "form_field" if self.read_from_form else "claude" if self.read_by_claude else "not_read"
+        return {"filename": self.filename, "doc_type": self.doc_type, "parent": self.parent, "method": method}
 
 
 class UnsupportedDocument(ValueError):
@@ -66,7 +70,7 @@ def _pdf(filename: str, data: bytes, parent: str | None) -> Document:
     elif "SUPPLEMENTAL QUESTIONNAIRE" in first_page:
         doc.doc_type = "supplemental_questionnaire"
     elif "INSURANCE APPLICATION" in first_page or "ACORD" in first_page:
-        doc.doc_type = "acord_application" if doc.has_form_fields else "acord_application_flattened"
+        doc.doc_type = "acord_application" if doc.read_from_form else "acord_application_flattened"
     elif "APPLICATION" in first_page:
         doc.doc_type = "application"
     return doc
@@ -76,14 +80,21 @@ def _email(filename: str, data: bytes) -> list[Document]:
     msg = email.message_from_bytes(data, policy=policy.default)
     body = msg.get_body(preferencelist=("plain", "html"))
     header = "\n".join(f"{h}: {msg[h]}" for h in ("From", "To", "Date", "Subject") if msg[h])
-    docs = [Document(filename, "broker_email", "text/plain",
-                     text=f"{header}\n\n{body.get_content() if body else ''}")]
+    main = Document(filename, "broker_email", "text/plain", text=f"{header}\n\n{body.get_content() if body else ''}")
+    docs = [main]
     for part in msg.iter_attachments():
         name = part.get_filename() or "attachment"
         try:
-            docs += load(name, part.get_payload(decode=True), parent=filename)
+            payload = part.get_payload(decode=True)
+            if payload is None:  # a forwarded message (message/rfc822) holds parts, not bytes
+                main.skipped.append(f"{filename}: attachment {part.get_filename() or part.get_content_type()} "
+                                    "was not read (a forwarded message); ask the broker to send its files directly")
+                continue
+            docs += load(name, payload, parent=filename)
         except UnsupportedDocument:
-            continue
+            main.skipped.append(f"{filename}: attachment {name} was not read (unsupported file type)")
+        except Exception as e:  # corrupt attachment: report it, keep the body and the other attachments
+            main.skipped.append(f"{filename}: attachment {name} could not be read ({e})")
     return docs
 
 

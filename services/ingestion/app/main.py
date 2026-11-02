@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import queue
@@ -10,11 +11,14 @@ from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from app import claude, pipeline
+from app.responses import ExtractResponse, Health
 
 RATING_SERVICE_URL = os.environ.get("RATING_SERVICE_URL", "http://localhost:8001")
 # One broker submission is a handful of documents; cap direct callers like the web tier does (25 MB).
 MAX_FILES = int(os.environ.get("MAX_UPLOAD_FILES", "20"))
 MAX_TOTAL_BYTES = int(os.environ.get("MAX_UPLOAD_MB", "25")) * 1024 * 1024
+# Each stream holds a thread and its uploads in memory for as long as Claude takes; beyond this, callers get a 503.
+_stream_slots = threading.BoundedSemaphore(int(os.environ.get("MAX_CONCURRENT_EXTRACTIONS", "8")))
 
 app = FastAPI(
     title="Ingestion Service",
@@ -22,7 +26,7 @@ app = FastAPI(
 )
 
 
-@app.get("/health")
+@app.get("/health", response_model=Health)
 def health():
     return {
         "service": "ingestion",
@@ -71,7 +75,7 @@ async def read_uploads(files: list[UploadFile]) -> list[tuple[str, bytes]]:
     return uploads
 
 
-@app.post("/extract")
+@app.post("/extract", response_model=ExtractResponse)
 async def extract(files: list[UploadFile] = File(..., description="Every document in one submission"),
                   use_claude: bool = True):
     """Upload one submission's documents (PDF, EML, DOCX, TXT) and get back the canonical submission JSON.
@@ -85,6 +89,20 @@ async def extract(files: list[UploadFile] = File(..., description="Every documen
     return await run_in_threadpool(pipeline.run, uploads, classes, use_claude=use_claude)
 
 
+class _CancelOnClose(StreamingResponse):
+    """Whatever ends the response, the client going away included, tells the worker to stop."""
+
+    def __init__(self, *args, cancel: threading.Event, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cancel = cancel
+
+    async def __call__(self, scope, receive, send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self.cancel.set()
+
+
 @app.post("/extract/stream")
 async def extract_stream(files: list[UploadFile] = File(..., description="Every document in one submission"),
                          use_claude: bool = True):
@@ -92,7 +110,10 @@ async def extract_stream(files: list[UploadFile] = File(..., description="Every 
     `loss`, `thinking` (Claude's reasoning summary), `warning`, then one `result` (the /extract body)
     or `error`. Every event carries `t`, seconds since the request started."""
     uploads = await read_uploads(files)
+    if not _stream_slots.acquire(blocking=False):
+        raise HTTPException(503, "Too many extractions are running; try again in a minute", headers={"Retry-After": "60"})
     events: queue.Queue = queue.Queue()
+    cancel = threading.Event()
     started = time.monotonic()
 
     def emit(event: dict) -> None:
@@ -104,17 +125,27 @@ async def extract_stream(files: list[UploadFile] = File(..., description="Every 
             emit({"type": "step", "stage": "classes",
                   "message": f"Loaded {len(classes)} rateable class codes from the rating service" if classes
                   else "Rating service class list unavailable"})
-            emit({"type": "result", "result": pipeline.run(uploads, classes, use_claude=use_claude, emit=emit)})
+            result = pipeline.run(uploads, classes, use_claude=use_claude, emit=emit, cancel=cancel)
+            emit({"type": "result", "result": ExtractResponse.model_validate(result).model_dump()})
         except Exception as e:  # the stream has already started, so report errors in-band
             emit({"type": "error", "message": f"Extraction failed: {e}"})
         finally:
+            _stream_slots.release()
             events.put(None)
 
     threading.Thread(target=work, daemon=True).start()
 
-    def lines():  # Starlette iterates a sync generator in its threadpool, so blocking get() is fine
-        while (event := events.get()) is not None:
+    async def lines():
+        while True:
+            try:
+                event = events.get_nowait()
+            except queue.Empty:
+                # Not a blocking get() in a thread: a disconnect couldn't cancel that until the next event arrived.
+                await asyncio.sleep(0.05)
+                continue
+            if event is None:
+                return
             yield json.dumps(event, default=str) + "\n"
 
-    return StreamingResponse(lines(), media_type="application/x-ndjson",
-                             headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"})
+    return _CancelOnClose(lines(), cancel=cancel, media_type="application/x-ndjson",
+                          headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"})

@@ -3,8 +3,12 @@
 Form fields are read exactly as the broker typed them, so they get confidence
 1.0 and never cost an API call.
 """
-from app.documents import Document
+from typing import TYPE_CHECKING
+
 from app.schema import FieldValue, Loss, NormalizeError, normalize, to_date, to_int
+
+if TYPE_CHECKING:
+    from app.documents import Document  # documents.py imports this module to decide what reaches extract()
 
 FIELD_MAP = {
     "Producer_FullName_A": "producer.agency",
@@ -44,7 +48,16 @@ FIELD_MAP = {
 }
 
 
-def extract(doc: Document) -> tuple[list[FieldValue], list[Loss], list[str]]:
+LOSS_ROWS = "ABCDEF"
+LOSS_COLUMNS = ("OccurrenceDate", "OccurrenceDescription", "TotalIncurredAmount", "ClaimStatusCode")
+
+
+def has_mapped_fields(form_fields: dict[str, str]) -> bool:
+    """Whether any field this module reads is filled, so extract() has something to return."""
+    return any(v and (k in FIELD_MAP or k.startswith("LossHistory_")) for k, v in form_fields.items())
+
+
+def extract(doc: "Document") -> tuple[list[FieldValue], list[Loss], list[str]]:
     """Return (field values, loss rows, warnings) from a fillable ACORD-style PDF."""
     values, warnings = [], []
     for name, path in FIELD_MAP.items():
@@ -58,15 +71,20 @@ def extract(doc: Document) -> tuple[list[FieldValue], list[Loss], list[str]]:
             values.append(FieldValue(path, value, 1.0, "form_field", "stated", doc.filename, f"{name} = {raw}"))
 
     losses = []
-    for row in "ABCDEF":
-        when, description, incurred, status = (
-            doc.form_fields.get(f"LossHistory_{name}_{row}", "")
-            for name in ("OccurrenceDate", "OccurrenceDescription", "TotalIncurredAmount", "ClaimStatusCode")
-        )
+    for row in LOSS_ROWS:
+        when, description, incurred, status = (doc.form_fields.get(f"LossHistory_{name}_{row}", "") for name in LOSS_COLUMNS)
+        if not (when or description or incurred or status):
+            continue
         if not when:
+            warnings.append(f"{doc.filename}: loss row {row} has no date and was not read "
+                            f"({description or 'no description'}, {incurred or 'no amount'})")
             continue
         try:
             losses.append(Loss(to_date(when), description, to_int(incurred or "0"), status, doc.filename))
         except NormalizeError as e:
             warnings.append(f"{doc.filename}: loss row {row}: {e}")
+            continue
+        if not incurred:
+            warnings.append(f"{doc.filename}: loss row {row} has no amount and was read as $0 "
+                            f"({when}, {description or 'no description'})")
     return values, losses, warnings

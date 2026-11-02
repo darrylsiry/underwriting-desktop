@@ -1,4 +1,6 @@
 """upload -> classify -> extract -> merge into one submission JSON with per-field confidence."""
+import threading
+
 from app import acord, claude
 from app.documents import Document, UnsupportedDocument, load
 from app.schema import REQUIRED_FOR_RATING, FieldValue, Loss, build_submission
@@ -12,8 +14,9 @@ DOC_TYPE_LABELS = {
 
 
 def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = True,
-        emit: claude.Emit | None = None) -> dict:
-    """`emit`, when given, receives a live activity feed (steps, fields, losses, Claude's reasoning)."""
+        emit: claude.Emit | None = None, cancel: threading.Event | None = None) -> dict:
+    """`emit`, when given, receives a live activity feed (steps, fields, losses, Claude's reasoning).
+    `cancel`, when set, stops a Claude call that is running or about to start."""
     emit = emit or (lambda _e: None)
     step = lambda stage, message: emit({"type": "step", "stage": stage, "message": message})  # noqa: E731
     docs: list[Document] = []
@@ -24,10 +27,11 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
             loaded = load(name, data)
             docs += loaded
             for d in loaded:
-                how = ("has filled form fields, reading them directly" if d.has_form_fields
-                       else "no form fields, Claude will read it")
+                how = ("has filled form fields, reading them directly" if d.read_from_form
+                       else "no application form fields, Claude will read it")
                 where = f" (attached to {d.parent})" if d.parent else ""
                 step("classify", f"{d.filename}{where}: {DOC_TYPE_LABELS.get(d.doc_type, d.doc_type)}; {how}")
+                warnings += d.skipped
         except UnsupportedDocument as e:
             warnings.append(str(e))
         except Exception as e:  # corrupt file: report it, keep going with the rest
@@ -36,7 +40,7 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
     candidates: list[FieldValue] = []
     losses: list[Loss] = []
     for doc in docs:
-        if doc.has_form_fields:
+        if doc.read_from_form:
             values, rows, w = acord.extract(doc)
             for fv in values:
                 emit({"type": "field", "path": fv.path, "value": fv.value, "basis": "stated",
@@ -48,8 +52,10 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
             candidates += values
             losses += rows
             warnings += w
+            if not values and not rows:
+                warnings.append(f"{doc.filename}: no usable values could be read from its form fields")
 
-    to_read = [d for d in docs if not d.has_form_fields]
+    to_read = [d for d in docs if not d.read_from_form]
     claude_info, notes = None, []
     if to_read and use_claude and claude.enabled():
         if not classes:
@@ -57,15 +63,19 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
         step("claude", f"Sending {len(to_read)} document(s) to Claude ({claude.MODEL}): "
              + ", ".join(d.filename for d in to_read) + f"; {len(classes)} rateable class codes as context")
         try:
-            result = claude.extract(to_read, classes, known=list(candidates), known_losses=list(losses), on_event=emit)
+            result = claude.extract(to_read, classes, known=list(candidates), known_losses=list(losses), on_event=emit,
+                                    cancel=cancel)
             tokens = result.usage or {}
             step("claude", f"Claude returned {len(result.fields)} fields, {len(result.losses)} loss row(s), "
                  f"{len(result.notes)} note(s) ({tokens.get('input_tokens', 0):,} tokens in, "
                  f"{tokens.get('output_tokens', 0):,} out)")
-            candidates += result.fields
+            rateable, off_list = _rateable_only(result.fields, classes)
+            candidates += rateable
             losses += result.losses
-            notes, warnings = result.notes, warnings + result.warnings
+            notes, warnings = result.notes, warnings + result.warnings + off_list
             claude_info = {"model": result.model, "usage": result.usage}
+            for d in to_read:
+                d.read_by_claude = True
         except claude.ExtractionError as e:
             warnings.append(f"{e}; {len(to_read)} document(s) were not read")
     elif to_read:
@@ -77,10 +87,12 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
     step("merge", f"Merged into {len(chosen)} fields"
          + (f"; {len(conflicts)} conflict(s) between documents" if conflicts else "")
          + (f"; missing for rating: {', '.join(missing)}" if missing else "; everything rating needs is present"))
+    kept_losses, loss_warnings = dedupe_losses(losses, docs)
+    warnings += loss_warnings
     for w in warnings:
         emit({"type": "warning", "message": w})
     return {
-        "submission": build_submission(chosen, dedupe_losses(losses, docs)),
+        "submission": build_submission(chosen, kept_losses),
         "fields": {path: {k: v for k, v in fv.to_dict().items() if k != "path"} for path, fv in chosen.items()},
         "conflicts": conflicts,
         "missing_for_rating": missing,
@@ -89,6 +101,19 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
         "warnings": warnings,
         "claude": claude_info,
     }
+
+
+def _rateable_only(fields: list[FieldValue], classes: list[dict]) -> tuple[list[FieldValue], list[str]]:
+    """The prompt asks Claude to pick from the class list; this enforces it, so an off-list code is caught
+    at intake rather than failing at Save & rate. With no list there is nothing to check against (warned above)."""
+    rateable = {str(c["class_code"]) for c in classes}
+    kept, warnings = [], []
+    for fv in fields:
+        if fv.path == "operations.class_code" and rateable and fv.value not in rateable:
+            warnings.append(f"Claude's class code {fv.value} ({fv.source_document}) is not a rateable class and was dropped")
+        else:
+            kept.append(fv)
+    return kept, warnings
 
 
 def merge(candidates: list[FieldValue]) -> tuple[dict[str, FieldValue], list[dict]]:
@@ -110,23 +135,37 @@ def merge(candidates: list[FieldValue]) -> tuple[dict[str, FieldValue], list[dic
 
 
 def _same_value(a, b) -> bool:
+    if isinstance(a, list) and isinstance(b, list):  # operations.states: order carries no meaning
+        return sorted(a) == sorted(b)
     return a.casefold() == b.casefold() if isinstance(a, str) and isinstance(b, str) else a == b
 
 
-def dedupe_losses(losses: list[Loss], docs: list[Document]) -> list[Loss]:
+def dedupe_losses(losses: list[Loss], docs: list[Document]) -> tuple[list[Loss], list[str]]:
     """The same claim often appears on the application and the loss run; keep one document's version.
 
-    Rows are grouped by (date, incurred). Within a group, every row from one document is kept
-    (two claimants hurt the same day for the same amount are two claims), but the same claim
-    repeated on another document is dropped, preferring the loss run's rows.
+    A loss run is the source for every date it covers: rows from other documents on those dates are
+    dropped, with a warning when their amount isn't on the loss run (the two are often valued on
+    different dates). The remaining rows are grouped by (date, incurred). Within a group, every row
+    from one document is kept (two claimants hurt the same day for the same amount are two claims),
+    but the same claim repeated on another document is dropped.
     """
+    labels = {d.filename: DOC_TYPE_LABELS.get(d.doc_type, d.doc_type) for d in docs}
     loss_runs = {d.filename for d in docs if d.doc_type == "loss_run"}
+    on_loss_run: dict[str, list[int]] = {}
+    for loss in losses:
+        if loss.source_document in loss_runs:
+            on_loss_run.setdefault(loss.date, []).append(loss.incurred)
+
+    warnings = []
     groups: dict[tuple, list[Loss]] = {}
     for loss in losses:
-        groups.setdefault((loss.date, loss.incurred), []).append(loss)
+        if loss.source_document in loss_runs or loss.date not in on_loss_run:
+            groups.setdefault((loss.date, loss.incurred), []).append(loss)
+        elif loss.incurred not in on_loss_run[loss.date]:
+            amounts = " and ".join(f"${n:,}" for n in on_loss_run[loss.date])
+            warnings.append(f"{loss.date}: {labels.get(loss.source_document, loss.source_document)} shows "
+                            f"${loss.incurred:,}, loss run shows {amounts}; used the loss run")
     kept = []
     for rows in groups.values():
-        sources = list(dict.fromkeys(r.source_document for r in rows))
-        source = next((s for s in sources if s in loss_runs), sources[0])
-        kept += [r for r in rows if r.source_document == source]
-    return kept
+        kept += [r for r in rows if r.source_document == rows[0].source_document]
+    return kept, warnings
