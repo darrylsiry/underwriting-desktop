@@ -1,4 +1,6 @@
 """upload -> classify -> extract -> merge into one submission JSON with per-field confidence."""
+import threading
+
 from app import acord, claude
 from app.documents import Document, UnsupportedDocument, load
 from app.schema import REQUIRED_FOR_RATING, FieldValue, Loss, build_submission
@@ -12,8 +14,9 @@ DOC_TYPE_LABELS = {
 
 
 def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = True,
-        emit: claude.Emit | None = None) -> dict:
-    """`emit`, when given, receives a live activity feed (steps, fields, losses, Claude's reasoning)."""
+        emit: claude.Emit | None = None, cancel: threading.Event | None = None) -> dict:
+    """`emit`, when given, receives a live activity feed (steps, fields, losses, Claude's reasoning).
+    `cancel`, when set, stops a Claude call that is running or about to start."""
     emit = emit or (lambda _e: None)
     step = lambda stage, message: emit({"type": "step", "stage": stage, "message": message})  # noqa: E731
     docs: list[Document] = []
@@ -60,7 +63,8 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
         step("claude", f"Sending {len(to_read)} document(s) to Claude ({claude.MODEL}): "
              + ", ".join(d.filename for d in to_read) + f"; {len(classes)} rateable class codes as context")
         try:
-            result = claude.extract(to_read, classes, known=list(candidates), known_losses=list(losses), on_event=emit)
+            result = claude.extract(to_read, classes, known=list(candidates), known_losses=list(losses), on_event=emit,
+                                    cancel=cancel)
             tokens = result.usage or {}
             step("claude", f"Claude returned {len(result.fields)} fields, {len(result.losses)} loss row(s), "
                  f"{len(result.notes)} note(s) ({tokens.get('input_tokens', 0):,} tokens in, "

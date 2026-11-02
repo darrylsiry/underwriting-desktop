@@ -1,8 +1,15 @@
+import asyncio
 import json
+import threading
+import time
+from contextlib import suppress
 from email.message import EmailMessage
+from types import SimpleNamespace
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
+from starlette.requests import ClientDisconnect
 
 from app import acord, claude, pipeline
 from app.documents import Document, load
@@ -471,6 +478,178 @@ def test_off_list_class_code_is_dropped_with_a_warning(monkeypatch):
     result = pipeline.run(files, classes=[])
     assert result["submission"]["operations"]["class_code"] == "99999"
     assert any("class list unavailable" in w for w in result["warnings"])
+
+
+def delta(kind, **fields):
+    return SimpleNamespace(type="content_block_delta", delta=SimpleNamespace(type=kind, **fields))
+
+
+class FakeStream:
+    """Stands in for the SDK's message stream: yields `events` (raising any that are exceptions)."""
+
+    def __init__(self, events, content=()):
+        self.events, self.content, self.closed, self.consumed = events, list(content), False, 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.closed = True
+
+    def __iter__(self):
+        for event in self.events:
+            if isinstance(event, Exception):
+                raise event
+            self.consumed += 1
+            yield event
+
+    def get_final_message(self):
+        return SimpleNamespace(stop_reason="end_turn", content=self.content, model="fake", usage=USAGE)
+
+
+def fake_sdk(monkeypatch, stream):
+    """Replace the Anthropic client; returns the keyword arguments the client was built with."""
+    built = {}
+
+    def client(**kwargs):
+        built.update(kwargs)
+        return SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(stream=lambda **_: stream)))
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setattr(claude.anthropic, "Anthropic", client)
+    return built
+
+
+EMAIL_DOC = Document("a.eml", "broker_email", "text/plain", text="hello")
+
+
+def test_claude_client_retries_once_within_a_shorter_timeout(monkeypatch):
+    """CR-020: the default of two retries at 300 s could hold a request for about 15 minutes."""
+    built = fake_sdk(monkeypatch, FakeStream([], [SimpleNamespace(type="text", text='{"fields":[],"loss_history":[],"notes":[]}')]))
+    assert claude.extract([EMAIL_DOC], []).fields == []
+    assert built["timeout"] == 240.0 and built["max_retries"] == 1
+
+
+@pytest.mark.parametrize("stream", [
+    FakeStream([], [SimpleNamespace(type="thinking", thinking="hmm")]),  # thinking only: no text block at all
+    FakeStream([], [SimpleNamespace(type="text", text="not json")]),
+    FakeStream([], [SimpleNamespace(type="text", text='{"fields":[]}')]),  # missing keys
+    FakeStream([ConnectionResetError("peer closed the connection mid-stream")]),
+], ids=["thinking-only", "not-json", "missing-keys", "dropped-mid-stream"])
+def test_unreadable_claude_reply_is_a_warning_not_a_500(monkeypatch, stream):
+    """CR-020: these escaped pipeline.run, so /extract answered 500 and lost the other documents."""
+    fake_sdk(monkeypatch, stream)
+    res = TestClient(app).post("/extract", files=[("files", (name, data)) for name, data in case_files("01")])
+    assert res.status_code == 200
+    body = res.json()
+    assert body["submission"]["applicant"]["name"] == "Lone Star Electrical Services LLC"
+    assert any("1 document(s) were not read" in w for w in body["warnings"])
+    assert body["documents"][1]["method"] == "not_read"
+
+
+def test_setting_cancel_stops_the_claude_stream_at_its_next_event(monkeypatch):
+    """CR-087: leaving the `with` is what closes the connection and ends the token spend."""
+    cancel = threading.Event()
+    stream = FakeStream([delta("thinking_delta", thinking="one"), delta("thinking_delta", thinking="two"),
+                         delta("thinking_delta", thinking="three")])
+    fake_sdk(monkeypatch, stream)
+    seen = []
+
+    def on_event(event):
+        seen.append(event["text"])
+        cancel.set()
+
+    with pytest.raises(claude.ExtractionError, match="cancelled"):
+        claude.extract([EMAIL_DOC], [], on_event=on_event, cancel=cancel)
+    assert seen == ["one"] and stream.closed and stream.consumed == 2
+
+
+def test_cancel_set_before_the_call_never_starts_it(monkeypatch):
+    def must_not_build(**_):
+        raise AssertionError("the client was built")
+
+    monkeypatch.setattr(claude.anthropic, "Anthropic", must_not_build)
+    cancel = threading.Event()
+    cancel.set()
+    with pytest.raises(claude.ExtractionError, match="cancelled"):
+        claude.extract([EMAIL_DOC], [], cancel=cancel)
+
+
+def stream_scope(request: httpx.Request, spec_version: str) -> dict:
+    return {"type": "http", "asgi": {"version": "3.0", "spec_version": spec_version}, "http_version": "1.1",
+            "method": request.method, "scheme": "http", "path": request.url.path, "raw_path": request.url.raw_path,
+            "root_path": "", "query_string": b"", "client": ("test", 1), "server": ("test", 80),
+            "headers": [(k.lower().encode(), v.encode()) for k, v in request.headers.items()]}
+
+
+@pytest.mark.parametrize("spec_version", ["2.3", "2.4"])  # uvicorn reports 2.3: the disconnect arrives on receive()
+def test_client_going_away_cancels_the_extraction_and_frees_its_slot(monkeypatch, spec_version):
+    """CR-087: TestClient buffers whole responses, so this drives the ASGI app and hangs up after the first line."""
+    import app.main as main
+    slots = threading.BoundedSemaphore(1)
+    monkeypatch.setattr(main, "_stream_slots", slots)
+    monkeypatch.setattr(main, "rateable_classes", lambda: [])
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    saw_cancel, finished = threading.Event(), threading.Event()
+
+    def slow_extract(docs, classes, cancel, **_):
+        if cancel.wait(5):
+            saw_cancel.set()
+        finished.set()
+        raise claude.ExtractionError("stopped")
+
+    monkeypatch.setattr(claude, "extract", slow_extract)
+    request = httpx.Request("POST", "http://test/extract/stream", files=[("files", ("a.txt", b"hello"))])
+    body = request.read()
+
+    async def hang_up_after_first_line():
+        hung_up = asyncio.Event()
+        incoming = [{"type": "http.request", "body": body, "more_body": False}]
+
+        async def receive():
+            if incoming:
+                return incoming.pop(0)
+            await hung_up.wait()
+            return {"type": "http.disconnect"}
+
+        async def send(message):
+            if message["type"] == "http.response.body" and message.get("body"):
+                hung_up.set()
+                if spec_version == "2.4":
+                    raise OSError("client disconnected")
+
+        with suppress(ClientDisconnect):
+            await asyncio.wait_for(app(stream_scope(request, spec_version), receive, send), timeout=5)
+
+    asyncio.run(hang_up_after_first_line())
+    assert saw_cancel.wait(5), "the extractor never saw the cancel"
+    assert finished.wait(5)
+    for _ in range(100):  # the worker releases its slot just after the extractor returns
+        if slots.acquire(blocking=False):
+            break
+        time.sleep(0.02)
+    else:
+        pytest.fail("the stream slot was never released")
+
+
+def test_stream_slots_bound_concurrency_and_are_released(monkeypatch):
+    """CR-087: every /extract/stream used to start another thread, with nothing limiting how many."""
+    import app.main as main
+    monkeypatch.setattr(main, "rateable_classes", lambda: [])
+    slots = threading.BoundedSemaphore(1)
+    monkeypatch.setattr(main, "_stream_slots", slots)
+    client = TestClient(app)
+    files = [("files", ("a.txt", b"hello"))]
+
+    assert slots.acquire(blocking=False)  # a stream is already running
+    res = client.post("/extract/stream", files=files)
+    assert res.status_code == 503 and res.headers["retry-after"] == "60"
+    slots.release()
+
+    for _ in range(2):  # a finished stream gives its slot back, so the next one gets it
+        res = client.post("/extract/stream", files=files)
+        assert res.status_code == 200
+        assert json.loads(res.text.splitlines()[-1])["type"] == "result"
 
 
 def test_blank_and_complete_loss_rows_warn_about_nothing():

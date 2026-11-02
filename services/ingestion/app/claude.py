@@ -10,6 +10,7 @@ import base64
 import json
 import os
 import re
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -150,13 +151,21 @@ def _unescape(s: str) -> str:
 
 
 def extract(docs: list[Document], classes: list[dict], known: list[FieldValue] = (),
-            known_losses: list[Loss] = (), on_event: Emit | None = None) -> ClaudeResult:
+            known_losses: list[Loss] = (), on_event: Emit | None = None,
+            cancel: threading.Event | None = None) -> ClaudeResult:
     """One streamed Claude call over the documents. `on_event` gets live activity: Claude's reasoning
-    summary as it thinks, and each field / loss row as soon as it appears in the reply."""
+    summary as it thinks, and each field / loss row as soon as it appears in the reply. Setting `cancel`
+    stops the call at its next stream event; leaving the `with` closes the connection, which ends the
+    generation and its cost."""
+    def stop_if_cancelled() -> None:
+        if cancel is not None and cancel.is_set():
+            raise ExtractionError("Extraction cancelled because the client went away")
+
+    stop_if_cancelled()
     emit = on_event or (lambda _e: None)
     filenames = [d.filename for d in docs]
     class_list = "\n".join(f"- {c['class_code']}: {c['description']}" for c in classes) or "(class list unavailable)"
-    client = anthropic.Anthropic(api_key=api_key(), timeout=300.0)
+    client = anthropic.Anthropic(api_key=api_key(), timeout=240.0, max_retries=1)
     try:
         with client.beta.messages.stream(
             model=MODEL,
@@ -174,6 +183,7 @@ def extract(docs: list[Document], classes: list[dict], known: list[FieldValue] =
         ) as stream:
             reply, fields_seen, losses_seen, writing = "", 0, 0, False
             for event in stream:
+                stop_if_cancelled()
                 if event.type != "content_block_delta":
                     continue
                 if event.delta.type == "thinking_delta" and event.delta.thinking:
@@ -192,17 +202,26 @@ def extract(docs: list[Document], classes: list[dict], known: list[FieldValue] =
                         emit({"type": "loss", "date": m[1], "description": _unescape(m[2]),
                               "incurred": int(m[3]), "status": m[4], "method": "claude"})
             response = stream.get_final_message()
+    except ExtractionError:
+        raise
     except anthropic.APIStatusError as e:
         raise ExtractionError(f"Claude API error {e.status_code}: {e.message}") from e
     except anthropic.APIConnectionError as e:
         raise ExtractionError(f"Could not reach the Claude API: {e}") from e
+    except Exception as e:  # e.g. a connection dropped mid-stream surfaces as a raw httpx error
+        raise ExtractionError(f"The Claude call failed: {e}") from e
 
     if response.stop_reason == "refusal":
         raise ExtractionError("Claude declined to extract these documents")
     if response.stop_reason == "max_tokens":
         raise ExtractionError("Claude's reply was cut off (max_tokens)")
-    text = next(b.text for b in response.content if b.type == "text")
-    return _parse(json.loads(text), response.model, response.usage)
+    text = next((b.text for b in response.content if b.type == "text"), None)
+    if text is None:
+        raise ExtractionError("Claude's reply held no text")
+    try:
+        return _parse(json.loads(text), response.model, response.usage)
+    except (ValueError, KeyError, TypeError) as e:  # JSONDecodeError is a ValueError
+        raise ExtractionError(f"Claude's reply could not be read ({e!r})") from e
 
 
 def _parse(data: dict, model: str, usage) -> ClaudeResult:
