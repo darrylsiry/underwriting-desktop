@@ -8,6 +8,8 @@ import type { AppTool, AssistantContext } from "./assistant-tools";
 export const ASSISTANT_MODEL = process.env.ASSISTANT_MODEL ?? "claude-opus-5-5";
 const MAX_STEPS = 12;
 const MAX_TOKENS = 16_000;
+const CLAUDE_CALL_TIMEOUT_MS = 120_000;
+const QUESTION_DEADLINE_MS = 240_000;   // one whole question; inside the ask route's maxDuration of 300 s
 
 // The Claude Code cloud sandbox reserves ANTHROPIC_API_KEY; there the key is UW_ANTHROPIC_API_KEY (as in ingestion).
 const apiKey = () => process.env.UW_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
@@ -41,19 +43,32 @@ How to answer:
 - If the data doesn't contain the answer, say so plainly rather than speculating. Keep answers compact.`;
 
 type CreateParams = Anthropic.Beta.Messages.MessageCreateParamsNonStreaming;
-export type Create = (params: CreateParams) => Promise<Anthropic.Beta.Messages.BetaMessage>;
+export type Create = (params: CreateParams, options: { signal: AbortSignal }) => Promise<Anthropic.Beta.Messages.BetaMessage>;
 
 let client: Anthropic | null = null;
-const defaultCreate: Create = (params) => (client ??= new Anthropic({ apiKey: apiKey() })).beta.messages.create(params);
+const defaultCreate: Create = (params, options) =>
+  (client ??= new Anthropic({ apiKey: apiKey(), timeout: CLAUDE_CALL_TIMEOUT_MS, maxRetries: 1 })).beta.messages.create(params, options);
+
+/** The work's answer, or a rejection as soon as `signal` aborts, whether or not the work itself notices. */
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    if (signal.aborted) onAbort();
+    signal.addEventListener("abort", onAbort, { once: true });
+    work.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
+}
 
 /**
  * Answer one question, yielding what happens on the way (each tool call and its result) and the
  * final answer. `history` is the earlier turns of this conversation as text; the model re-queries
- * the tools for follow-ups, so answers always rest on current data.
+ * the tools for follow-ups, so answers always rest on current data. `signal` is the asker leaving
+ * (Stop, or the page closed); `deadlineMs` bounds the whole question, so a stalled call can't lock
+ * the chat (CR-129).
  */
 export async function* askAssistant(
   question: string, history: Turn[], ctx: AssistantContext,
-  deps: { create?: Create; tools?: AppTool[]; model?: string } = {},
+  deps: { create?: Create; tools?: AppTool[]; model?: string; signal?: AbortSignal; deadlineMs?: number } = {},
 ): AsyncGenerator<AssistantEvent> {
   const create = deps.create ?? defaultCreate;
   const tools = deps.tools ?? (await import("./assistant-tools")).APP_TOOLS;
@@ -62,6 +77,11 @@ export async function* askAssistant(
     ...history.slice(-12).map((t) => ({ role: t.role, content: t.text })),
     { role: "user", content: `Context: today is ${ctx.today}; the person asking is signed in as ${ctx.actor}.\n\n${question}` },
   ];
+  const deadlineMs = deps.deadlineMs ?? QUESTION_DEADLINE_MS;
+  const signal = AbortSignal.any([AbortSignal.timeout(deadlineMs), ...(deps.signal ? [deps.signal] : [])]);
+  const failure = (err: unknown) => (!signal.aborted ? describeApiError(err)
+    : deps.signal?.aborted ? "Stopped."
+    : `Stopped after ${Math.round(deadlineMs / 1000)} seconds without an answer; try again, or ask a narrower question.`);
   const usage = { input: 0, output: 0, cache_read: 0 };
   let steps = 0;
   yield { type: "status", text: `Asking ${model}` };
@@ -70,7 +90,7 @@ export async function* askAssistant(
     steps = step;
     let res: Anthropic.Beta.Messages.BetaMessage;
     try {
-      res = await create({
+      res = await untilAborted(create({
         model, max_tokens: MAX_TOKENS,
         // Opus 5.5 thinks adaptively on its own; effort sets how hard. A safety decline falls back
         // server-side to Anthropic's recommended model instead of ending the answer.
@@ -78,9 +98,9 @@ export async function* askAssistant(
         betas: ["server-side-fallback-2026-07-01"], fallbacks: "default",
         system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
         tools: toolDefinitions(tools), messages,
-      } as CreateParams);
+      } as CreateParams, { signal }), signal);
     } catch (err) {
-      yield { type: "error", message: describeApiError(err) };
+      yield { type: "error", message: failure(err) };
       return;
     }
     usage.input += res.usage.input_tokens;
@@ -104,11 +124,17 @@ export async function* askAssistant(
 
     messages.push({ role: "assistant", content: res.content });
     for (const t of toolUses) yield { type: "tool", id: t.id, name: t.name, input: t.input };
-    const results = await Promise.all(toolUses.map(async (t) => {
-      const t0 = Date.now();
-      const r = await runTool(tools, t.name, t.input, ctx);
-      return { t, r, ms: Date.now() - t0 };
-    }));
+    let results;
+    try {
+      results = await untilAborted(Promise.all(toolUses.map(async (t) => {
+        const t0 = Date.now();
+        const r = await runTool(tools, t.name, t.input, ctx);
+        return { t, r, ms: Date.now() - t0 };
+      })), signal);
+    } catch (err) {
+      yield { type: "error", message: failure(err) };
+      return;
+    }
     for (const { t, r, ms } of results) yield { type: "tool_result", id: t.id, name: t.name, ms, ok: !r.isError, chars: r.content.length };
     messages.push({
       role: "user",

@@ -62,3 +62,39 @@ test("an unknown tool and a refusal are reported, not thrown", async () => {
   const r = await collect(refusing);
   assert.equal(r.at(-1)?.type, "error");
 });
+
+// CR-129: a stalled call can't lock the chat.
+const stalled: Create = () => new Promise(() => {});
+const ask = async (deps: Parameters<typeof askAssistant>[3]) => {
+  const events: AssistantEvent[] = [];
+  for await (const e of askAssistant("Anything?", [], ctx, { tools, model: "claude-opus-5-5", ...deps })) events.push(e);
+  return events;
+};
+
+test("a Claude call that never answers ends in an error at the deadline", async () => {
+  const events = await ask({ create: stalled, deadlineMs: 20 });
+  const last = events.at(-1) as Extract<AssistantEvent, { type: "error" }>;
+  assert.equal(last.type, "error");
+  assert.match(last.message, /without an answer/);
+});
+
+test("a tool that never answers ends in an error at the deadline too", async () => {
+  const hanging: AppTool[] = [{ name: "slow", description: "", input_schema: { type: "object", properties: {} }, run: () => new Promise(() => {}) }];
+  const create: Create = async () => message({ stop_reason: "tool_use", content: [{ type: "tool_use", id: "tu_1", name: "slow", input: {} }] });
+  const events = await ask({ create, tools: hanging, deadlineMs: 20 });
+  assert.equal(events.at(-1)?.type, "error");
+});
+
+test("the asker leaving stops the question and reaches the call", async () => {
+  const leaving = new AbortController();
+  let seen: AbortSignal | undefined;
+  const create: Create = (_params, options) => { seen = options.signal; setTimeout(() => leaving.abort(), 5); return new Promise(() => {}); };
+  const events = await ask({ create, signal: leaving.signal });
+  assert.deepEqual(events.at(-1), { type: "error", message: "Stopped." });
+  assert.equal(seen?.aborted, true);
+});
+
+test("an API failure still reads as itself, not as a stop", async () => {
+  const failing: Create = async () => { throw new Error("boom"); };
+  assert.deepEqual((await ask({ create: failing })).at(-1), { type: "error", message: "boom" });
+});

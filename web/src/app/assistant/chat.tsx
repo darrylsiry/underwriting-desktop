@@ -20,6 +20,7 @@ export function AssistantChat({ user, model, enabled, suggestions, initialQuesti
   const bottom = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
   const started = useRef(false);
+  const stopper = useRef<AbortController | null>(null);
 
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages]);
 
@@ -40,8 +41,10 @@ export function AssistantChat({ user, model, enabled, suggestions, initialQuesti
     const history: Turn[] = messages.filter((m) => !m.error && !m.pending).map((m) => ({ role: m.role, text: m.text }));
     setMessages((prev) => [...prev, { role: "user", text: q, steps: [] }, { role: "assistant", text: "", steps: [], pending: true }]);
     const update = (fn: (m: Message) => Message) => setMessages((prev) => prev.map((m, i) => (i === prev.length - 1 ? fn(m) : m)));
+    const stop = new AbortController();
+    stopper.current = stop;
     try {
-      const res = await fetch("/assistant/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q, history }) });
+      const res = await fetch("/assistant/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q, history }), signal: stop.signal });
       if (!res.ok || !res.body) throw new Error(`Request failed (${res.status})`);
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -62,7 +65,7 @@ export function AssistantChat({ user, model, enabled, suggestions, initialQuesti
       }
       update((m) => (m.pending ? { ...m, pending: false, error: m.error ?? "The connection closed before an answer arrived." } : m));
     } catch (err) {
-      update((m) => ({ ...m, error: (err as Error).message, pending: false }));
+      update((m) => ({ ...m, error: stop.signal.aborted ? "Stopped." : (err as Error).message, pending: false }));
     } finally {
       setBusy(false);
       box.current?.focus();
@@ -129,7 +132,9 @@ export function AssistantChat({ user, model, enabled, suggestions, initialQuesti
           placeholder={`Ask about anything in the app, ${user}… (Enter to send, Shift+Enter for a new line)`}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(input); } }}
           className="flex-1 resize-none rounded-md border-0 px-2 py-1 text-sm text-slate-900 focus:outline-none" />
-        <button type="submit" disabled={busy || !enabled || !input.trim()} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">{busy ? "Working…" : "Ask"}</button>
+        {busy
+          ? <button type="button" onClick={() => stopper.current?.abort()} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Stop</button>
+          : <button type="submit" disabled={!enabled || !input.trim()} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">Ask</button>}
         {messages.length > 0 && <button type="button" onClick={() => setMessages([])} disabled={busy} className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">New</button>}
       </form>
       <p className="text-center text-[11px] text-slate-500">Powered by the Claude API ({model}). Read-only: the assistant looks things up and links to them; it never changes anything.</p>
