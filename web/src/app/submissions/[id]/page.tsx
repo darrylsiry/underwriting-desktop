@@ -155,7 +155,7 @@ export default async function ReviewPage({ params, searchParams }: Props) {
                 {ex.documents.map((d) => (
                   <li key={d.filename}>
                     <span className="font-medium text-slate-700">{d.doc_type.replaceAll("_", " ")}</span>: {d.filename}
-                    {d.parent && <> (in email)</>} · {d.method === "form_field" ? "form fields" : "Claude"}
+                    {d.parent && <> (in email)</>} · {d.method === "claude" ? "Claude" : "form fields"}
                   </li>
                 ))}
               </ul>

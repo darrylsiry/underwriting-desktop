@@ -72,12 +72,15 @@ export type FieldMeta = {
   snippet: string;
 };
 
+/** What the ingestion service calls a document (services/ingestion/app/documents.py). */
+export type DocType = "acord_application" | "acord_application_flattened" | "application" | "loss_run" | "supplemental_questionnaire" | "broker_email" | "other";
+
 export type Extraction = {
   submission: SubmissionData;
   fields: Record<string, FieldMeta>;
   conflicts: { path: string; chosen: Value; others: { value: Value; source_document: string; method: string }[] }[];
   missing_for_rating: string[];
-  documents: { filename: string; doc_type: string; parent: string | null; method: string }[];
+  documents: { filename: string; doc_type: DocType; parent: string | null; method: FieldMeta["method"] }[];
   notes: string[];
   warnings: string[];
   claude: { model: string; usage: { input_tokens: number; output_tokens: number } } | null;
