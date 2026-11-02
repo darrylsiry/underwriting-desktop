@@ -38,7 +38,7 @@ def load_tables(version_id: int | None = None) -> RateTables:
 
 
 def log_rating(version_id: int, reference: str | None, requested_by: str, request: dict, result: dict, rated_at=None) -> str:
-    """Record a rating call. `rated_at` back-dates the entry (seeded history); it defaults to now."""
+    """Record a rating call. `rated_at` back-dates the entry (seeded history); it defaults to now. The database stamps recorded_at itself."""
     with pool.connection() as conn:
         row = conn.execute(
             "INSERT INTO rating_log (version_id, reference, requested_by, request, result, created_at)"
@@ -60,7 +60,7 @@ def list_ratings(reference_prefix: str | None = None, limit: int = 200,
     reaches rows older than the newest `limit`."""
     with pool.connection() as conn:
         return conn.execute(
-            "SELECT r.id, r.created_at, r.requested_by, r.reference, v.label AS rate_version,"
+            "SELECT r.id, r.created_at, r.recorded_at, r.requested_by, r.reference, v.label AS rate_version,"
             " r.request->>'class_code' AS class_code, r.result->>'premium' AS premium, r.result->>'total' AS total"
             " FROM rating_log r JOIN rate_versions v ON v.id = r.version_id"
             " WHERE (%(p)s::text IS NULL OR r.reference LIKE %(p)s || '%%')"

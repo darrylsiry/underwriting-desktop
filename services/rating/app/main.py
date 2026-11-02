@@ -38,7 +38,7 @@ class RateRequest(RatingInput):
     rate_version_id: int | None = None
     reference: str | None = None  # caller's ID, e.g. the submission or quote
     # Who asked is read from the x-uw-user header of a trusted caller (SEC-002), not from the body.
-    rated_at: datetime | None = None  # when the rating happened, if not now (seeded history)
+    rated_at: datetime | None = None  # when the rating happened, if not now (seeded history); only a trusted caller may say (CR-074)
 
 
 class RateResponse(RatingResult):
@@ -56,7 +56,8 @@ def rate_risk(req: RateRequest, request: Request):
         raise HTTPException(422, str(e)) from e
     rating_id = repository.log_rating(
         tables.version_id, req.reference, auth.acting_user(request) or "anonymous",
-        req.model_dump(mode="json", exclude={"rated_at"}), result.model_dump(mode="json"), req.rated_at,
+        req.model_dump(mode="json", exclude={"rated_at"}), result.model_dump(mode="json"),
+        req.rated_at if auth.trusted_caller(request) else None,
     )
     return RateResponse(rating_id=rating_id, **result.model_dump())
 

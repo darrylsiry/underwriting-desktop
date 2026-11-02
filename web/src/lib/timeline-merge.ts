@@ -17,11 +17,12 @@ export type TimelineEvent = {
   before: unknown;
   after: unknown;
   correlationId: string | null;
+  recordedAt?: string;         // CR-074: when the row was really written, only when that isn't `at` (back-dated history)
 };
 
 export type DesktopRow = {
   id: number | string; occurred_at: Date | string; actor: string; action: string; entity_type: string; entity_id: string;
-  summary: string; before: unknown; after: unknown; correlation_id: string;
+  summary: string; before: unknown; after: unknown; correlation_id: string; recorded_at?: Date | string | null;
 };
 export type RateAdminRow = {
   id: number; created_at: string; actor: string; action: string; entity: string | null; version_id: number;
@@ -29,17 +30,30 @@ export type RateAdminRow = {
 };
 export type RatingRow = {
   id: string; created_at: string; requested_by: string; reference: string | null; rate_version: string;
-  class_code: string | null; premium: string | null; total: string | null;
+  class_code: string | null; premium: string | null; total: string | null; recorded_at?: string | null;
 };
 
 const iso = (d: Date | string) => (d instanceof Date ? d.toISOString() : new Date(d).toISOString());
 const money = (v: string | null) => (v == null ? "?" : `$${Math.round(Number(v)).toLocaleString("en-US")}`);
 
+/**
+ * CR-074: when the database wrote a row, if that isn't when the row says it happened (a minute's
+ * grace), else undefined. Null means the row predates recorded_at, so there is nothing to show.
+ */
+export function recordedApart(at: Date | string, recorded: Date | string | null | undefined): string | undefined {
+  if (!recorded) return undefined;
+  return Math.abs(Date.parse(iso(recorded)) - Date.parse(iso(at))) > 60_000 ? iso(recorded) : undefined;
+}
+const recordedField = (at: Date | string, recorded: Date | string | null | undefined) => {
+  const recordedAt = recordedApart(at, recorded);
+  return recordedAt ? { recordedAt } : {};
+};
+
 export function fromDesktop(r: DesktopRow): TimelineEvent {
   return {
     key: `d-${r.id}`, at: iso(r.occurred_at), source: "desktop", actor: r.actor, action: r.action,
     entityType: r.entity_type, entityId: r.entity_id, summary: r.summary, before: r.before, after: r.after,
-    correlationId: r.correlation_id,
+    correlationId: r.correlation_id, ...recordedField(r.occurred_at, r.recorded_at),
   };
 }
 
@@ -59,7 +73,7 @@ export function fromRating(r: RatingRow): TimelineEvent {
     entityType: "rating", entityId: r.id, entityLabel: r.reference ?? undefined,
     summary: `Rated ${r.reference ?? "(no reference)"} on ${r.rate_version}: ${money(r.premium)} premium, ${money(r.total)} total`
       + (r.class_code ? ` (class ${r.class_code})` : ""),
-    before: null, after: null, correlationId: null,
+    before: null, after: null, correlationId: null, ...recordedField(r.created_at, r.recorded_at),
   };
 }
 

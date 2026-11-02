@@ -1,4 +1,6 @@
 """API tests against the seeded 2026.1 rates (client fixture in conftest.py)."""
+import psycopg
+import pytest
 
 
 ELECTRICAL = {
@@ -51,6 +53,34 @@ def test_rated_at_backdates_the_log_entry(client):
     logged = client.get(f"/ratings/{res.json()['rating_id']}").json()
     assert logged["created_at"].startswith("2026-03-30T18:13:00")
     assert "rated_at" not in logged["request"]
+    assert not logged["recorded_at"].startswith("2026-03-30"), "recorded_at shows when the row was really written"
+
+
+def test_only_a_trusted_caller_can_backdate(client, monkeypatch):
+    """CR-074: POST /rate is open, so a date from an unproven caller is ignored, and nobody can choose recorded_at."""
+    monkeypatch.setenv("RATING_ADMIN_TOKEN", "s3cret")
+    body = ELECTRICAL | {"rated_at": "2026-03-30T18:13:00Z", "recorded_at": "2020-01-01T00:00:00Z"}
+    anon = client.get(f"/ratings/{client.post('/rate', json=body).json()['rating_id']}").json()
+    assert not anon["created_at"].startswith("2026-03-30")
+    held = client.post("/rate", json=body, headers={"Authorization": "Bearer s3cret"})
+    logged = client.get(f"/ratings/{held.json()['rating_id']}").json()
+    assert logged["created_at"].startswith("2026-03-30T18:13:00")
+    assert not logged["recorded_at"].startswith("2020")
+
+
+def test_recorded_at_cannot_be_set_or_changed(client):
+    """CR-074: the database stamps it on insert whatever the statement says; the append-only trigger still refuses updates."""
+    from app import db
+    row = client.get(f"/ratings/{client.post('/rate', json=ELECTRICAL).json()['rating_id']}").json()
+    with db.pool.connection() as conn:
+        written = conn.execute(
+            "INSERT INTO rating_log (version_id, requested_by, request, result, created_at, recorded_at)"
+            " VALUES (%s, 'x', '{}', '{}', '2026-01-01', '2020-01-01') RETURNING created_at, recorded_at", (row["version_id"],),
+        ).fetchone()
+        conn.rollback()
+    assert written["created_at"].year == 2026 and written["recorded_at"].year > 2020
+    with pytest.raises(psycopg.errors.InsufficientPrivilege), db.pool.connection() as conn:
+        conn.execute("UPDATE rating_log SET recorded_at = '2020-01-01' WHERE id = %s", (row["id"],))
 
 
 def test_unknown_class_is_422(client):

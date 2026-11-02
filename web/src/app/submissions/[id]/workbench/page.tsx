@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { SubmitButton } from "@/components/submit-button";
 import { Pill, when, whenDate } from "@/components/ui";
 import { auditTrail } from "@/lib/audit";
+import { recordedApart } from "@/lib/timeline-merge";
 import { addYears, suggestedSubjectivities } from "@/lib/quote-terms";
 import { bindBlockers } from "@/lib/bind-rules";
 import { clearanceStatus } from "@/lib/referrals";
@@ -368,6 +369,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                   <li key={h.id}>
                     {/* UX-006: one display zone, named. */}
                     <span className="text-slate-500">{when(h.occurred_at)}</span>{" "}
+                    {recordedApart(h.occurred_at, h.recorded_at) && <span className="text-amber-700">(recorded {when(h.recorded_at!)}) </span>/* CR-074 */}
                     <span className="font-medium">{h.actor}</span>: {h.summary}
                     {/* UX-045: the same text the inputs show ($1,000 → $2,500, AZ → AZ, NV). */}
                     {h.action === "worksheet.input_changed" && (() => {

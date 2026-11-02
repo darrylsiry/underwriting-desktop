@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyFilters, changes, display, fromDesktop, fromRateAdmin, fromRating, groupByCorrelation, merge } from "./timeline-merge.ts";
+import { applyFilters, changes, display, fromDesktop, fromRateAdmin, fromRating, groupByCorrelation, merge, recordedApart } from "./timeline-merge.ts";
 
 const desktop = (id: number, at: string, correlation: string, action = "submission.field_corrected") => fromDesktop({
   id, occurred_at: new Date(at), actor: "pat", action, entity_type: "submission", entity_id: "s1",
@@ -65,4 +65,18 @@ test("from/to bucket days in the display zone, not UTC", () => {
   assert.equal(applyFilters(lateOct31Eastern, { from: "2026-10-31", to: "2026-10-31" }, "America/New_York").length, 1);
   assert.equal(applyFilters(lateOct31Eastern, { from: "2026-11-01" }, "America/New_York").length, 0);
   assert.equal(applyFilters(lateOct31Eastern, { from: "2026-11-01" }, "UTC").length, 1);
+});
+
+test("a back-dated row shows when it was really written; a live row or an older one doesn't (CR-074)", () => {
+  const row = { id: 1, occurred_at: new Date("2026-03-30T18:13:00Z"), actor: "pat", action: "policy.bound", entity_type: "policy", entity_id: "p1", summary: "bound", before: null, after: null, correlation_id: "c1" };
+  assert.equal(fromDesktop({ ...row, recorded_at: new Date("2026-11-02T15:00:00Z") }).recordedAt, "2026-11-02T15:00:00.000Z");
+  assert.ok(!("recordedAt" in fromDesktop({ ...row, recorded_at: row.occurred_at })), "written when it happened");
+  assert.ok(!("recordedAt" in fromDesktop({ ...row, recorded_at: new Date("2026-03-30T18:13:30Z") })), "seconds apart isn't back-dating");
+  assert.ok(!("recordedAt" in fromDesktop({ ...row, recorded_at: null })), "written before the column existed");
+  assert.ok(!("recordedAt" in fromDesktop(row)));
+  const rating = { id: "r1", created_at: "2026-03-30T18:13:00Z", requested_by: "pat", reference: "SUB-1", rate_version: "2026.1", class_code: null, premium: "1", total: "2" };
+  assert.equal(fromRating({ ...rating, recorded_at: "2026-11-02T15:00:00Z" }).recordedAt, "2026-11-02T15:00:00.000Z");
+  assert.ok(!("recordedAt" in fromRating({ ...rating, recorded_at: "2026-03-30T18:13:00Z" })));
+  assert.equal(recordedApart("2026-03-30T18:13:00Z", "2026-03-30T18:14:01Z"), "2026-03-30T18:14:01.000Z");
+  assert.equal(recordedApart("2026-03-30T18:13:00Z", null), undefined);
 });
