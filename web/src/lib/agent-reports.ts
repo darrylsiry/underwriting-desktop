@@ -16,13 +16,14 @@ export type AgentInfo = {
   command: string;       // the slash command that runs it
   what: string;
   severities: string[];  // display order
+  repositoryOnly?: true; // its full report is left out of deployed copies (scripts/fly-deploy.sh, CR-097)
 };
 
 export const AGENTS: AgentInfo[] = [
   { key: "code", name: "Code quality", agent: "code-auditor", file: "CODE_REVIEW.md", prefix: "CR", command: "/audit",
     what: "Reads the whole repository for bugs and quality issues", severities: ["Critical", "High", "Medium", "Low", "Suggestion"] },
   { key: "security", name: "Security", agent: "security-reviewer", file: "SECURITY_REVIEW.md", prefix: "SEC", command: "/security-audit",
-    what: "Looks for vulnerabilities and insecure configuration", severities: ["Critical", "High", "Medium", "Low", "Informational"] },
+    what: "Looks for vulnerabilities and insecure configuration", severities: ["Critical", "High", "Medium", "Low", "Informational"], repositoryOnly: true },
   { key: "ux", name: "UX", agent: "ux-reviewer", file: "UX_REVIEW.md", prefix: "UX", command: "/ux-audit",
     what: "Uses every screen, form and flow as an underwriter would", severities: ["P1 Blocker", "P2 Major", "P3 Minor", "P4 Polish"] },
   { key: "uat", name: "UAT", agent: "uat-tester", file: "UAT_REPORT.md", prefix: "UAT", command: "/uat",

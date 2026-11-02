@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { test } from "node:test";
+import { loadAgentActivity, readReport } from "./agent-activity.ts";
 import { activityView, emptyLedger, foldCommit, foldReport, readLedger } from "./agent-ledger.ts";
 import { agentOfId, agentOfReport, citedIds, commitTitles, localDate, parseReport, zonedInstant } from "./agent-reports.ts";
 
@@ -233,4 +237,83 @@ test("the page view: open by severity, closed lists, fixes landed after the run,
   assert.equal(view.totals.open, 4);   // CR-066, CR-095, UX-048, UAT-O1
   assert.equal(view.totals.runs, 4);
   assert.equal(readLedger("not json").runs.length, 0);
+});
+
+const SECURITY = `# Security review: Underwriting Desktop
+
+- **Run:** 2026-11-01 00:10
+- **Commit reviewed:** \`8dbe665\`
+
+## Summary
+
+One High is open.
+
+## High
+
+### SEC-040 — A login can read something it should not
+- **Status:** Open (first seen 2026-10-30)
+- **Evidence:** the steps to reproduce it.
+
+## Low
+
+### SEC-041 — A header is missing
+- **Status:** Open (first seen 2026-10-31)
+`;
+
+const securityLedger = () => {
+  const l = emptyLedger();
+  const r = parseReport("security", SECURITY);
+  foldReport(l, r, r.runAt!);
+  foldCommit(l, { sha: "abc1234ffff", date: "2026-11-01T06:00:00.000Z", subject: "fix: SEC-040 close the hole", body: "" });
+  return l;
+};
+
+test("a deployed copy with no security report still shows its card and findings from the ledger (CR-097)", () => {
+  const view = activityView(readLedger(JSON.stringify(securityLedger())), { code: parseReport("code", CODE_2) });
+  const sec = view.agents.find((a) => a.info.key === "security")!;
+  assert.equal(sec.report, null);
+  assert.equal(sec.reportWithheld, true, "the page says the full report stays in the repository");
+  assert.deepEqual(sec.latest, { runAt: "2026-11-01T04:10:00.000Z", commit: "8dbe665", open: 2 });
+  assert.deepEqual(sec.open.map((i) => [i.id, i.severity, i.title]), [
+    ["SEC-040", "High", "A login can read something it should not"],
+    ["SEC-041", "Low", "A header is missing"],
+  ]);
+  assert.deepEqual(sec.openBySeverity, [{ severity: "High", count: 1 }, { severity: "Low", count: 1 }]);
+  assert.deepEqual(sec.pendingFixes["SEC-040"]?.map((c) => c.sha), ["abc1234"], "a later fix still shows");
+  assert.equal(sec.runs.length, 1);
+  // Other agents are unchanged: no report and no runs on record is still "No report yet", and no note.
+  const ux = view.agents.find((a) => a.info.key === "ux")!;
+  assert.deepEqual([ux.report, ux.latest, ux.reportWithheld], [null, null, false]);
+});
+
+test("with the security report on disk, nothing changes: the card reads the report and offers it (CR-097)", () => {
+  const report = parseReport("security", SECURITY);
+  const sec = activityView(readLedger(JSON.stringify(securityLedger())), { security: report }).agents.find((a) => a.info.key === "security")!;
+  assert.equal(sec.report?.commit, "8dbe665");
+  assert.equal(sec.reportWithheld, false);
+  assert.deepEqual(sec.latest, { runAt: report.runAt, commit: "8dbe665", open: 2 });
+});
+
+test("from a folder without the security report the page loads and its report is not found (CR-097)", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "agent-reports-"));
+  const saved = process.env.AGENT_REPORTS_DIR;
+  process.env.AGENT_REPORTS_DIR = dir;
+  try {
+    writeFileSync(path.join(dir, "AGENT_LEDGER.json"), JSON.stringify(securityLedger()));
+    writeFileSync(path.join(dir, "CODE_REVIEW.md"), CODE_2);
+    const { view, source } = await loadAgentActivity();
+    assert.equal(source, "deployed copy");
+    assert.deepEqual(view.agents.find((a) => a.info.key === "security")!.open.map((i) => i.id), ["SEC-040", "SEC-041"]);
+    assert.equal(await readReport("security"), null, "/app-tests/security answers notFound()");
+    assert.ok(await readReport("code"));
+  } finally {
+    if (saved === undefined) delete process.env.AGENT_REPORTS_DIR; else process.env.AGENT_REPORTS_DIR = saved;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the deploy leaves the security report out of the web image (CR-097)", () => {
+  const copied = /for f in ([^;]*AGENT_LEDGER\.json); do/.exec(readFileSync("../scripts/fly-deploy.sh", "utf8"))?.[1] ?? "";
+  assert.match(copied, /CODE_REVIEW\.md/);
+  assert.doesNotMatch(copied, /SECURITY_REVIEW/);
 });
