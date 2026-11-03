@@ -7,6 +7,7 @@ becomes one document and each attachment is classified on its own.
 import email
 import hashlib
 import io
+import re
 from dataclasses import dataclass, field
 from email import policy
 from pathlib import PurePath
@@ -14,10 +15,14 @@ from pathlib import PurePath
 from docx import Document as DocxDocument
 from docx.table import Table
 from pypdf import PdfReader
+from pypdf.generic import NameObject
 
 from app import acord
 
 NOT_READ_FROM_FORM = ("loss_run", "supplemental_questionnaire")
+# A mention isn't a loss run: applications and cover letters say "attach loss runs" (CR-160).
+LOSS_RUN_MENTION = re.compile(r"\b(ATTACH\w*|ENCLOS\w*|INCLUD\w*|SEE|PLEASE|PROVIDE\w*|REQUEST\w*|SEND|SENT|FOLLOW\w*|NEED\w*|REQUIRED)\b")
+LOSS_RUN_TERMS = ("TOTAL INCURRED", "VALUED AS OF", "VALUATION DATE")
 
 
 @dataclass
@@ -65,20 +70,55 @@ def load(filename: str, data: bytes, parent: str | None = None) -> list[Document
     raise UnsupportedDocument(f"{filename}: unsupported file type (send PDF, EML, DOCX, or TXT)")
 
 
+def _form_value(value) -> str:
+    """A checkbox's value is a PDF name: /Off is an unticked box, so no answer, and /Yes reads as yes (CR-162)."""
+    if isinstance(value, NameObject):
+        return "" if value == "/Off" else value.lstrip("/")
+    return str(value or "").strip()
+
+
+def _is_loss_run(first_page: str, application: bool) -> bool:
+    """It says so at the top of the page, or says so and carries a loss run's own terms."""
+    lines = [line for line in first_page.splitlines() if line.strip()]
+    if any("LOSS RUN" in line and not LOSS_RUN_MENTION.search(line) for line in lines[:5]):
+        return True
+    return not application and "LOSS RUN" in first_page and any(term in first_page for term in LOSS_RUN_TERMS)
+
+
+def _doc_type(first_page: str, fields: dict[str, str]) -> str:
+    """A filled application is one whatever else it says, so its fields get read (CR-160)."""
+    application = "INSURANCE APPLICATION" in first_page or "ACORD" in first_page
+    if application and acord.has_mapped_fields(fields):
+        return "acord_application"
+    if _is_loss_run(first_page, application):
+        return "loss_run"
+    if "SUPPLEMENTAL QUESTIONNAIRE" in first_page:
+        return "supplemental_questionnaire"
+    if application:
+        return "acord_application_flattened"
+    return "application" if "APPLICATION" in first_page else "other"
+
+
 def _pdf(filename: str, data: bytes, parent: str | None) -> Document:
     reader = PdfReader(io.BytesIO(data))
-    fields = {k: str(v.get("/V") or "").strip() for k, v in (reader.get_fields() or {}).items()}
+    fields = {k: _form_value(v.get("/V")) for k, v in (reader.get_fields() or {}).items()}
     first_page = (reader.pages[0].extract_text() or "").upper() if reader.pages else ""
-    doc = Document(filename, "other", "application/pdf", data=data, form_fields=fields, parent=parent)
-    if "LOSS RUN" in first_page:
-        doc.doc_type = "loss_run"
-    elif "SUPPLEMENTAL QUESTIONNAIRE" in first_page:
-        doc.doc_type = "supplemental_questionnaire"
-    elif "INSURANCE APPLICATION" in first_page or "ACORD" in first_page:
-        doc.doc_type = "acord_application" if doc.read_from_form else "acord_application_flattened"
-    elif "APPLICATION" in first_page:
-        doc.doc_type = "application"
-    return doc
+    return Document(filename, _doc_type(first_page, fields), "application/pdf", data=data, form_fields=fields, parent=parent)
+
+
+def _attachments(part, body):
+    """Every file in a message, however it is nested: iter_attachments misses those inside multipart/alternative
+    and multipart/related (CR-169). A forwarded message stops the walk and keeps its warning; a logo an HTML
+    body shows by Content-ID isn't a document."""
+    for sub in part.iter_parts():
+        if sub.get_content_type() == "message/rfc822":
+            yield sub
+        elif sub.is_multipart():
+            yield from _attachments(sub, body)
+        elif sub is body or (sub.get_content_maintype() == "image" and sub["Content-ID"]):
+            continue
+        elif sub.get_filename() or sub.get_content_maintype() != "text":
+            yield sub
 
 
 def _email(filename: str, data: bytes) -> list[Document]:
@@ -87,7 +127,7 @@ def _email(filename: str, data: bytes) -> list[Document]:
     header = "\n".join(f"{h}: {msg[h]}" for h in ("From", "To", "Date", "Subject") if msg[h])
     main = Document(filename, "broker_email", "text/plain", text=f"{header}\n\n{body.get_content() if body else ''}")
     docs = [main]
-    for part in msg.iter_attachments():
+    for part in _attachments(msg, body):
         name = part.get_filename() or "attachment"
         try:
             payload = part.get_payload(decode=True)

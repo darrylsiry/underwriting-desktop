@@ -145,7 +145,7 @@ def normalize(path: str, raw) -> object:
         return to_int(text, path)
     if kind == "bool":
         lowered = text.lower()
-        if lowered in ("y", "yes", "true", "1"):
+        if lowered in ("y", "yes", "true", "1", "on"):
             return True
         if lowered in ("n", "no", "false", "0"):
             return False

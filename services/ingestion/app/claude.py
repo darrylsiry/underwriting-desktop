@@ -49,8 +49,14 @@ Class codes: choose operations.class_code only from this list, as an inference u
 Loss history: list every individual claim from loss runs or applications (incurred in whole dollars, \
 status as written). If a document says there were no losses, return an empty list.
 
+Document types: for every document, say what it really is from its content, scans included: loss_run \
+(a carrier's claim history), supplemental_questionnaire, application, broker_email, or other.
+
 {known}Notes: up to 5 short underwriting-relevant facts the fields don't capture (e.g. New York Labor Law \
 240 exposure, a large open claim, documents the broker promised but didn't send)."""
+
+
+DOC_TYPES = ["loss_run", "supplemental_questionnaire", "application", "broker_email", "other"]
 
 
 def response_schema(filenames: list[str]) -> dict:
@@ -83,9 +89,15 @@ def response_schema(filenames: list[str]) -> dict:
                 "required": ["date", "description", "incurred", "status", "source_document"],
                 "additionalProperties": False,
             }},
+            "document_types": {"type": "array", "items": {
+                "type": "object",
+                "properties": {"filename": source, "doc_type": {"type": "string", "enum": DOC_TYPES}},
+                "required": ["filename", "doc_type"],
+                "additionalProperties": False,
+            }},
             "notes": {"type": "array", "items": {"type": "string"}},
         },
-        "required": ["fields", "loss_history", "notes"],
+        "required": ["fields", "loss_history", "document_types", "notes"],
         "additionalProperties": False,
     }
 
@@ -98,6 +110,7 @@ class ClaudeResult:
     model: str
     usage: dict
     warnings: list[str] = field(default_factory=list)
+    document_types: dict[str, str] = field(default_factory=dict)  # filename -> what Claude says the document is
 
 
 class ExtractionError(RuntimeError):
@@ -250,4 +263,5 @@ def _parse(data: dict, model: str, usage) -> ClaudeResult:
         fields=fields, losses=losses, notes=data["notes"], model=model,
         usage={"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens},
         warnings=warnings,
+        document_types={d["filename"]: d["doc_type"] for d in data.get("document_types", [])},
     )

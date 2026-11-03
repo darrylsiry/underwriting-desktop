@@ -1,5 +1,6 @@
 """upload -> classify -> extract -> merge into one submission JSON with per-field confidence."""
 import threading
+from pathlib import PurePath
 
 from app import acord, claude
 from app.documents import Document, UnsupportedDocument, load
@@ -22,8 +23,10 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
     docs: list[Document] = []
     warnings: list[str] = []
     first_copy: dict[str, str] = {}  # content hash -> the file name it was first read under
+    names: set[str] = set()
     step("receive", f"Received {len(files)} file(s): " + ", ".join(f"{n} ({len(d) / 1024:.0f} KB)" for n, d in files))
     for name, data in files:
+        renamed: dict[str, str] = {}
         try:
             for d in load(name, data):
                 # A copy would be read twice under one name, and dedupe_losses keeps every row from one document (CR-142).
@@ -32,6 +35,14 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
                     warnings.append(f"{d.filename} appears twice with the same contents; read once" if first == d.filename
                                     else f"{d.filename} has the same contents as {first}; read once")
                     continue
+                # Everything from here on identifies a document by name, so one name can only mean one document (CR-166).
+                d.parent = renamed.get(d.parent, d.parent)
+                if d.filename in names:
+                    later = _free_name(d.filename, names)
+                    warnings.append(f"Two files named {d.filename} have different contents; the later one is read as {later}")
+                    renamed[d.filename] = later
+                    d.filename = later
+                names.add(d.filename)
                 first_copy[d.content_hash] = d.filename
                 docs.append(d)
                 how = ("has filled form fields, reading them directly" if d.read_from_form
@@ -49,6 +60,8 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
     for doc in docs:
         if doc.read_from_form:
             values, rows, w = acord.extract(doc)
+            values, off_list = _rateable_only(values, classes)
+            warnings += off_list
             for fv in values:
                 emit({"type": "field", "path": fv.path, "value": fv.value, "basis": "stated",
                       "confidence": 1.0, "method": "form_field"})
@@ -83,6 +96,9 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
             claude_info = {"model": result.model, "usage": result.usage}
             for d in to_read:
                 d.read_by_claude = True
+                # Only what the file couldn't say itself: a scan has no first-page text, a Word file no heading test (CR-153).
+                if d.doc_type in ("other", "application") and result.document_types.get(d.filename) in DOC_TYPE_LABELS:
+                    d.doc_type = result.document_types[d.filename]
         except claude.ExtractionError as e:
             warnings.append(f"{e}; {len(to_read)} document(s) were not read")
     elif to_read:
@@ -110,14 +126,22 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
     })
 
 
+def _free_name(name: str, taken: set[str]) -> str:
+    """`LossRuns.pdf` -> `LossRuns (2).pdf`, or the next number not already in use."""
+    path, n = PurePath(name), 2
+    while f"{path.stem} ({n}){path.suffix}" in taken:
+        n += 1
+    return f"{path.stem} ({n}){path.suffix}"
+
+
 def _rateable_only(fields: list[FieldValue], classes: list[dict]) -> tuple[list[FieldValue], list[str]]:
-    """The prompt asks Claude to pick from the class list; this enforces it, so an off-list code is caught
-    at intake rather than failing at Save & rate. With no list there is nothing to check against (warned above)."""
+    """Catch an off-list code at intake rather than failing at Save & rate, whether Claude chose it or a form
+    stated it (CR-058, CR-171). With no list there is nothing to check against."""
     rateable = {str(c["class_code"]) for c in classes}
     kept, warnings = [], []
     for fv in fields:
         if fv.path == "operations.class_code" and rateable and fv.value not in rateable:
-            warnings.append(f"Claude's class code {fv.value} ({fv.source_document}) is not a rateable class and was dropped")
+            warnings.append(f"Class code {fv.value} ({fv.source_document}) is not a rateable class and was dropped")
         else:
             kept.append(fv)
     return kept, warnings

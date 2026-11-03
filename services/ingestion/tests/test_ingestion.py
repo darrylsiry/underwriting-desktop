@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import threading
 import time
@@ -10,6 +11,8 @@ import httpx
 import pytest
 from fastapi.exceptions import ResponseValidationError
 from fastapi.testclient import TestClient
+from pypdf import PdfWriter
+from pypdf.generic import DictionaryObject, NameObject, TextStringObject
 from starlette.requests import ClientDisconnect
 
 from app import acord, claude, pipeline
@@ -752,3 +755,192 @@ def test_the_same_contents_under_another_name_is_read_once_and_named():
     result = pipeline.run([("a.pdf", pdf), ("b.pdf", pdf)], [], use_claude=False)
     assert [d["filename"] for d in result["documents"]] == ["a.pdf"]
     assert any("b.pdf has the same contents as a.pdf" in w for w in result["warnings"])
+
+
+# --- how a document is typed (CR-160, CR-153) ---
+
+@pytest.mark.parametrize("line", ["Please attach loss runs", "see loss runs attached", "Loss runs to follow"])
+def test_a_mention_of_loss_runs_doesnt_make_a_document_one(line):
+    """CR-160: the phrase anywhere on the first page used to win, ahead of the application tests."""
+    [doc] = load("letter.pdf", fillable_pdf(line, {}))
+    assert doc.doc_type == "other"
+
+
+def test_an_application_asking_for_loss_runs_is_still_read_from_its_fields():
+    pdf = fillable_pdf("INSURANCE APPLICATION - Please attach loss runs", {"NamedInsured_FullName_A": "Acme LLC"})
+    result = pipeline.run([("app.pdf", pdf)], classes=[], use_claude=False)
+    assert result["documents"][0] == {"filename": "app.pdf", "doc_type": "acord_application", "parent": None, "method": "form_field"}
+    assert result["submission"]["applicant"]["name"] == "Acme LLC"
+
+
+@pytest.mark.parametrize("line", ["LOSS RUN", "Loss Runs", "Commercial General Liability - Loss Run Report",
+                                  "Carrier claims - loss run - Valued as of 10/01/2026"])
+def test_a_real_loss_run_is_still_a_loss_run(line):
+    [doc] = load("lr.pdf", fillable_pdf(line, {}))
+    assert doc.doc_type == "loss_run"
+
+
+def stored_claude(monkeypatch, **reply):
+    """Claude "on" returning `reply` as ClaudeResult fields, document_types included."""
+    def extract(docs, classes, **_):
+        return claude.ClaudeResult(reply.get("fields", []), reply.get("losses", []), [], "fake", {},
+                                   document_types=reply.get("document_types", {}))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setattr(claude, "extract", extract)
+
+
+def test_a_scanned_loss_run_gets_its_type_and_its_precedence_from_claude(monkeypatch):
+    """CR-153: a scan has no first-page text, so it stayed "other" and lost to the application's row."""
+    loss = lambda amount, source: Loss("2025-01-02", "Fall", amount, "Open", source)  # noqa: E731
+    stored_claude(monkeypatch, losses=[loss(40_000, "scan.pdf"), loss(25_000, "letter.txt")],
+                  document_types={"scan.pdf": "loss_run", "letter.txt": "application"})
+    result = pipeline.run([("scan.pdf", fillable_pdf("", {})), ("letter.txt", b"Application: one claim, $25,000")], classes=[])
+    assert {d["filename"]: d["doc_type"] for d in result["documents"]} == {"scan.pdf": "loss_run", "letter.txt": "application"}
+    assert [row["incurred"] for row in result["submission"]["loss_history"]] == [40_000]
+    assert any("$25,000" in w and "$40,000" in w for w in result["warnings"])
+
+
+def test_claude_never_overrides_a_type_read_from_the_document(monkeypatch):
+    stored_claude(monkeypatch, document_types={"q.pdf": "loss_run", "scan.pdf": "not-a-type"})
+    files = [("q.pdf", fillable_pdf("SUPPLEMENTAL QUESTIONNAIRE", {})), ("scan.pdf", fillable_pdf("", {}))]
+    types = {d["filename"]: d["doc_type"] for d in pipeline.run(files, classes=[])["documents"]}
+    assert types == {"q.pdf": "supplemental_questionnaire", "scan.pdf": "other"}
+
+
+def test_the_response_schema_asks_claude_to_type_each_document():
+    schema = claude.response_schema(["a.pdf"])
+    assert "document_types" in schema["required"]
+    item = schema["properties"]["document_types"]["items"]["properties"]
+    assert item["filename"]["enum"] == ["a.pdf"] and "loss_run" in item["doc_type"]["enum"]
+
+
+def test_claude_reply_without_document_types_still_parses():
+    result = claude._parse({"fields": [], "loss_history": [], "notes": []}, "fake", USAGE)
+    assert result.document_types == {}
+
+
+def test_claude_reply_document_types_are_read():
+    reply = {"fields": [], "loss_history": [], "notes": [], "document_types": [{"filename": "a.pdf", "doc_type": "loss_run"}]}
+    assert claude._parse(reply, "fake", USAGE).document_types == {"a.pdf": "loss_run"}
+
+
+# --- emailed files nested below the top level (CR-169) ---
+
+def nested_email(shape: str) -> bytes:
+    msg = EmailMessage()
+    msg["From"], msg["Subject"] = "broker@example.com", "Submission"
+    msg.set_content("Loss run attached.")
+    pdf = fillable_pdf("LOSS RUN", {})
+    if shape == "alternative":   # text, then the HTML and its files: how a file placed in an HTML message can arrive
+        msg.add_alternative("<p>Loss run attached.</p>", subtype="html")
+        html = msg.get_payload()[1]
+        html.make_mixed()
+        html.add_attachment(pdf, maintype="application", subtype="pdf", filename="loss-run.pdf")
+    else:                        # a related part holding a file, beside an ordinary attachment
+        msg.make_related()
+        msg.add_related(pdf, maintype="application", subtype="pdf", filename="loss-run.pdf", disposition="inline")
+        msg.make_mixed()
+        msg.add_attachment(b"notes", maintype="text", subtype="plain", filename="notes.txt")
+    return msg.as_bytes()
+
+
+@pytest.mark.parametrize("shape", ["alternative", "related"])
+def test_a_file_nested_in_an_email_is_read(shape):
+    docs = load("mail.eml", nested_email(shape))
+    run = next(d for d in docs if d.filename == "loss-run.pdf")
+    assert run.doc_type == "loss_run" and run.parent == "mail.eml"
+    assert not docs[0].skipped
+
+
+def test_a_signature_logo_is_not_reported_as_an_unsupported_file():
+    msg = EmailMessage()
+    msg["From"], msg["Subject"] = "broker@example.com", "Submission"
+    msg.set_content("Hello")
+    msg.add_alternative("<p>Hello <img src='cid:logo'></p>", subtype="html")
+    msg.get_payload()[1].add_related(b"\x89PNG", maintype="image", subtype="png", cid="<logo>", filename="logo.png")
+    [body] = load("mail.eml", msg.as_bytes())
+    assert body.skipped == [] and "Hello" in body.text
+
+
+# --- same name, different contents (CR-166) ---
+
+def test_two_different_files_with_one_name_stay_two_documents():
+    """Everything after classifying identifies a document by name, so one claim on both counted twice."""
+    first = fillable_pdf("LOSS RUN", {"A": "valued in March"})
+    second = fillable_pdf("LOSS RUN", {"A": "valued in June"})
+    result = pipeline.run([("lr.pdf", first), ("lr.pdf", second)], classes=[], use_claude=False)
+    assert [d["filename"] for d in result["documents"]] == ["lr.pdf", "lr (2).pdf"]
+    assert any("lr.pdf" in w and "lr (2).pdf" in w and "different contents" in w for w in result["warnings"])
+
+
+def test_a_claim_on_two_files_with_one_name_counts_once(monkeypatch):
+    first, second = fillable_pdf("LOSS RUN", {"A": "1"}), fillable_pdf("LOSS RUN", {"A": "2"})
+    row = lambda source: Loss("2025-01-02", "Fall", 40_000, "Open", source)  # noqa: E731
+    calls = fake_claude(monkeypatch, losses=[row("lr.pdf"), row("lr (2).pdf")])
+    result = pipeline.run([("lr.pdf", first), ("lr.pdf", second)], classes=[])
+    assert calls == [["lr.pdf", "lr (2).pdf"]]
+    assert len(result["submission"]["loss_history"]) == 1
+
+
+def test_an_email_renamed_for_a_clash_keeps_its_attachments():
+    def mail(text):
+        msg = EmailMessage()
+        msg["From"], msg["Subject"] = "broker@example.com", text
+        msg.set_content(text)
+        msg.add_attachment(fillable_pdf("LOSS RUN", {"A": text}), maintype="application", subtype="pdf", filename=f"{text}.pdf")
+        return msg.as_bytes()
+    result = pipeline.run([("mail.eml", mail("one")), ("mail.eml", mail("two"))], classes=[], use_claude=False)
+    parents = {d["filename"]: d["parent"] for d in result["documents"]}
+    assert parents == {"mail.eml": None, "one.pdf": "mail.eml", "mail (2).eml": None, "two.pdf": "mail (2).eml"}
+
+
+# --- checkboxes on a fillable form (CR-162) ---
+
+def checkbox_pdf(value: str) -> bytes:
+    writer = PdfWriter(clone_from=io.BytesIO(fillable_pdf("INSURANCE APPLICATION", {"NamedInsured_FullName_A": "Acme LLC"})))
+    box = DictionaryObject({NameObject("/FT"): NameObject("/Btn"), NameObject("/V"): NameObject(value),
+                            NameObject("/T"): TextStringObject("GeneralLiability_Contractor_SubcontractorCertificateIndicator_A")})
+    writer.root_object["/AcroForm"]["/Fields"].append(writer._add_object(box))
+    out = io.BytesIO()
+    writer.write(out)
+    return out.getvalue()
+
+
+@pytest.mark.parametrize("value, expected", [("/Yes", True), ("/On", True), ("/Off", None), ("/No", False)])
+def test_a_checkbox_reads_as_its_answer(value, expected):
+    result = pipeline.run([("app.pdf", checkbox_pdf(value))], classes=[], use_claude=False)
+    assert result["submission"]["operations"].get("subcontractor_coi_required") == expected
+    assert not any("subcontractor_coi_required" in w for w in result["warnings"])
+
+
+def test_an_unticked_box_alone_is_not_a_filled_form():
+    writer = PdfWriter(clone_from=io.BytesIO(fillable_pdf("Hello", {})))
+    box = DictionaryObject({NameObject("/FT"): NameObject("/Btn"), NameObject("/V"): NameObject("/Off"),
+                            NameObject("/T"): TextStringObject("GeneralLiability_Contractor_WrapUpIndicator_A")})
+    writer.root_object["/AcroForm"]["/Fields"].append(writer._add_object(box))
+    out = io.BytesIO()
+    writer.write(out)
+    [doc] = load("x.pdf", out.getvalue())
+    assert not doc.read_from_form
+
+
+# --- class codes on a filled form (CR-171) ---
+
+def test_an_off_list_class_code_on_a_form_is_dropped_and_claudes_can_win(monkeypatch):
+    classes = [{"class_code": "98304", "description": "Painting"}]
+    pdf = fillable_pdf("INSURANCE APPLICATION", {"NamedInsured_FullName_A": "Acme", "GeneralLiability_Hazard_ClassCode_A": "99999"})
+    alone = pipeline.run([("app.pdf", pdf)], classes, use_claude=False)
+    assert "operations.class_code" in alone["missing_for_rating"]
+    assert any("99999" in w and "app.pdf" in w and "not a rateable class" in w for w in alone["warnings"])
+    assert not any("Claude's" in w for w in alone["warnings"])
+
+    fake_claude(monkeypatch, fields=[FieldValue("operations.class_code", "98304", 0.8, "claude", "inferred", "a.eml")])
+    both = pipeline.run([("app.pdf", pdf), ("a.txt", b"Painter")], classes)
+    assert both["submission"]["operations"]["class_code"] == "98304" and both["conflicts"] == []
+
+
+def test_a_rateable_class_code_on_a_form_is_kept():
+    classes = [{"class_code": "98304", "description": "Painting"}]
+    pdf = fillable_pdf("INSURANCE APPLICATION", {"GeneralLiability_Hazard_ClassCode_A": "98304"})
+    result = pipeline.run([("app.pdf", pdf)], classes, use_claude=False)
+    assert result["submission"]["operations"]["class_code"] == "98304" and not any("rateable" in w for w in result["warnings"])
