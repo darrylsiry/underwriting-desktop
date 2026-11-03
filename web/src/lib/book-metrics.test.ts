@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { dueWithin, isBoundNotEffective, isInForce, lossRatio, lossTotals, summarizeBook, teamSummary, type BookRow } from "./book-metrics.ts";
+import { claimsOnFile, dueWithin, isBoundNotEffective, isInForce, lossRatio, lossTotals, summarizeBook, teamSummary, type BookRow } from "./book-metrics.ts";
 
 const TODAY = "2026-11-02";
 
@@ -118,4 +118,13 @@ test("loss totals count every row and only open ones as open (CR-135)", () => {
   ]), { claims: 2, incurred: 42_500, open_claims: 1 });
   assert.deepEqual(lossTotals([]), { claims: 0, incurred: 0, open_claims: 0 });
   assert.deepEqual(lossTotals(null), { claims: 0, incurred: 0, open_claims: 0 });
+});
+
+test("a renewal's claims: the rows when they tell the whole story, otherwise the totals carried from the expiring policy (CR-152)", () => {
+  const rows = [{ incurred: 1000, status: "Closed" }, { incurred: 2000, status: "Open" }];
+  assert.deepEqual(claimsOnFile({ data: { loss_history: rows } }), { claims: 2, incurred: 3000, open_claims: 1 });
+  const carried = { claims: 3, incurred: 90_000, open_claims: 1 };
+  assert.deepEqual(claimsOnFile({ data: { loss_history: [] }, renewal_of: { losses: carried } }), carried);
+  assert.deepEqual(claimsOnFile({ data: { loss_history: rows }, renewal_of: { losses: { claims: 1, incurred: 500, open_claims: 0 } } }), { claims: 2, incurred: 3000, open_claims: 1 });
+  assert.deepEqual(claimsOnFile(undefined), { claims: 0, incurred: 0, open_claims: 0 });
 });

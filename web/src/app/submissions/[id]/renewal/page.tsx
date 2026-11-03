@@ -7,7 +7,7 @@ import { Pill, RowLink, Section, money, when, whenDate } from "@/components/ui";
 import { policiesForSubmission } from "@/lib/policies";
 import { addYears, producerOf, suggestedSubjectivities } from "@/lib/quote-terms";
 import { getQuote, quotesForSubmission } from "@/lib/quotes";
-import { changeSummary, compareRenewal, inputText, pctText, signed, type Comparison, type Side } from "@/lib/renewal-compare";
+import { changeSummary, compareRenewal, coverageGapNote, inputText, pctText, signed, type Comparison, type Side } from "@/lib/renewal-compare";
 import { expiringOf } from "@/lib/renewals";
 import { getSubmission } from "@/lib/submissions";
 import { currentUser } from "@/lib/user";
@@ -15,7 +15,8 @@ import { inputChanges, inputsHash, worksheetChips, type RatingInputs } from "@/l
 import { activeRateVersion, openWorksheet, readiness } from "@/lib/worksheets";
 import { IssueQuoteForm } from "../issue-quote-form";
 import { QuoteDriftNotice, StatusChips } from "../status-chips";
-import { issueRenewalQuoteAction, reRateAction } from "./actions";
+import { issueQuoteAction } from "../workbench/actions";
+import { reRateAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +57,7 @@ export default async function RenewalPage({ params, searchParams }: Props) {
   const policy = policies[0];
   const effective = latest?.effective_date ?? String(sub.data.policy?.effective_date ?? exp.expiration_date);
   const expiration = latest?.expiration_date ?? addYears(effective, 1);
+  const gap = coverageGapNote(exp.expiration_date, effective);
   const subjectivities = latest?.subjectivities ?? ["Signed renewal application or no-change confirmation", ...suggestedSubjectivities(flags, sub.data).slice(1)];
   const expiringHref = exp.source === "book" ? `/policies/book/${exp.policy_id}` : `/policies/${exp.policy_id}`;
 
@@ -93,6 +95,7 @@ export default async function RenewalPage({ params, searchParams }: Props) {
         {" · "}<RowLink href={`/submissions/${id}/workbench`}>{policy ? "Workbench →" : <>Adjust &amp; re-rate on the workbench →</>}</RowLink>
         {" · "}<RowLink href={`/audit?submission=${id}`}>case history</RowLink>
       </p>
+      {gap && <p className="mt-1 text-sm text-amber-800">{gap}</p>}
 
       {msg && <p className="mt-4 rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{msg}</p>}
       {error && <p className="mt-4 rounded bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
@@ -236,13 +239,13 @@ export default async function RenewalPage({ params, searchParams }: Props) {
                   <details>
                     <summary className="cursor-pointer text-xs text-indigo-600">Revise renewal quote (v{latest.version + 1})</summary>
                     <div className="mt-3">
-                      <IssueQuoteForm action={issueRenewalQuoteAction.bind(null, id)} effective={effective} expiration={expiration} subjectivities={subjectivities} ratingId={ws.last_rating?.rating_id}
+                      <IssueQuoteForm action={issueQuoteAction.bind(null, id)} effective={effective} expiration={expiration} subjectivities={subjectivities} ratingId={ws.last_rating?.rating_id}
                         label={`Issue revised renewal quote (v${latest.version + 1})`} primary={false} />
                     </div>
                   </details>
                 </>
               ) : !policy && (ready ? (
-                <IssueQuoteForm action={issueRenewalQuoteAction.bind(null, id)} effective={effective} expiration={expiration} subjectivities={subjectivities} ratingId={ws.last_rating?.rating_id}
+                <IssueQuoteForm action={issueQuoteAction.bind(null, id)} effective={effective} expiration={expiration} subjectivities={subjectivities} ratingId={ws.last_rating?.rating_id}
                   label={latest ? `Issue revised renewal quote (v${latest.version + 1})` : `Issue renewal quote · ${money(ws.last_rating!.total)}`} />
               ) : (
                 <p className="text-slate-500">

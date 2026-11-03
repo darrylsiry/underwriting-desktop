@@ -6,7 +6,7 @@ import { audit, type AuditEvent } from "./audit";
 import { customerDb, policyDb } from "./db";
 import { formsFor, quoteLimits, type ProducerFields } from "./quote-terms";
 import { rateOn, rateVersionId } from "./rating-api";
-import { lossTotals } from "./book-metrics.ts";
+import { claimsOnFile } from "./book-metrics.ts";
 import type { ExpiringPolicy } from "./renewal-compare";
 import { renewalSubmissionData } from "./renewal-data.ts";
 import type { Extraction, SubmissionData } from "./submission";
@@ -76,8 +76,7 @@ async function desktopPolicyForRenewal(id: string): Promise<DesktopPolicyForRene
 }
 
 /** Snapshot of a policy bound in the UW Desktop: everything is on its quote and the original submission. */
-export function expiringFromDesktop(p: DesktopPolicyForRenewal, original: SubmissionData | null): ExpiringPolicy {
-  const losses = original?.loss_history;
+export function expiringFromDesktop(p: DesktopPolicyForRenewal, original: SubmissionData | null, originalRenewalOf: ExpiringPolicy | null = null): ExpiringPolicy {
   return {
     source: "desktop", policy_id: p.id, policy_number: p.policy_number, insured_name: p.insured_name, producer: p.terms.producer, producer_fields: p.terms.producer_fields,
     effective_date: p.effective_date, expiration_date: p.expiration_date, rate_version: p.rate_version,
@@ -85,7 +84,7 @@ export function expiringFromDesktop(p: DesktopPolicyForRenewal, original: Submis
     premium: Number(p.premium), policy_fee: Number(p.policy_fee), surplus_lines_tax: Number(p.surplus_lines_tax), total: Number(p.total),
     terms: { limits: p.terms.limits, deductible: p.terms.deductible, class_code: p.terms.class_code, class_description: p.terms.class_description,
       operations: p.terms.operations, forms: p.terms.forms },
-    losses: lossTotals(losses),
+    losses: claimsOnFile({ data: original, renewal_of: originalRenewalOf }),
     quote_id: p.quote_id,
   };
 }
@@ -168,8 +167,9 @@ export async function startRenewal(source: "book" | "desktop", policyId: string,
     if (!p) throw new Error("Policy not found");
     existing = await liveRenewal(source, policyId, p.policy_number, p.renewal_submission_id, actor);
     if (!existing) {
-      original = (await customerDb.query<{ data: SubmissionData }>("SELECT data FROM submissions WHERE id = $1", [p.submission_id])).rows[0]?.data ?? null;
-      exp = expiringFromDesktop(p, original);
+      const from = (await customerDb.query<{ data: SubmissionData; renewal_of: ExpiringPolicy | null }>("SELECT data, renewal_of FROM submissions WHERE id = $1", [p.submission_id])).rows[0];
+      original = from?.data ?? null;
+      exp = expiringFromDesktop(p, original, from?.renewal_of ?? null);
       homeState = p.rating_inputs.home_state;
       insuredId = p.insured_id;
     }
@@ -204,6 +204,8 @@ export async function startRenewal(source: "book" | "desktop", policyId: string,
 
     policy = await policyDb.connect();
     await policy.query("BEGIN");
+    // Read under the lock, so the audit says what it really was: the seeded book holds some already in progress (CR-167).
+    const statusWas = (await policy.query<{ renewal_status: RenewalStatus }>(`SELECT renewal_status FROM ${table} WHERE id = $1 FOR UPDATE`, [policyId])).rows[0]?.renewal_status;
     // Conditional, so two clicks can't start two renewals: the second waits here, then loses and rolls its inserts back.
     const claimed = await policy.query(
       `UPDATE ${table} SET renewal_status = 'in_progress', renewal_submission_id = $2 WHERE id = $1 AND renewal_submission_id IS NULL`,
@@ -229,7 +231,7 @@ export async function startRenewal(source: "book" | "desktop", policyId: string,
       },
       {
         actor, action: "renewal.started", entityType: source === "book" ? "book_policy" : "policy", entityId: policyId,
-        summary: `${exp!.policy_number}: renewal started as ${reference}`, before: { renewal_status: "not_started" },
+        summary: `${exp!.policy_number}: renewal started as ${reference}`, before: { renewal_status: statusWas },
         after: { renewal_status: "in_progress", renewal_submission_id: submissionId }, correlationId,
       },
     ];
@@ -241,9 +243,10 @@ export async function startRenewal(source: "book" | "desktop", policyId: string,
     await customer?.query("ROLLBACK").catch(() => {});
     await policy?.query("ROLLBACK").catch(() => {});
     if (submissionCommitted) {
-      // The claim didn't commit, so nothing points at this submission: don't leave it in the inbox.
-      await customerDb.query("DELETE FROM worksheets WHERE submission_id = $1", [submissionId]).catch(() => {});
-      await customerDb.query("DELETE FROM submissions WHERE id = $1", [submissionId]).catch(() => {});
+      // The claim didn't commit, so nothing points at this submission: don't leave it in the inbox. If it stays, say which (CR-157).
+      const notRemoved = (e: unknown) => console.error("[renewal] orphan submission not removed", submissionId, policyId, e);
+      await customerDb.query("DELETE FROM worksheets WHERE submission_id = $1", [submissionId]).catch(notRemoved);
+      await customerDb.query("DELETE FROM submissions WHERE id = $1", [submissionId]).catch(notRemoved);
     }
     throw err;
   } finally {

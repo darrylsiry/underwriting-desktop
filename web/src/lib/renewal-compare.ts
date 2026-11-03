@@ -148,12 +148,32 @@ function scheduleReasons(a: ScheduleItem[], b: ScheduleItem[]): string[] {
 }
 
 const RATE_PER_1000 = /\$([\d.]+) per \$1,000/;
+const CLASS_MINIMUM = "Minimum premium";
+
+/** A class minimum moves the premium with no factor to show for it (CR-170). */
+function minimumReason(bridge: Rating, renewing: Rating): string | null {
+  const b = line(bridge, CLASS_MINIMUM), r = line(renewing, CLASS_MINIMUM);
+  const to = renewing.rate_version;
+  if (b && r) return b.premium === r.premium ? null : `The minimum premium for your class changed from ${money(Number(b.premium))} to ${money(Number(r.premium))} under rate revision ${to}.`;
+  if (r) return `The minimum premium for your class, ${money(Number(r.premium))}, now applies to this policy under rate revision ${to}.`;
+  if (b) return `The minimum premium for your class, ${money(Number(b.premium))}, no longer applies to this policy under rate revision ${to}.`;
+  return null;
+}
+
+/** What a memo says when a renewal starts after the expiring policy ends; null when they meet (CR-156). */
+export function coverageGapNote(expiringEnds: string, renewingStarts: string): string | null {
+  const days = Math.round((Date.parse(`${renewingStarts}T00:00:00Z`) - Date.parse(`${expiringEnds}T00:00:00Z`)) / 86_400_000);
+  if (days <= 0) return null;
+  return `The expiring policy ends on ${whenDate(expiringEnds)} and this renewal starts on ${whenDate(renewingStarts)}, leaving ${days} day${days === 1 ? "" : "s"} without coverage from us.`;
+}
 
 /** Rate-table changes: lines that differ between the bridge (old rates) and the renewing rating (current rates). */
 function rateReasons(bridge: Rating | null, renewing: Rating): string[] {
   if (!bridge) return [];
   const out: string[] = [];
   const from = bridge.rate_version, to = renewing.rate_version;
+  const minimum = minimumReason(bridge, renewing);
+  if (minimum) out.push(minimum);
   for (const l of renewing.worksheet) {
     const b = line(bridge, l.step);
     if (!b) continue;
@@ -172,7 +192,11 @@ function rateReasons(bridge: Rating | null, renewing: Rating): string[] {
   if (Number(bridge.surplus_lines_tax_rate) !== Number(renewing.surplus_lines_tax_rate)) {
     out.push(`The surplus lines tax rate changed from ${(Number(bridge.surplus_lines_tax_rate) * 100).toFixed(2)}% to ${(Number(renewing.surplus_lines_tax_rate) * 100).toFixed(2)}%.`);
   }
-  if (!out.length && from !== to) out.push(`Rate revision ${to} replaced ${from}; none of its changes affect this policy's factors.`);
+  if (!out.length && from !== to) {
+    const moved = Number(renewing.premium) - Number(bridge.premium);
+    out.push(moved === 0 ? `Rate revision ${to} replaced ${from}; none of its changes affect this policy's factors.`
+      : `Rate revision ${to} replaced ${from} and moved this policy's premium by ${signed(moved)}.`);
+  }
   return out;
 }
 

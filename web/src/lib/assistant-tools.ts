@@ -5,7 +5,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { auditSearch } from "./assistant-audit.ts";
 import { listMeta } from "./assistant-lists.ts";
-import { LOSS_RATIO_BASIS, lossTotals, teamSummary } from "./book-metrics.ts";
+import { LOSS_RATIO_BASIS, claimsOnFile, teamSummary } from "./book-metrics.ts";
 import { daysUntil, loadDashboard } from "./dashboard";
 import { customerDb, policyDb } from "./db";
 import { GL_TOOLS } from "./gl-mcp";
@@ -73,11 +73,11 @@ async function underwriterNames(today: string): Promise<string[]> {
  * Who owns each submission. A policy written here belongs to the underwriter who picked its
  * submission up, as on the desk, whoever clicked Bind (CR-089). The two live in different databases.
  */
-async function submissionOwners(ids: string[]): Promise<Map<string, { owner: string; losses: Loss[] | null }>> {
+async function submissionOwners(ids: string[]): Promise<Map<string, { owner: string; claims: ReturnType<typeof claimsOnFile> }>> {
   if (!ids.length) return new Map();
-  const { rows } = await customerDb.query<{ id: string; received_by: string; losses: Loss[] | null }>(
-    "SELECT id::text AS id, received_by, data->'loss_history' AS losses FROM submissions WHERE id = ANY($1::uuid[])", [[...new Set(ids)]]);
-  return new Map(rows.map((r) => [r.id, { owner: r.received_by, losses: r.losses }]));
+  const { rows } = await customerDb.query<{ id: string; received_by: string; losses: Loss[] | null; carried: { claims: number; incurred: number; open_claims: number } | null }>(
+    "SELECT id::text AS id, received_by, data->'loss_history' AS losses, renewal_of->'losses' AS carried FROM submissions WHERE id = ANY($1::uuid[])", [[...new Set(ids)]]);
+  return new Map(rows.map((r) => [r.id, { owner: r.received_by, claims: claimsOnFile({ data: { loss_history: r.losses }, renewal_of: { losses: r.carried } }) }]));
 }
 
 export const APP_TOOLS: AppTool[] = [
@@ -304,7 +304,7 @@ export const APP_TOOLS: AppTool[] = [
       const owners = await submissionOwners(desk.rows.map((p) => p.submission_id));
       const all = [
         ...book.rows.map((p) => ({ source: "prior system", policy_number: p.policy_number, insured: p.insured_name, underwriter: p.underwriter, class: p.class_description, states: p.states, producer: p.producer, effective_date: p.effective_date, expiration_date: p.expiration_date, days_left: daysUntil(p.expiration_date, ctx.today), premium: money(p.premium), claims: p.claims, incurred: money(p.incurred), open_claims: p.open_claims, renewal_status: p.renewal_status, renewal_url: p.renewal_submission_id ? `/submissions/${p.renewal_submission_id}/renewal` : null, url: `/policies/book/${p.id}` })),
-        ...desk.rows.filter((p) => !uw || owners.get(p.submission_id)?.owner === uw).map((p) => ({ source: "UW Desktop", policy_number: p.policy_number, insured: p.insured_name, underwriter: owners.get(p.submission_id)?.owner ?? "", class: null, states: null, producer: null, effective_date: p.effective_date, expiration_date: p.expiration_date, days_left: daysUntil(p.expiration_date, ctx.today), premium: money(p.premium), ...lossTotals(owners.get(p.submission_id)?.losses), renewal_status: p.renewal_status, renewal_url: p.renewal_submission_id ? `/submissions/${p.renewal_submission_id}/renewal` : null, url: `/policies/${p.id}` })),
+        ...desk.rows.filter((p) => !uw || owners.get(p.submission_id)?.owner === uw).map((p) => ({ source: "UW Desktop", policy_number: p.policy_number, insured: p.insured_name, underwriter: owners.get(p.submission_id)?.owner ?? "", class: null, states: null, producer: null, effective_date: p.effective_date, expiration_date: p.expiration_date, days_left: daysUntil(p.expiration_date, ctx.today), premium: money(p.premium), ...(owners.get(p.submission_id)?.claims ?? claimsOnFile(null)), renewal_status: p.renewal_status, renewal_url: p.renewal_submission_id ? `/submissions/${p.renewal_submission_id}/renewal` : null, url: `/policies/${p.id}` })),
       ].sort((x, y) => x.expiration_date.localeCompare(y.expiration_date));
       const rows = all.filter((r) => r.renewal_status !== "renewed");
       return { window_days: days, as_of: ctx.today, count: rows.length, already_renewed: all.length - rows.length, expiring_premium: money(rows.reduce((s, r) => s + r.premium, 0)), policies: rows, list_url: `/book?due=${days}` };

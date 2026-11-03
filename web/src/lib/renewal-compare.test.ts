@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { changeSummary, compareRenewal, type Side } from "./renewal-compare.ts";
+import { changeSummary, compareRenewal, coverageGapNote, type Side } from "./renewal-compare.ts";
 import type { Rating } from "./worksheets.ts";
 
 const inputs = {
@@ -87,4 +87,40 @@ test("an unchanged renewal reads as unchanged", () => {
   assert.equal(changeSummary(c.bridge), "unchanged");
   assert.deepEqual(c.reasons, { terms: [], schedule: [], rates: [] });
   assert.equal(c.terms.filter((t) => t.changed).length, 1);  // only the policy period
+});
+
+const minimumCase = (expiringMin: number, renewingMin: number | null, renewingPremium: number) => {
+  const lines = (premium: number) => [["Base premium", "Painting: $8.2000 per $1,000 × $100,000 receipts", null, premium]] as [string, string, number | null, number][];
+  const withMin = (min: number | null, base: number) => min === null ? lines(base) : [...lines(base), ["Minimum premium", `Class minimum $${min.toLocaleString("en-US")}`, null, min] as [string, string, number | null, number]];
+  const before = rating("2026.1", withMin(expiringMin, 820), expiringMin);
+  const after = rating("2026.2", withMin(renewingMin, renewingPremium), renewingPremium);
+  const side = (r: Rating): Side => ({ inputs, schedule: [], rating: r, effective_date: "2025-11-01", expiration_date: "2026-11-01" });
+  return compareRenewal(side(before), side(after), before).reasons.rates;
+};
+
+test("a raised class minimum is named as the reason, not called no change (CR-170)", () => {
+  const reasons = minimumCase(2500, 3500, 3500);
+  assert.ok(reasons.some((r) => r.includes("minimum premium") && r.includes("$2,500") && r.includes("$3,500")), reasons.join());
+  assert.ok(!reasons.some((r) => r.includes("none of its changes")), reasons.join());
+});
+
+test("a minimum that stops applying is named too", () => {
+  const reasons = minimumCase(2500, null, 3000);
+  assert.ok(reasons.some((r) => r.includes("minimum premium") && r.includes("$2,500") && r.includes("no longer")), reasons.join());
+});
+
+test("only a revision that moved nothing says so; one nothing explains gives the amount (CR-170)", () => {
+  const lines = (rate: string) => [["Base premium", `Painting: $${rate} per $1,000 × $100,000 receipts`, null, 820]] as [string, string, number | null, number][];
+  const side = (r: Rating): Side => ({ inputs, schedule: [], rating: r, effective_date: "2025-11-01", expiration_date: "2026-11-01" });
+  const same = rating("2026.1", lines("8.20"), 820);
+  assert.ok(compareRenewal(side(same), side(rating("2026.2", lines("8.20"), 820)), same).reasons.rates[0].includes("none of its changes"));
+  const moved = compareRenewal(side(same), side(rating("2026.2", lines("8.20"), 821)), same).reasons.rates;
+  assert.ok(!moved.some((r) => r.includes("none of its changes")), moved.join());
+  assert.ok(moved.some((r) => r.includes("$1")), moved.join());
+});
+
+test("a renewal that starts after the expiring policy ends says how long the gap is (CR-156)", () => {
+  assert.equal(coverageGapNote("2027-03-15", "2027-03-15"), null);
+  assert.match(coverageGapNote("2027-03-15", "2027-04-01")!, /17 days/);
+  assert.match(coverageGapNote("2027-03-15", "2027-03-16")!, /1 day\b/);
 });

@@ -1,7 +1,7 @@
 import { money } from "./format.ts";
 import { plural } from "./text.ts";
 export { plural };
-import { RENEWAL_WINDOW_DAYS, daysUntil, lossTotals, summarizeBook } from "./book-metrics.ts";
+import { RENEWAL_WINDOW_DAYS, claimsOnFile, daysUntil, summarizeBook } from "./book-metrics.ts";
 export { RENEWAL_WINDOW_DAYS, daysUntil };
 import { customerDb, policyDb } from "./db";
 import { listInbox } from "./inbox";
@@ -89,7 +89,7 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     class_code: p.terms?.class_code ?? "", class_description: p.terms?.class_description ?? "",
     states: p.states ?? [], producer: producerOf(p.terms ?? {}).agency,
     effective_date: p.effective_date, expiration_date: p.expiration_date, premium: p.premium,
-    ...lossTotals(subById.get(p.submission_id)?.data.loss_history), renewal_status: p.renewal_status, renewal_submission_id: p.renewal_submission_id,
+    ...claimsOnFile(subById.get(p.submission_id)), renewal_status: p.renewal_status, renewal_submission_id: p.renewal_submission_id,
     source: "uw desktop", href: `/policies/${p.id}`, is_renewal: p.is_renewal,
   }));
   const unexpired = [...legacy.rows.map((p) => ({ ...p, source: "prior system" as const, href: `/policies/book/${p.id}` })), ...written]

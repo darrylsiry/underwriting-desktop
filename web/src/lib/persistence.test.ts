@@ -328,3 +328,103 @@ test("App Tests reads the newest of the published set and the deployed copy, and
   assert.equal((await loadAgentActivity()).source, "deployed copy", "with publishing off the stored set is ignored");
   assert.match((await readReport("code"))!.text, /CR-001/);
 });
+
+let bookPolicies = 0;
+/** A prior-system policy: claim totals and no loss rows. */
+async function bookPolicy(over: { claims?: number; incurred?: number; open_claims?: number; expiration_date?: string } = {}) {
+  bookPolicies += 1;
+  const expiration = over.expiration_date ?? addDays(todayIso(), 30);
+  const inputs = { class_code: "91580", gross_receipts: 1_000_000, states: ["TX"], home_state: "TX", occurrence_limit: 1_000_000, aggregate_limit: 2_000_000, deductible: 0,
+    residential_pct: 0, subcontracted_pct: 0, subcontractor_coi_required: true, max_height_ft: 20, experience_mod: 1 };
+  const { rows } = await policyDb.query<{ id: string }>(
+    `INSERT INTO book_policies (policy_number, insured_name, underwriter, class_code, class_description, states, home_state, producer, effective_date, expiration_date,
+       premium, claims, incurred, open_claims, rating_inputs, schedule, rate_version)
+     VALUES ($1, $2, $3, '91580', 'Roofing', '{TX}', 'TX', 'Test Agency', ($4::date - 365), $4, 1000, $5, $6, $7, $8, '[]', '2026.1') RETURNING id`,
+    [`GL-TEST-${bookPolicies}`, `Prior Roofing ${bookPolicies}`, ACTOR, expiration, over.claims ?? 0, over.incurred ?? 0, over.open_claims ?? 0, inputs]);
+  return rows[0].id;
+}
+
+test("a prior-system renewal's claims survive its bind, on the desk and into the next renewal (CR-152)", options, async () => {
+  const expired = addDays(todayIso(), -300);
+  const book = await bookPolicy({ claims: 3, incurred: 90_000, open_claims: 1, expiration_date: expired });
+  const { submissionId } = await startRenewal("book", book, ACTOR);
+  const renewal = (await getSubmission(submissionId))!;
+  await saveAndRate(renewal, formOf((await getWorksheet(submissionId))!.rating_inputs), ACTOR);
+  for (const code of ["OPEN_CLAIMS_NO_DETAIL", "LOSS_FREQUENCY"]) {
+    await clearReferral(renewal, code, "Reviewed the expiring file with the manager", ACTOR);
+  }
+  const quote = await issueQuote((await getSubmission(submissionId))!, period(expired), ACTOR);
+  const bound = await bindQuote(quote.id, new Set(), ACTOR);
+
+  const row = (await loadDashboard(ACTOR)).renewals.find((p) => p.id === bound.id)!;
+  assert.deepEqual([row.claims, row.incurred, row.open_claims], [3, 90_000, 1]);
+
+  const next = await startRenewal("desktop", bound.id, ACTOR);
+  const nextSub = (await getSubmission(next.submissionId))!;
+  const codes = flagsFor(nextSub, (await openWorksheet(nextSub, ACTOR))).map((f) => f.code);
+  assert.ok(codes.includes("LOSS_FREQUENCY") && codes.includes("OPEN_CLAIMS_NO_DETAIL"), codes.join());
+});
+
+test("the audit says what a renewal's status really was (CR-167)", options, async () => {
+  const quote = await issueQuote(await ratedSubmission(), period(), ACTOR);
+  const policy = await bindQuote(quote.id, new Set(), ACTOR);
+  await policyDb.query("UPDATE policies SET renewal_status = 'in_progress' WHERE id = $1", [policy.id]);
+  await startRenewal("desktop", policy.id, ACTOR);
+  const started = (await auditTrail("policy", policy.id)).find((e) => e.action === "renewal.started")!;
+  assert.deepEqual(started.before, { renewal_status: "in_progress" });
+
+  const untouched = await bookPolicy();
+  await startRenewal("book", untouched, ACTOR);
+  const first = (await auditTrail("book_policy", untouched)).find((e) => e.action === "renewal.started")!;
+  assert.deepEqual(first.before, { renewal_status: "not_started" });
+});
+
+test("a clean-up that fails after a failed renewal start says which submission it left (CR-157)", options, async (t) => {
+  const book = await bookPolicy();
+  const realConnect = policyDb.connect.bind(policyDb) as (...a: unknown[]) => Promise<never>;
+  t.mock.method(policyDb, "connect", (async (...args: unknown[]) => {
+    if (args.length) return realConnect(...args);   // the pool's own query() passes a callback: leave those alone
+    const client = await realConnect() as unknown as { query: (...a: unknown[]) => Promise<unknown>; release: (...a: unknown[]) => void };
+    const [query, release] = [client.query.bind(client), client.release.bind(client)];
+    client.query = (...a) => a[0] === "COMMIT" ? Promise.reject(new Error("commit failed")) : query(...a);
+    client.release = (...a) => {
+      delete (client as Partial<typeof client>).query;
+      delete (client as Partial<typeof client>).release;
+      release(...a);
+    };
+    return client;
+  }) as never);
+  const realQuery = customerDb.query.bind(customerDb) as (...a: unknown[]) => Promise<unknown>;
+  t.mock.method(customerDb, "query", ((...a: unknown[]) =>
+    /^DELETE FROM submissions/.test(String(a[0])) ? Promise.reject(new Error("delete failed")) : realQuery(...a)) as never);
+  const logged = t.mock.method(console, "error", () => {});
+
+  await assert.rejects(startRenewal("book", book, ACTOR), /commit failed/);
+  const orphan = logged.mock.calls.find((c) => String(c.arguments[0]).includes("orphan"));
+  assert.ok(orphan, "the log names what was left behind");
+  assert.ok((orphan.arguments as unknown[]).includes(book), "and the policy it came from");
+});
+
+test("a renewal can't start before the expiring policy ends, and can start on the day it does (CR-156)", options, async () => {
+  const expires = addDays(todayIso(), 60);
+  const book = await bookPolicy({ expiration_date: expires });
+  const { submissionId } = await startRenewal("book", book, ACTOR);
+  await saveAndRate((await getSubmission(submissionId))!, formOf((await getWorksheet(submissionId))!.rating_inputs), ACTOR);
+  const sub = (await getSubmission(submissionId))!;
+  await assert.rejects(issueQuote(sub, period(addDays(expires, -30)), ACTOR), /^Error: Effective date:/);
+  assert.equal((await policyDb.query("SELECT 1 FROM quotes WHERE submission_id = $1", [submissionId])).rowCount, 0);
+  assert.equal((await issueQuote(sub, period(expires), ACTOR)).version, 1);
+});
+
+test("a quote for a period already over is refused before anything is written, but seeded history still issues (CR-164)", options, async () => {
+  const sub = await ratedSubmission();
+  const live = await issueQuote(sub, period(), ACTOR);
+  const longAgo = addDays(todayIso(), -400);
+  await assert.rejects(issueQuote(sub, period(longAgo), ACTOR), /^Error: Effective date:/);
+  const quotes = (await policyDb.query<{ id: string; status: string }>("SELECT id, status FROM quotes WHERE submission_id = $1", [sub.id])).rows;
+  assert.deepEqual(quotes.map((q) => [q.id, q.status]), [[live.id, "issued"]], "the live quote isn't superseded");
+
+  const seeded = await ratedSubmission();
+  const issuedThen = new Date(`${longAgo}T12:00:00Z`);
+  assert.equal((await issueQuote(seeded, period(longAgo), ACTOR, issuedThen)).version, 1);
+});

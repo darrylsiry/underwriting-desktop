@@ -29,6 +29,19 @@ export function lossTotals(losses: { incurred: number; status: string }[] | null
   return { claims: rows.length, incurred: rows.reduce((n, l) => n + l.incurred, 0), open_claims: rows.filter((l) => isOpenLoss(l.status)).length };
 }
 
+/**
+ * A policy's claims from its submission. A renewal of a prior-system policy has no rows, only the totals
+ * carried from the expiring policy, and they hold through every later bind and renewal (CR-152).
+ */
+export function claimsOnFile(sub: {
+  data?: { loss_history?: { incurred: number; status: string }[] | null } | null;
+  renewal_of?: { losses?: { claims: number; incurred: number; open_claims: number } | null } | null;
+} | null | undefined) {
+  const rows = lossTotals(sub?.data?.loss_history);
+  const carried = sub?.renewal_of?.losses;
+  return carried && carried.claims > rows.claims ? { claims: carried.claims, incurred: carried.incurred, open_claims: carried.open_claims } : rows;
+}
+
 /** The years of losses the book's `incurred` covers. */
 export const LOSS_HISTORY_YEARS = 5;
 export const LOSS_RATIO_BASIS = "five-year losses on current premium";

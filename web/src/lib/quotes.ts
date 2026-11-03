@@ -7,7 +7,7 @@ import { renderRenewalMemoPdf } from "./renewal-memo-pdf";
 import { QUOTE_VALID_DAYS, addDays, formsFor, parseSubjectivities, producerFields, producerLines, quoteLimits, quotePeriod, type ProducerFields } from "./quote-terms";
 import { rateOn } from "./rating-api";
 import type { SubmissionRow } from "./submissions";
-import { todayIso } from "./time";
+import { todayIso, whenDate } from "./time";
 import { StaleWorksheetError, type RatingInputs, type ScheduleItem } from "./worksheet";
 import { activeRateVersion, getWorksheet, money, readiness, type Rating } from "./worksheets";
 
@@ -74,6 +74,12 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
   const ws = await getWorksheet(sub.id);
   if (!ws) throw new Error("Open the workbench and rate first");
   const { effective, expiration } = quotePeriod(form);
+  const exp = sub.kind === "renewal" ? sub.renewal_of : null;
+  const issuedAt = at ?? new Date();
+  // Bind would refuse a period already over, and issuing one would first supersede the live quote (CR-164).
+  if (expiration <= todayIso(issuedAt)) throw new Error(`Effective date: this period ended on ${whenDate(expiration)}, so it could never be bound. Check the year.`);
+  // Both terms would count as in force and both book premium, the double count CR-136 removed for the boundary day (CR-156).
+  if (exp && effective < exp.expiration_date) throw new Error(`Effective date: a renewal can't start before ${exp.policy_number} ends on ${whenDate(exp.expiration_date)}`);
   const active = await activeRateVersion();
   if (!active) throw new Error("The rating service isn't reachable, so the rate version can't be confirmed. Try again shortly.");
   const { ready, openReferrals, rated, staleRates } = readiness(sub, ws, active);
@@ -87,7 +93,6 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
 
   const previous = (await quotesForSubmission(sub.id))[0];
   if (previous?.status === "bound") throw new Error(`${previous.quote_number} is already bound; changes now need a policy endorsement`);
-  const issuedAt = at ?? new Date();
   const quoteNumber = previous?.quote_number ?? (await policyDb.query<{ n: string }>(
     `SELECT 'Q-' || $1 || '-' || ${paddedSeq("quote_number_seq", 4)} AS n`, [todayIso(issuedAt).slice(0, 4)])).rows[0].n;
   const version = (previous?.version ?? 0) + 1;
@@ -132,7 +137,6 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
   // basis, and any rate changes. The comparison it's built from is stored with the quote too.
   let memo: Uint8Array | null = null;
   let comparison: Comparison | null = null;
-  const exp = sub.kind === "renewal" ? sub.renewal_of : null;
   if (exp) {
     comparison = compareRenewal(
       { inputs: exp.rating_inputs, schedule: exp.schedule, rating: exp.rating, effective_date: exp.effective_date, expiration_date: exp.expiration_date },

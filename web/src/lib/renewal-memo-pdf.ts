@@ -1,5 +1,5 @@
 import { ACCENT, MUTED, PAGE, RULE, createDocument, masthead, money, parties, surplusLinesNotice, usDate, type Writer } from "./pdf-writer";
-import { changeSummary, signed, type Comparison } from "./renewal-compare";
+import { changeSummary, coverageGapNote, signed, type Comparison } from "./renewal-compare";
 import { todayIso } from "./time";
 
 export type RenewalMemo = {
@@ -64,6 +64,8 @@ export async function renderRenewalMemoPdf(m: RenewalMemo): Promise<Uint8Array> 
     + `${usDate(m.renewingPeriod[0])} to ${usDate(m.renewingPeriod[1])} under quote ${m.quoteNumber}. The renewal premium is `
     + `${money(b.renewingPremium)}, ${changeSummary(b)} from the expiring premium of ${money(b.expiringPremium)}. `
     + "This memo explains what changed.");
+  const gap = coverageGapNote(m.expiringPeriod[1], m.renewingPeriod[0]);
+  if (gap) w.para(gap);
 
   w.heading("Premium");
   moneyRow(w, "", "Expiring", "Renewing", "Change", { head: true });
