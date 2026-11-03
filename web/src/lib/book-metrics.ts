@@ -114,6 +114,9 @@ type Desk = {
 const cents = (n: number) => Math.round(n * 100) / 100;
 const ratio = (x: number | null) => (x === null ? null : Math.round(x * 1000) / 1000);
 
+/** One policy's ratio for the assistant, on the basis the pages show, so it never works one out on another. */
+export const policyLossRatio = (incurred: number, annualPremium: number) => ratio(lossRatio(incurred, annualPremium));
+
 /** The whole operation: every number is the sum of the desks, so the team and a desk can't disagree (CR-080, CR-089). */
 export function teamSummary(desks: Desk[]) {
   const total = (f: (k: Desk["kpis"]) => number) => sum(desks, (d) => f(d.kpis));

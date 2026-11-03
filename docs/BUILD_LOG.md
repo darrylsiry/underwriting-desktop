@@ -1021,3 +1021,25 @@ read this to replay the build quickly.
   - **Check a truncated line before rewriting it.** The Bind confirmation lost its last sentence because the rewrite worked from a cut-off view; a sandbox test caught that too.
   - **A link to a closed `<details>` needs its target inside.** With the id on the `<details>` the link scrolled but didn't open it.
 - **How to show it:** on a roofing file's workbench, click "or decline this file…", choose Outside appetite and confirm: it leaves the desk, reads Declined under its pill on Submissions, and Reopen brings it back. Then open a Chase bind order task: the broker's details are on the page.
+
+## step-33: The seeded book's loss ratio reads about 25%, from the data
+- **Prompt used:** "The Book loss ratio tile shows 2%, implausibly low for E&S contractors' GL. Change the demo book's loss data so the tile computes to about 25% on its own, without overriding the number or the calculation, and check everything that depends on it."
+- **What was built:** Two data migrations and a fix to what the assistant is given. Every desk now reads 24-27% (underwriter1 25%, the whole book 25.1%), with 34 of 134 claims open where there were 10 of 95. The tile's calculation didn't change.
+  - **Why it read 2%.** `generate-book.py` drew `incurred` as a share of one year's premium, and migration 005 then re-rated the premiums without touching the losses. Since CR-124 the tile divides by five years of premium, so every desk read 2-10%.
+  - **The assistant.** Its tools gave premium and incurred but no ratio per policy, so it divided the two itself and called Red Rock 280% while the policy page said 56%. `get_policy` and `renewals_due` now return `loss_ratio` and `loss_ratio_basis`, and it quotes them.
+- **Files:** `scripts/generate-book.py`, new `web/migrations/policy/016_book_loss_experience.sql` and `web/migrations/customer/007_book_renewal_losses.sql` (both generated), `web/src/lib/book-metrics.ts`, `web/src/lib/assistant-tools.ts`, new `web/src/lib/book-seed.test.ts`, `web/src/lib/persistence.test.ts`
+- **Commit:** `step-33: the seeded book's loss ratio reads about 25%, from the data`
+- **Decisions:**
+  - **New migrations, not edited ones.** The runner records a migration by filename and never runs it again, so editing 004 or 005 would have changed fresh databases only. The live site picks up 016 and 007 when the next deploy boots: no reseed, script or secret. The generator still reproduces 004 byte for byte.
+  - **Every desk, not just the total.** Each login sees only its own desk, so a book that averaged 25% could still show a client 10%. Desk targets differ a little (24-26.5%) because identical numbers would look made up.
+  - **Balanced by expiry.** Book dates are relative to when 004 ran and the tile only counts what's in force, so a desk's ratio moves as policies expire. Each desk's policies are split into four expiry groups, each at the desk's ratio: every desk stays within about 5 points of its target for 120 days, and underwriter1 reads 24-26% for 90. It will keep moving after that.
+  - **Open claims on every desk.** About a quarter of the claims stay open, because GL claims take years to close and a 25% book with none isn't credible. Those policies' renewals gain the "Open claims, no detail" referral, as the rule intends.
+  - **Claim counts mostly as seeded.** They only rise where an account's size or its schedule demands it: $150K+ premium has at least 2, $250K+ at least 3, a loss-experience debit quoting two claims has at least 2. Clean accounts stay clean unless their expiry group needs claims to carry its losses.
+  - **The demo's renewals keep their referrals.** Red Rock and Palm Harbor (step-16's walkthrough) gain no new one, so the script still flows. Their loss figures on screen did change.
+  - **Renewals already started get the new totals.** Their snapshot would otherwise disagree with the policy page. A referral cleared on the old totals reads as changed and needs clearing again, a new open claim adds one, and a quote already issued can still bind. A renewal of a renewal isn't refreshed: its totals came through a Desktop policy, and the customer database can't tell which ones.
+- **Dead ends / gotchas:**
+  - **Check the assistant by asking it.** The per-policy 280% only showed up in a real answer. The tile, the pages and the tool's totals were all correct.
+  - **Picking the seed took three passes.** The first was stable but had painting running worse than roofing, and the next had two accounts side by side at exactly $210,800. The tests now hold both.
+  - **Re-applying a changed migration locally:** the runner won't run a recorded filename again. Run the file with `psql` until it's committed.
+  - In zsh, unquoted `====` fails (`=` expansion), as step-16 already warned.
+- **How to show it:** on underwriter1's desk the tile reads 25% with 4 open claims. Click it for `/book?view=losses`: Red Rock is 56%, and the policy page agrees. Ask the assistant "What's my loss ratio, and which policy is worst?" and it gives the same numbers.

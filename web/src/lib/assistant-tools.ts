@@ -5,7 +5,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { auditSearch } from "./assistant-audit.ts";
 import { listMeta } from "./assistant-lists.ts";
-import { LOSS_RATIO_BASIS, claimsOnFile, teamSummary } from "./book-metrics.ts";
+import { LOSS_RATIO_BASIS, claimsOnFile, policyLossRatio, teamSummary } from "./book-metrics.ts";
 import { daysUntil, loadDashboard } from "./dashboard";
 import { customerDb, policyDb } from "./db";
 import { GL_TOOLS } from "./gl-mcp";
@@ -253,7 +253,7 @@ export const APP_TOOLS: AppTool[] = [
         const bookId = isUuid(ref) ? ref : (await policyDb.query<{ id: string }>("SELECT id FROM book_policies WHERE upper(policy_number) = upper($1)", [ref])).rows[0]?.id;
         const b = bookId ? await getBookPolicy(bookId) : null;
         if (!b) return { error: `No policy ${ref}` };
-        return { source: "prior policy system", ...b, premium: money(b.premium), url: `/policies/book/${b.id}`, note: "Written in the prior system: no quote, documents or GL journal here; it can be renewed in the UW Desktop." };
+        return { source: "prior policy system", ...b, premium: money(b.premium), loss_ratio: policyLossRatio(Number(b.incurred), Number(b.premium)), loss_ratio_basis: LOSS_RATIO_BASIS, url: `/policies/book/${b.id}`, note: "Written in the prior system: no quote, documents or GL journal here; it can be renewed in the UW Desktop." };
       }
       const [quote, journalNo] = await Promise.all([
         getQuote(p.quote_id),
@@ -292,7 +292,7 @@ export const APP_TOOLS: AppTool[] = [
   },
   {
     name: "renewals_due",
-    description: "Policies expiring within N days (default 90) that still need renewing, prior-system and UW Desktop, with premium, losses, renewal status (not started, in progress) and the link to start or continue the renewal. Policies already renewed are left out and counted in already_renewed, matching the list on /book?due=N. Optionally one underwriter.",
+    description: "Policies expiring within N days (default 90) that still need renewing, prior-system and UW Desktop, with premium, losses, each policy's loss_ratio (on loss_ratio_basis, as the pages show it: quote it rather than dividing incurred by premium yourself), renewal status (not started, in progress) and the link to start or continue the renewal. Policies already renewed are left out and counted in already_renewed, matching the list on /book?due=N. Optionally one underwriter.",
     input_schema: { type: "object", properties: { days: { type: "integer", description: "Window in days from today; default 90" }, underwriter: UNDERWRITER } },
     run: async (a, ctx) => {
       const days = int(a.days, 90, 400);
@@ -307,11 +307,11 @@ export const APP_TOOLS: AppTool[] = [
       ]);
       const owners = await submissionOwners(desk.rows.map((p) => p.submission_id));
       const all = [
-        ...book.rows.map((p) => ({ source: "prior system", policy_number: p.policy_number, insured: p.insured_name, underwriter: p.underwriter, class: p.class_description, states: p.states, producer: p.producer, effective_date: p.effective_date, expiration_date: p.expiration_date, days_left: daysUntil(p.expiration_date, ctx.today), premium: money(p.premium), claims: p.claims, incurred: money(p.incurred), open_claims: p.open_claims, renewal_status: p.renewal_status, renewal_url: p.renewal_submission_id ? `/submissions/${p.renewal_submission_id}/renewal` : null, url: `/policies/book/${p.id}` })),
-        ...desk.rows.filter((p) => !uw || owners.get(p.submission_id)?.owner === uw).map((p) => ({ source: "UW Desktop", policy_number: p.policy_number, insured: p.insured_name, underwriter: owners.get(p.submission_id)?.owner ?? "", class: null, states: null, producer: null, effective_date: p.effective_date, expiration_date: p.expiration_date, days_left: daysUntil(p.expiration_date, ctx.today), premium: money(p.premium), ...(owners.get(p.submission_id)?.claims ?? claimsOnFile(null)), renewal_status: p.renewal_status, renewal_url: p.renewal_submission_id ? `/submissions/${p.renewal_submission_id}/renewal` : null, url: `/policies/${p.id}` })),
+        ...book.rows.map((p) => ({ source: "prior system", policy_number: p.policy_number, insured: p.insured_name, underwriter: p.underwriter, class: p.class_description, states: p.states, producer: p.producer, effective_date: p.effective_date, expiration_date: p.expiration_date, days_left: daysUntil(p.expiration_date, ctx.today), premium: money(p.premium), claims: p.claims, incurred: money(p.incurred), loss_ratio: policyLossRatio(p.incurred, p.premium), open_claims: p.open_claims, renewal_status: p.renewal_status, renewal_url: p.renewal_submission_id ? `/submissions/${p.renewal_submission_id}/renewal` : null, url: `/policies/book/${p.id}` })),
+        ...desk.rows.filter((p) => !uw || owners.get(p.submission_id)?.owner === uw).map((p) => ({ source: "UW Desktop", policy_number: p.policy_number, insured: p.insured_name, underwriter: owners.get(p.submission_id)?.owner ?? "", class: null, states: null, producer: null, effective_date: p.effective_date, expiration_date: p.expiration_date, days_left: daysUntil(p.expiration_date, ctx.today), premium: money(p.premium), ...(owners.get(p.submission_id)?.claims ?? claimsOnFile(null)), loss_ratio: policyLossRatio((owners.get(p.submission_id)?.claims ?? claimsOnFile(null)).incurred, p.premium), renewal_status: p.renewal_status, renewal_url: p.renewal_submission_id ? `/submissions/${p.renewal_submission_id}/renewal` : null, url: `/policies/${p.id}` })),
       ].sort((x, y) => x.expiration_date.localeCompare(y.expiration_date));
       const rows = all.filter((r) => r.renewal_status !== "renewed" && r.renewal_status !== "non_renewed");
-      return { window_days: days, as_of: ctx.today, count: rows.length, already_renewed: all.length - rows.length, expiring_premium: money(rows.reduce((s, r) => s + r.premium, 0)), policies: rows, list_url: `/book?due=${days}` };
+      return { window_days: days, as_of: ctx.today, count: rows.length, already_renewed: all.length - rows.length, expiring_premium: money(rows.reduce((s, r) => s + r.premium, 0)), loss_ratio_basis: LOSS_RATIO_BASIS, policies: rows, list_url: `/book?due=${days}` };
     },
   },
   ...GL_TOOLS.filter((t) => t.annotations?.readOnlyHint).map<AppTool>((t) => ({

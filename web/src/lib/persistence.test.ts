@@ -3,7 +3,7 @@
 // dropped after; the rating service is stubbed, so no test depends on its rates.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test, type TestContext } from "node:test";
@@ -36,6 +36,7 @@ const options = { skip: reachable ? false : "Postgres not available" };
 
 const { customerDb, policyDb, pools } = await import("./db.ts");
 const { auditTrail } = await import("./audit.ts");
+const { LOSS_RATIO_BASIS, lossRatio } = await import("./book-metrics.ts");
 const { loadAgentActivity, mockupIds, readMockup, readReport } = await import("./agent-activity.ts");
 const { closeQuote, declineSubmission, markSubjectivityReceived, nonRenewPolicy, reopenDeclined, reopenIntake, reverseNonRenewal } = await import("./file-closure.ts");
 const { addDays } = await import("./quote-terms.ts");
@@ -464,6 +465,48 @@ test("retyping the same states in another order changes nothing; a new state doe
 
 const tool = (name: string) => APP_TOOLS.find((t) => t.name === name)!;
 const toolCtx = { actor: ACTOR, origin: "http://test", today: todayIso() };
+
+test("a database that ran the migrations shows the seeded book at about 25%, on the desk and to the assistant", options, async () => {
+  const { kpis } = await loadDashboard("underwriter2");   // not ACTOR: other tests add policies to that desk
+  assert.ok(kpis.lossRatio! >= 0.235 && kpis.lossRatio! <= 0.265, String(kpis.lossRatio));
+  assert.ok(kpis.openClaims > 0);
+  const summary = await tool("book_summary").run({ underwriter: "underwriter2" }, toolCtx as never) as { kpis: typeof kpis };
+  assert.equal(summary.kpis.lossRatio, kpis.lossRatio);
+  assert.equal(summary.kpis.openClaims, kpis.openClaims);
+});
+
+test("the assistant is given each policy's loss ratio on the page's basis, so it can't work one out on another", options, async () => {
+  const policy = await tool("get_policy").run({ policy: "GL-25-70012" }, toolCtx as never) as { premium: number; incurred: string; loss_ratio: number; loss_ratio_basis: string };
+  const pageShows = lossRatio(Number(policy.incurred), policy.premium)!;
+  assert.ok(pageShows > 0);
+  assert.equal(policy.loss_ratio, Math.round(pageShows * 1000) / 1000);
+  assert.equal(policy.loss_ratio_basis, LOSS_RATIO_BASIS);
+
+  const due = await tool("renewals_due").run({ days: 400, underwriter: "underwriter2" }, toolCtx as never) as { loss_ratio_basis: string; policies: { premium: number; incurred: number; loss_ratio: number }[] };
+  assert.equal(due.loss_ratio_basis, LOSS_RATIO_BASIS);
+  assert.ok(due.policies.some((p) => p.incurred > 0));
+  for (const p of due.policies) assert.equal(p.loss_ratio, Math.round(lossRatio(p.incurred, p.premium)! * 1000) / 1000);
+});
+
+test("a renewal started before the loss data changed gets the new totals, and only one from the prior-system book does", options, async () => {
+  const { rows: [p] } = await policyDb.query<{ id: string; claims: number; incurred: number; open_claims: number }>(
+    "SELECT id, claims, incurred::float8 AS incurred, open_claims FROM book_policies WHERE policy_number = 'GL-25-70003'");
+  assert.ok(p.open_claims > 0, "this policy has to show the new referral below");
+  const { submissionId } = await startRenewal("book", p.id, ACTOR);
+  const backToOldTotals = (source: string) => customerDb.query(
+    `UPDATE submissions SET renewal_of = renewal_of || jsonb_build_object('source', $2::text, 'losses', '{"claims": 3, "incurred": 24000, "open_claims": 0}'::jsonb) WHERE id = $1`, [submissionId, source]);
+  const migration = () => customerDb.query(readFileSync(new URL("../../migrations/customer/007_book_renewal_losses.sql", import.meta.url), "utf8"));
+
+  await backToOldTotals("book");
+  await migration();
+  const renewal = (await getSubmission(submissionId))!;
+  assert.deepEqual(renewal.renewal_of!.losses, { claims: p.claims, incurred: p.incurred, open_claims: p.open_claims });
+  assert.ok(flagsFor(renewal, (await getWorksheet(submissionId))!).some((f) => f.code === "OPEN_CLAIMS_NO_DETAIL"));
+
+  await backToOldTotals("desktop");
+  await migration();
+  assert.equal((await getSubmission(submissionId))!.renewal_of!.losses.incurred, 24_000);
+});
 
 test("the assistant judges a bound file as the workbench does, by the terms that were bound (CR-155)", options, async () => {
   const sub = await ratedSubmission();
