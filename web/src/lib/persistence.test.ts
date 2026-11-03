@@ -42,7 +42,7 @@ const { startRenewal } = await import("./renewals.ts");
 const { acceptSubmission, dataFingerprint, getSubmission, saveReview, storeSubmission } = await import("./submissions.ts");
 const { todayIso } = await import("./time.ts");
 const { StaleWorksheetError, worksheetFingerprint } = await import("./worksheet.ts");
-const { clearReferral, getWorksheet, openWorksheet, saveAndRate } = await import("./worksheets.ts");
+const { clearReferral, flagsFor, getWorksheet, openWorksheet, saveAndRate } = await import("./worksheets.ts");
 
 const ACTOR = "underwriter1";
 const realFetch = globalThis.fetch;
@@ -179,6 +179,26 @@ test("a clearance covers only the facts on the page that sent it (CR-148)", opti
 
   await assert.rejects(clearReferral(sub, "HEIGHT", "Acceptable at the height I was shown", ACTOR, null, shown), StaleWorksheetError);
   assert.deepEqual((await getWorksheet(sub.id))!.referral_clearances, {});
+});
+
+/** A value as the server action gets it: multipart encoding rewrites each line break in a form field as CRLF. */
+const asPosted = async (value: string) => {
+  const form = new FormData();
+  form.set("detail", value);
+  return String((await new Response(form).formData()).get("detail"));
+};
+
+test("a referral quoting a multi-line claim clears from the page that shows it, and only at those facts (CR-151)", options, async () => {
+  const sub = await ratedSubmission(20, [{ date: "2025-02-03", description: "Fall\nfrom scaffold", incurred: 150_000, status: "Open" }]);
+  const shown = flagsFor(sub, (await getWorksheet(sub.id))!).find((f) => f.code === "LARGE_OPEN_CLAIM")!.detail;
+  const posted = await asPosted(shown);
+  assert.notEqual(posted, shown, "the form post is meant to change the line break");
+
+  await assert.rejects(clearReferral(sub, "LARGE_OPEN_CLAIM", "Reserve reviewed with the claims team", ACTOR, null, posted.replace("150,000", "90,000")), StaleWorksheetError);
+  assert.deepEqual((await getWorksheet(sub.id))!.referral_clearances, {});
+
+  await clearReferral(sub, "LARGE_OPEN_CLAIM", "Reserve reviewed with the claims team", ACTOR, null, posted);
+  assert.equal((await getWorksheet(sub.id))!.referral_clearances.LARGE_OPEN_CLAIM.detail, shown);
 });
 
 test("a quote issues only at the rating on the page that sent it (CR-148)", options, async () => {

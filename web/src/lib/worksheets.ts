@@ -205,6 +205,9 @@ async function rateAndStore(sub: SubmissionRow, inputs: RatingInputs, schedule: 
   return rating;
 }
 
+/** A form post rewrites each line break in a field as CRLF, so text quoting a multi-line claim never comes back exactly as sent (CR-151). */
+const sameText = (a: string, b: string) => a.replace(/\r\n?/g, "\n") === b.replace(/\r\n?/g, "\n");
+
 /**
  * Record why a referral is acceptable. Only flags that currently apply can be cleared. `at` back-dates it (seeded history).
  * `shownDetail` is the flag as the page showed it: a clearance covers only the facts it was given for, so if they moved, refuse (CR-148).
@@ -216,7 +219,7 @@ export async function clearReferral(sub: SubmissionRow, code: string, note: stri
     const ws = (await client.query<WorksheetRow>("SELECT * FROM worksheets WHERE submission_id = $1 FOR UPDATE", [sub.id])).rows[0];
     const flag = flagsFor(sub, ws).find((f) => f.code === code);
     if (!flag) throw new Error(`No ${code} flag applies to ${sub.reference}`);
-    if (shownDetail && shownDetail !== flag.detail) {
+    if (shownDetail && !sameText(shownDetail, flag.detail)) {
       throw new StaleWorksheetError(`${sub.reference} changed since you opened it: "${flag.title}" now reads "${flag.detail}". Nothing was cleared. Reload to see it, then clear it if it's still acceptable.`);
     }
     if (note.trim().length < 10) throw new Error("Write a note explaining why this is acceptable");
