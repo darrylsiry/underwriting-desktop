@@ -1,3 +1,6 @@
+import { Flash } from "@/components/flash";
+import { todayIso } from "@/lib/time";
+import { quoteState } from "@/lib/bind-rules";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -74,7 +77,7 @@ export default async function RenewalPage({ params, searchParams }: Props) {
   // UX-003: the same chip pair and drift notice as the workbench, so the two pages agree about one file.
   const { quoteCurrent, drift } = quoteDrift(latest && !policy ? await getQuote(latest.id) : null, ws);
   const chips = worksheetChips({
-    policyNumber: policy?.policy_number, quote: latest ? { number: latest.quote_number, version: latest.version } : null, quoteCurrent,
+    policyNumber: policy?.policy_number, quote: latest ? { number: latest.quote_number, version: latest.version, state: quoteState(latest, todayIso()) } : null, quoteCurrent,
     hasRating: !!ws.last_rating, rated, ready, openReferrals: openReferrals.length,
   });
 
@@ -93,8 +96,7 @@ export default async function RenewalPage({ params, searchParams }: Props) {
       </p>
       {gap && <p className="mt-1 text-sm text-amber-800">{gap}</p>}
 
-      {msg && <p className="mt-4 rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{msg}</p>}
-      {error && <p className="mt-4 rounded bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+      <Flash msg={msg} error={error} />
       {!rating && <p className="mt-4 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">The renewing terms haven&apos;t been rated yet. Rate them to see the comparison.</p>}
       {ws.last_rating && !rated && !policy && (
         <p className="mt-4 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -235,13 +237,13 @@ export default async function RenewalPage({ params, searchParams }: Props) {
                   <details>
                     <summary className="cursor-pointer text-xs text-indigo-600">Revise renewal quote (v{latest.version + 1})</summary>
                     <div className="mt-3">
-                      <IssueQuoteForm action={issueQuoteAction.bind(null, id)} effective={effective} expiration={expiration} subjectivities={subjectivities} ratingId={ws.last_rating?.rating_id}
+                      <IssueQuoteForm action={issueQuoteAction.bind(null, id)} effective={effective} today={todayIso()} subjectivities={subjectivities} ratingId={ws.last_rating?.rating_id}
                         label={`Issue revised renewal quote (v${latest.version + 1})`} primary={false} />
                     </div>
                   </details>
                 </>
               ) : !policy && (ready ? (
-                <IssueQuoteForm action={issueQuoteAction.bind(null, id)} effective={effective} expiration={expiration} subjectivities={subjectivities} ratingId={ws.last_rating?.rating_id}
+                <IssueQuoteForm action={issueQuoteAction.bind(null, id)} effective={effective} today={todayIso()} subjectivities={subjectivities} ratingId={ws.last_rating?.rating_id}
                   label={latest ? `Issue revised renewal quote (v${latest.version + 1})` : `Issue renewal quote · ${money(ws.last_rating!.total)}`} />
               ) : (
                 <p className="text-slate-500">

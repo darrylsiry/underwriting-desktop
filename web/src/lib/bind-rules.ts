@@ -1,8 +1,13 @@
 // Rules for binding a quote. Pure module so node:test can load it.
+import { whenDate } from "./time.ts";
 
 export const SUBJECTIVITY_DUE_DAYS = 30;
 
-export type SubjectivityStatus = { text: string; status: "received" | "open"; due_date: string | null };
+export type SubjectivityStatus = { text: string; status: "received" | "open"; due_date: string | null; received_at?: string; received_by?: string };
+
+/** A quote's state as a reader means it: an issued quote past its valid-until date is expired, in every list and on every page (UX-054). */
+export const quoteState = (q: { status: string; valid_until: string }, today: string): string =>
+  q.status === "issued" && q.valid_until < today ? "expired" : q.status;
 
 /** Why this quote can't be bound today, or [] if it can. */
 export function bindBlockers(
@@ -12,7 +17,8 @@ export function bindBlockers(
   const out: string[] = [];
   if (quote.status === "superseded") out.push("A newer version of this quote exists; bind the latest version");
   if (quote.status === "bound") out.push("This quote is already bound");
-  if (quote.valid_until < today) out.push(`The quote expired on ${quote.valid_until}; issue a revised quote`);
+  if (quote.status === "not_taken") out.push("This quote was closed as not taken; issue a new version");
+  if (quote.valid_until < today) out.push(`The quote expired on ${whenDate(quote.valid_until)}; issue a revised quote`);
   if (quote.expiration_date <= today) out.push("The policy period has already ended");
   return out;
 }

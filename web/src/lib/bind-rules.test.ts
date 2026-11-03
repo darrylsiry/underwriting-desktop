@@ -11,7 +11,7 @@ test("an issued, unexpired quote can be bound", () => {
 test("superseded, bound and expired quotes can't", () => {
   assert.match(bindBlockers({ ...quote, status: "superseded" }, "2026-10-23")[0], /newer version/);
   assert.match(bindBlockers({ ...quote, status: "bound" }, "2026-10-23")[0], /already bound/);
-  assert.match(bindBlockers(quote, "2026-11-23")[0], /expired on 2026-11-22/);
+  assert.match(bindBlockers(quote, "2026-11-23")[0], /expired on Nov 22, 2026/);
 });
 
 test("unreceived subjectivities stay open, due in 30 days", () => {

@@ -109,6 +109,7 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
   const quotedSubs = new Set(quotes.rows.map((q) => q.submission_id));
 
   for (const s of subs) {
+    if (s.status === "declined") continue;
     const name = s.applicant_name || s.reference;
     if (s.status === "needs_review") {
       const missing = missingForRating(s.data).length;
@@ -125,7 +126,7 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     const r = readiness(s, s.ws, activeVersion);
     if (r.openReferrals.length) {
       tasks.push({ kind: "referral", title: `Clear ${plural(r.openReferrals.length, "referral")}: ${name}`,
-        detail: r.openReferrals.map((f) => f.title).join(" · "), href: `/submissions/${s.id}/workbench`, due: null, urgency: 25 });
+        detail: r.openReferrals.map((f) => f.title).join(" · "), href: `/submissions/${s.id}/workbench#referrals`, due: null, urgency: 25 });
     } else if (!r.rated) {
       const never = !s.ws.last_rating;
       tasks.push({ kind: "rate", title: `${never ? "Rate" : "Re-rate"} ${name}`,
@@ -176,14 +177,14 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
   tasks.sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || a.urgency - b.urgency);
 
   const quoteNumbers = [...latestQuote.values()];
-  const decided = quoteNumbers.filter((q) => q.status === "bound" || (q.status === "issued" && q.valid_until < today));
+  const decided = quoteNumbers.filter((q) => q.status === "bound" || q.status === "not_taken" || (q.status === "issued" && q.valid_until < today));
 
   return {
     user, today, book, boundNotEffective, unexpired, renewals, tasks, premiumByClass,
     kpis: {
       ...kpis,
       quotesOut: quoteNumbers.filter((q) => q.status === "issued" && q.valid_until >= today).length,   // an expired one is lost, below (CR-137)
-      // Only decided quotes count: bound (won) or past their valid-until date unbound (lost).
+      // Only decided quotes count: bound (won), or closed as not taken or past their valid-until date unbound (lost).
       hitRatio: decided.length ? decided.filter((q) => q.status === "bound").length / decided.length : null,
     },
     activity: activity.rows,
@@ -212,7 +213,7 @@ export async function submissionStages(subs: SubmissionRow[]): Promise<Map<strin
     return [s.id, stageOf({
       status: s.status, missing: missingForRating(s.data).length,
       worksheet: r ? { rated: r.rated, openReferrals: r.openReferrals.length } : null,
-      quote: quote.get(s.id) ?? null, policy: policy.get(s.id) ?? null,
+      quote: quote.get(s.id) ?? null, policy: policy.get(s.id) ?? null, today: todayIso(),
     })];
   }));
 }

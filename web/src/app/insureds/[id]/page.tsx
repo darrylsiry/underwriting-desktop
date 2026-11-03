@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { StageChip } from "@/components/stage-chip";
+import { policyPeriodState } from "@/lib/book-metrics";
+import { todayIso } from "@/lib/time";
 import { Empty, Pill, RowLink, Section, money, when, whenDate } from "@/components/ui";
 import { submissionStagesById } from "@/lib/dashboard";
 import { getInsured, policiesForInsured, quotesForInsured, submissionsForInsured } from "@/lib/insureds";
@@ -49,14 +51,15 @@ export default async function InsuredPage({ params }: { params: Promise<{ id: st
 
       <div className="mt-6 space-y-6">
         <Section title="Policies">
-          <table className="w-full text-sm"><Head cols={["Policy", "Period", "Subjectivities", ["Total", "right"]]} /><tbody>
+          <table className="w-full text-sm"><Head cols={["Policy", "Period", "Subjectivities", ["Premium", "right"], ["Total", "right"]]} /><tbody>
             {policies.map((p) => {
               const open = p.subjectivities.filter((s) => s.status === "open").length;
               return (
                 <tr key={p.id} className="border-t border-slate-100">
                   <td className="px-4 py-2 font-mono text-xs"><RowLink href={`/policies/${p.id}`}>{p.policy_number}</RowLink></td>
-                  <td className="px-4 py-2 tabular-nums text-xs">{whenDate(p.effective_date)} → {whenDate(p.expiration_date)}</td>
+                  <td className="px-4 py-2 tabular-nums text-xs">{whenDate(p.effective_date)} → {whenDate(p.expiration_date)} <Pill status={policyPeriodState(p, todayIso())} /></td>
                   <td className="px-4 py-2 text-xs">{open ? <Pill status="open" /> : <Pill status="received" />}{open ? ` ${open} subjectivit${open === 1 ? "y" : "ies"}` : ""}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{money(p.premium)}</td>
                   <td className="px-4 py-2 text-right tabular-nums">{money(p.total)}</td>
                 </tr>
               );

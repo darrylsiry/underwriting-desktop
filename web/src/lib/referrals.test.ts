@@ -120,7 +120,7 @@ test("schedule parsing requires reasons and bounds", () => {
   const ok = parseSchedule({ "schedule.safety.pct": "-5", "schedule.safety.rationale": "Written safety program, weekly toolbox talks" });
   assert.deepEqual(ok, [{ category: "safety", pct: -5, rationale: "Written safety program, weekly toolbox talks" }]);
   assert.equal(scheduleMod(ok), 0.95);
-  assert.throws(() => parseSchedule({ "schedule.safety.pct": "-5" }), /write a reason for the credit/);
+  assert.throws(() => parseSchedule({ "schedule.safety.pct": "-5" }), /write at least 10 characters explaining the credit/);
   assert.throws(() => parseSchedule({ "schedule.safety.pct": "12", "schedule.safety.rationale": "long enough reason" }), /between -10/);
 });
 

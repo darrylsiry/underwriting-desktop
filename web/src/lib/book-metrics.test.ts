@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { claimsOnFile, dueWithin, isBoundNotEffective, isInForce, lossRatio, lossTotals, summarizeBook, teamSummary, type BookRow } from "./book-metrics.ts";
+import { claimsOnFile, dueWithin, policyPeriodState, isBoundNotEffective, isInForce, lossRatio, lossTotals, summarizeBook, teamSummary, type BookRow } from "./book-metrics.ts";
 
 const TODAY = "2026-11-02";
 
@@ -127,4 +127,10 @@ test("a renewal's claims: the rows when they tell the whole story, otherwise the
   assert.deepEqual(claimsOnFile({ data: { loss_history: [] }, renewal_of: { losses: carried } }), carried);
   assert.deepEqual(claimsOnFile({ data: { loss_history: rows }, renewal_of: { losses: { claims: 1, incurred: 500, open_claims: 0 } } }), { claims: 2, incurred: 3000, open_claims: 1 });
   assert.deepEqual(claimsOnFile(undefined), { claims: 0, incurred: 0, open_claims: 0 });
+});
+
+test("a policy's state reads as the desk does (UX-071)", () => {
+  assert.equal(policyPeriodState({ effective_date: "2026-11-03", expiration_date: "2027-11-03" }, TODAY), "not yet effective");
+  assert.equal(policyPeriodState({ effective_date: TODAY, expiration_date: "2027-11-02" }, TODAY), "in force");
+  assert.equal(policyPeriodState({ effective_date: "2025-11-02", expiration_date: TODAY }, TODAY), "period ended");
 });

@@ -10,8 +10,9 @@ const TONE: Record<Chip["tone"], string> = {
 export function StatusChips({ chips }: { chips: { commercial: Chip | null; worksheet: Chip | null } }) {
   return (
     <>
-      {[chips.commercial, chips.worksheet].map((c) => c && (
-        <span key={c.label} className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${TONE[c.tone]}`}>{c.label}</span>
+      {[chips.commercial, chips.worksheet].map((c) => c && (c.href
+        ? <a key={c.label} href={c.href} className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium underline-offset-2 hover:underline ${TONE[c.tone]}`}>{c.label}</a>
+        : <span key={c.label} className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${TONE[c.tone]}`}>{c.label}</span>
       ))}
     </>
   );

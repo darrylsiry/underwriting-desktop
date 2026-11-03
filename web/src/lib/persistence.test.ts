@@ -37,6 +37,7 @@ const options = { skip: reachable ? false : "Postgres not available" };
 const { customerDb, policyDb, pools } = await import("./db.ts");
 const { auditTrail } = await import("./audit.ts");
 const { loadAgentActivity, mockupIds, readMockup, readReport } = await import("./agent-activity.ts");
+const { closeQuote, declineSubmission, markSubjectivityReceived, nonRenewPolicy, reopenDeclined, reopenIntake, reverseNonRenewal } = await import("./file-closure.ts");
 const { addDays } = await import("./quote-terms.ts");
 const { loadDashboard } = await import("./dashboard.ts");
 const { migrate } = await import("./migrate.ts");
@@ -535,4 +536,109 @@ test("the assistant says a rule raised since bind needs no action, and calls not
   const { worksheet } = await tool("get_submission").run({ reference_or_id: sub.reference }, toolCtx as never) as { worksheet: { referrals: { code: string; severity: string; status: string }[] } };
   assert.equal(worksheet.referrals.find((r) => r.code === "EXPERIENCE_MOD")?.status, "raised_since_bind");
   assert.ok(!worksheet.referrals.some((r) => r.severity === "refer" && r.status === "open"));
+});
+
+const fresh = async (id: string) => (await getSubmission(id))!;
+const taskFor = async (needle: string) => (await loadDashboard(ACTOR)).tasks.find((t) => t.href.includes(needle));
+
+test("a declined file leaves the desk, closes its quote, refuses work and can be reopened (UX-068)", options, async () => {
+  const sub = await ratedSubmission();
+  const quote = await issueQuote(sub, period(), ACTOR);
+  assert.ok(await taskFor(quote.id), "on the desk while the quote is out");
+
+  await assert.rejects(declineSubmission(sub, { reason: "Nonsense" }, ACTOR), /Choose a reason/);
+  await assert.rejects(declineSubmission(sub, { reason: "Other" }, ACTOR), /Say why/);
+  await declineSubmission(sub, { reason: "Outside appetite", note: "Torch work" }, ACTOR);
+
+  const declined = await fresh(sub.id);
+  assert.equal(declined.status, "declined");
+  assert.deepEqual([declined.decline?.reason, declined.decline?.note, declined.decline?.by, declined.decline?.from], ["Outside appetite", "Torch work", ACTOR, "accepted"]);
+  assert.equal(await taskFor(sub.id), undefined);
+  assert.equal(await taskFor(quote.id), undefined);
+  assert.equal((await policyDb.query<{ status: string }>("SELECT status FROM quotes WHERE id = $1", [quote.id])).rows[0].status, "not_taken");
+  assert.ok((await actions("submission", sub.id)).includes("submission.declined"));
+
+  await assert.rejects(saveAndRate(declined, formOf((await getWorksheet(sub.id))!.rating_inputs), ACTOR), /declined/);
+  await assert.rejects(issueQuote(declined, period(), ACTOR), /declined/);
+  await assert.rejects(bindQuote(quote.id, new Set(), ACTOR), /closed as not taken/);
+  await assert.rejects(declineSubmission(declined, { reason: "Price" }, ACTOR), /already declined/);
+
+  assert.equal(await reopenDeclined(declined, ACTOR), "accepted");
+  const reopened = await fresh(sub.id);
+  assert.equal(reopened.status, "accepted");
+  assert.equal(reopened.decline, null);
+  assert.equal((await issueQuote(reopened, period(), ACTOR)).version, 2, "a new version says what is on offer now");
+});
+
+test("a bound file can't be declined (UX-068)", options, async () => {
+  const sub = await ratedSubmission();
+  await bindQuote((await issueQuote(sub, period(), ACTOR)).id, new Set(), ACTOR);
+  await assert.rejects(declineSubmission(sub, { reason: "Price" }, ACTOR), /bound as/);
+});
+
+test("a quote closed as not taken leaves Quotes out and counts as lost (UX-068)", options, async () => {
+  const before = (await loadDashboard(ACTOR)).kpis;
+  const sub = await ratedSubmission();
+  const quote = await issueQuote(sub, period(), ACTOR);
+  const during = (await loadDashboard(ACTOR)).kpis;
+  assert.equal(during.quotesOut, before.quotesOut + 1);
+
+  await closeQuote(quote.id, { reason: "Lost on price" }, ACTOR);
+  const after = (await loadDashboard(ACTOR)).kpis;
+  assert.equal(after.quotesOut, before.quotesOut);
+  assert.equal(await taskFor(quote.id), undefined);
+  assert.ok(after.hitRatio !== null);
+  await assert.rejects(closeQuote(quote.id, { reason: "Lost on price" }, ACTOR), /not taken, so it can't be closed/);
+  assert.ok((await auditTrail("quote", quote.id)).some((e) => e.action === "quote.not_taken"));
+});
+
+test("a non-renewed policy leaves the renewal work, refuses a renewal, and can be reversed (UX-068)", options, async () => {
+  const book = await bookPolicy({ expiration_date: addDays(todayIso(), 20) });
+  assert.ok(await taskFor(book));
+  await nonRenewPolicy("book", book, { reason: "Loss history" }, ACTOR);
+  assert.equal(await taskFor(book), undefined);
+  assert.ok(!(await loadDashboard(ACTOR)).renewals.some((p) => p.id === book));
+  await assert.rejects(startRenewal("book", book, ACTOR), /non-renewed/);
+
+  await reverseNonRenewal("book", book, ACTOR);
+  assert.ok(await taskFor(book));
+  const { submissionId } = await startRenewal("book", book, ACTOR);
+  await assert.rejects(nonRenewPolicy("book", book, { reason: "Price" }, ACTOR), /decline that submission/);
+
+  // Declining the renewal says the same thing, and reopening it undoes both.
+  const renewal = await fresh(submissionId);
+  await declineSubmission(renewal, { reason: "Loss history" }, ACTOR);
+  const status = async () => (await policyDb.query<{ renewal_status: string }>("SELECT renewal_status FROM book_policies WHERE id = $1", [book])).rows[0].renewal_status;
+  assert.equal(await status(), "non_renewed");
+  await reopenDeclined(await fresh(submissionId), ACTOR);
+  assert.equal(await status(), "in_progress");
+});
+
+test("marking the last subjectivity received clears the chase task and keeps who and when (UX-051)", options, async () => {
+  const quote = await issueQuote(await ratedSubmission(), { ...period(), subjectivities: "Signed application\nLoss runs" }, ACTOR);
+  const policy = await bindQuote(quote.id, new Set(), ACTOR);
+  assert.ok(await taskFor(policy.id));
+
+  await markSubjectivityReceived(policy.id, 0, ACTOR);
+  assert.ok(await taskFor(policy.id), "one still open");
+  await assert.rejects(markSubjectivityReceived(policy.id, 0, ACTOR), /already marked received/);
+  await assert.rejects(markSubjectivityReceived(policy.id, 9, ACTOR), /no such subjectivity/);
+  await markSubjectivityReceived(policy.id, 1, ACTOR);
+  assert.equal(await taskFor(policy.id), undefined);
+
+  const { subjectivities } = (await policyDb.query<{ subjectivities: { status: string; received_by?: string; received_at?: string }[] }>("SELECT subjectivities FROM policies WHERE id = $1", [policy.id])).rows[0];
+  assert.ok(subjectivities.every((s) => s.status === "received" && s.received_by === ACTOR && s.received_at));
+  assert.equal((await auditTrail("policy", policy.id)).filter((e) => e.action === "policy.subjectivity_received").length, 2);
+});
+
+test("an accepted intake can be reopened to correct it until the file is bound (UX-058)", options, async () => {
+  const sub = await ratedSubmission();
+  await reopenIntake(sub, ACTOR);
+  assert.equal((await fresh(sub.id)).status, "needs_review");
+  assert.ok(await getWorksheet(sub.id), "the worksheet is kept");
+  await assert.rejects(reopenIntake(await fresh(sub.id), ACTOR), /isn't accepted/);
+
+  await acceptSubmission(sub.id, ACTOR);
+  await bindQuote((await issueQuote(await fresh(sub.id), period(), ACTOR)).id, new Set(), ACTOR);
+  await assert.rejects(reopenIntake(await fresh(sub.id), ACTOR), /endorsement/);
 });

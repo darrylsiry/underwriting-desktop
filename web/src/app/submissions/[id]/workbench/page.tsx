@@ -5,9 +5,9 @@ import { SubmitButton } from "@/components/submit-button";
 import { Pill, when, whenDate } from "@/components/ui";
 import { auditTrail } from "@/lib/audit";
 import { recordedApart } from "@/lib/timeline-merge";
-import { addYears, suggestedSubjectivities } from "@/lib/quote-terms";
-import { bindBlockers } from "@/lib/bind-rules";
-import { clearanceStatus } from "@/lib/referrals";
+import { suggestedSubjectivities } from "@/lib/quote-terms";
+import { bindBlockers, quoteState } from "@/lib/bind-rules";
+import { assumedInputs, clearanceStatus } from "@/lib/referrals";
 import { policiesForSubmission } from "@/lib/policies";
 import { getQuote, quotesForSubmission } from "@/lib/quotes";
 import { getSubmission } from "@/lib/submissions";
@@ -18,10 +18,16 @@ import {
   worksheetChips, worksheetFingerprint, type RatingInputs,
 } from "@/lib/worksheet";
 import { factorText } from "@/lib/format";
-import { activeRateVersion, boundFlags, money, openWorksheet, readiness } from "@/lib/worksheets";
+import { Flash } from "@/components/flash";
+import { ReasonForm } from "@/components/reason-form";
+import { DECLINE_REASONS, NOT_TAKEN_REASONS, closureText } from "@/lib/file-closure";
+import { closeQuoteAction } from "@/app/quotes/[id]/actions";
+import { declineAction } from "../../actions";
+import { ClearReferralForm } from "./clear-referral-form";
+import { activeRateVersion, boundFlags, money, openWorksheet, rateableClasses, readiness } from "@/lib/worksheets";
 import { inputText, quoteDrift } from "@/lib/renewal-compare";
 import { expiringOf } from "@/lib/renewals";
-import { ActionDirtyHint, ActionError, ActionForm, ActionFormProvider, ActionInput, ActionSelect, ActionSubmit, FieldMessage, WaitForSave } from "../action-form";
+import { ActionDirtyHint, ActionError, ActionForm, ActionFormProvider, ActionInput, ActionSelect, ActionSubmit, FieldMessage, WaitForSave, RatingFreshness } from "../action-form";
 import { IssueQuoteForm } from "../issue-quote-form";
 import { QuoteDriftNotice, StatusChips } from "../status-chips";
 import { bindAction, clearReferralAction, issueQuoteAction, saveAndRateAction } from "./actions";
@@ -46,6 +52,15 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
   const { msg, error } = await searchParams;
   const sub = await getSubmission(id);
   if (!sub) notFound();
+  if (sub.status === "declined") {
+    return (
+      <main className="mx-auto max-w-3xl p-8">
+        <p className="rounded bg-slate-100 px-4 py-3 text-slate-800">
+          {sub.reference}: {sub.decline ? closureText("Declined", sub.decline) : "declined"}. <Link href={`/submissions/${id}`} className="underline">Open its intake page</Link> to reopen it.
+        </p>
+      </main>
+    );
+  }
   if (sub.status !== "accepted") {
     return (
       <main className="mx-auto max-w-3xl p-8">
@@ -55,18 +70,21 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
       </main>
     );
   }
-  const ws = await openWorksheet(sub, await currentUser());
+  const me = await currentUser();
+  const ws = await openWorksheet(sub, me);
+  const classes = await rateableClasses();
   const { flags, openReferrals, rated, ready, staleRates } = readiness(sub, ws, await activeRateVersion());
   const history = (await auditTrail("submission", id)).filter((h) => WORKSHEET_ACTIONS.has(h.action));
   const quotes = await quotesForSubmission(id);
   const latest = quotes[0];
   const effective = latest?.effective_date ?? String(sub.data.policy?.effective_date ?? "");
-  const expiration = latest?.expiration_date ?? (effective ? addYears(effective, 1) : "");
   const subjectivities = latest?.subjectivities ?? (sub.kind === "renewal"
     ? ["Signed renewal application or no-change confirmation", ...suggestedSubjectivities(flags, sub.data).slice(1)]
     : suggestedSubjectivities(flags, sub.data));
   const [policy] = await policiesForSubmission(id);
-  const bindIssues = latest ? bindBlockers(latest, todayIso()) : [];
+  const today = todayIso();
+  const bindIssues = latest ? bindBlockers(latest, today) : [];
+  const assumed = new Set(assumedInputs(sub.data, ws.rating_inputs).map((a) => a.key as string));   // UX-077
   // CR-100: a bound file shows what was bound, frozen on its quote; the worksheet may have moved on after that quote was issued.
   const boundQuote = policy ? await getQuote(policy.quote_id) : null;
   const rating = boundQuote?.rating ?? ws.last_rating;
@@ -79,13 +97,13 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
   const { quoteCurrent, drift } = quoteDrift(latest && !policy ? await getQuote(latest.id) : null, ws);
   const differs = drift.length > 0;
   const chips = worksheetChips({
-    policyNumber: policy?.policy_number, quote: latest ? { number: latest.quote_number, version: latest.version } : null, quoteCurrent,
+    policyNumber: policy?.policy_number, quote: latest ? { number: latest.quote_number, version: latest.version, state: quoteState(latest, todayIso()) } : null, quoteCurrent,
     hasRating: !!rating, rated, ready, openReferrals: openReferrals.length,
   });
 
   const exp = expiringOf(sub);
   const issueForm = (
-    <IssueQuoteForm action={issueQuoteAction.bind(null, id)} effective={effective} expiration={expiration} subjectivities={subjectivities} ratingId={ws.last_rating?.rating_id}
+    <IssueQuoteForm action={issueQuoteAction.bind(null, id)} effective={effective} today={today} subjectivities={subjectivities} ratingId={ws.last_rating?.rating_id}
       label={latest ? `Issue revised ${exp ? "renewal " : ""}quote (v${latest.version + 1})` : `Issue ${exp ? "renewal " : ""}quote · ${rating ? money(rating.total) : ""}`} />
   );
 
@@ -98,13 +116,67 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
   const unresolved = policy ? "since bind" : "open";
   const referralsTitle = `Referrals · ${openRefers} ${unresolved}${refers.length - openRefers ? ` · ${refers.length - openRefers} cleared` : ""}${warns ? ` · ${warns} warn` : ""}`;
 
+  // UX-069: what tripped is the question while anything is open, so the card leads; otherwise it keeps its place.
+  // UX-036: the same numbers as the header chip: what is still open, what was cleared, what only warns.
+  const referralsCard = (
+            <Card id="referrals" title={referralsTitle}>
+              <ul className="divide-y divide-slate-100">
+                {panelFlags.map((f) => {
+                  const clearance = ws.referral_clearances[f.code];
+                  const status = clearanceStatus(f, clearance, !!policy);
+                  return (
+                    <li key={f.code} className="p-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${status === "cleared" || (policy && f.severity === "refer") ? "bg-slate-100 text-slate-500" : f.severity === "refer" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}`}>
+                          {status === "cleared" ? "cleared" : policy && f.severity === "refer" ? "since bind" : f.severity}
+                        </span>
+                        <span className="font-medium">{f.title}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-600">{f.detail}</p>
+                      {status === "cleared" && clearance && (
+                        // UX-017: who, when and why on one line.
+                        <p className="mt-2 text-xs text-slate-500">
+                          <span className="font-medium text-slate-700">{clearance.by}</span> · {when(clearance.at)}: “{clearance.note}”
+                          {clearance.by === sub.received_by && <span className="ml-1 rounded bg-amber-50 px-1 text-amber-800">self-cleared: holds this file</span>/* UX-079 */}
+                          {clearance.detail && clearance.detail !== f.detail && <> That note is for “{clearance.detail}”. The worksheet history has the clearance this quote was issued under.</>}
+                        </p>
+                      )}
+                      {status !== "cleared" && f.severity === "refer" && policy && (
+                        <p className="mt-2 text-xs text-slate-500">Raised by the current rules, not the rules at bind. Nothing to clear on a bound policy.</p>
+                      )}
+                      {status === "stale" && clearance && !policy && (
+                        <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                          {clearance.by} cleared this for {clearance.detail ? `“${clearance.detail}”` : "earlier facts"} on {when(clearance.at)}; the facts changed, so it needs clearing again.
+                        </p>
+                      )}
+                      {status !== "cleared" && f.severity === "refer" && !policy && (
+                        // UX-002: Clear waits for unsaved rating edits, so a flag isn't cleared against stale facts.
+                        <WaitForSave hint={WAIT} className="mt-2">
+                          <ClearReferralForm action={clearReferralAction.bind(null, id, f.code)} detail={f.detail} title={f.title} selfCleared={me === sub.received_by} />
+                          <a href="#decline" className="mt-1 inline-block text-[11px] text-rose-700 hover:underline">or decline this file…</a>
+                        </WaitForSave>
+                      )}
+                    </li>
+                  );
+                })}
+                {!panelFlags.length && <li className="p-4 text-sm text-emerald-700">No referral rules triggered.</li>}
+              </ul>
+              {!policy && (
+                <div className="border-t border-slate-100 p-4">
+                  <ReasonForm id="decline" action={declineAction.bind(null, id)} summary="Decline this file…" reasons={DECLINE_REASONS} submitLabel="Decline file" pending="Declining…"
+                    confirmText={`Decline ${sub.reference}? It leaves your desk and stays searchable with its history.${latest?.status === "issued" ? ` ${latest.quote_number} v${latest.version} closes with it.` : ""}`} />
+                </div>
+              )}
+            </Card>
+  );
+
   return (
     <main className="mx-auto max-w-7xl p-8">
       {/* The key remounts on bind: the inputs then show what was bound, not figures typed since that quote. */}
       <ActionFormProvider key={policy ? "bound" : "open"} formId="worksheet-form" action={saveAndRateAction.bind(null, id)}>
         {/* UX-010: where this page sits. */}
         <nav aria-label="Breadcrumb" className="text-sm text-slate-500">
-          <Link href="/submissions" className="text-indigo-600 hover:underline">Inbox</Link> ›{" "}
+          <Link href="/submissions" className="text-indigo-600 hover:underline">Submissions</Link> ›{" "}
           <Link href={`/submissions/${id}`} className="text-indigo-600 hover:underline">{sub.reference} intake</Link> › <span className="text-slate-700">Workbench</span>
         </nav>
         {/* UX-021: the title row and Save & rate stay in view while the form scrolls. */}
@@ -113,6 +185,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
           <span className="font-mono text-sm text-slate-500">{sub.reference}</span>
           {/* UX-033: the workbench only exists for accepted files, so the chip pair is the whole status. */}
           <StatusChips chips={chips} />
+          {!policy && assumed.size > 0 && <span className="whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">{assumed.size} input{assumed.size === 1 ? "" : "s"} assumed</span>}
           <span className="ml-auto flex items-center gap-3">
             {/* UX-037: once bound, the worksheet is the rating that was bound; nothing here saves. */}
             {policy ? <span className="text-xs text-slate-500">Worksheet frozen at bind</span> : <>
@@ -142,8 +215,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
             <Link href={`/submissions/${id}/renewal`} className="ml-auto font-medium hover:underline">Expiring vs renewing →</Link>
           </p>
         )}
-        {msg && <p className="mt-4 rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{msg}</p>}
-        {error && <p className="mt-4 rounded bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+        <Flash msg={msg} error={error} />
         <ActionError />
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
@@ -165,6 +237,11 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                       <WorksheetInput def={d} saved={editValue(d, shownInputs)} unit={inputUnit(d)} />
                     )}
                     <FieldMessage name={d.key} />
+                    {!policy && assumed.has(d.key) && <span className="text-[11px] font-medium text-amber-700">assumed, not stated</span>}
+                    {d.key === "class_code" && <>
+                      <span className="text-[11px] text-slate-600">{classes.size ? classes.get(shownInputs.class_code) ?? "Not a rated class" : ""}</span>
+                      {flags.some((f) => f.code === "CLASS_INFERRED") && !policy && <span className="text-[11px] font-medium text-amber-700">inferred, confirm with broker</span>}
+                    </>}
                     {exp && (() => {
                       const was = inputText(d.key, exp.rating_inputs[d.key]);
                       const changed = was !== inputText(d.key, shownInputs[d.key]);
@@ -177,7 +254,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
 
             <Card title={`Schedule rating · total ${total > 0 ? "+" : ""}${total}% · mod ${scheduleMod(shownSchedule).toFixed(2)}`}>
               <p className="px-4 pt-3 text-xs text-slate-500">
-                Credits are negative, debits positive, up to ±{MAX_CATEGORY_PCT}% per category. Every credit or debit needs a written reason.
+                Credits are negative, debits positive, up to ±{MAX_CATEGORY_PCT}% per category. Every credit or debit needs a written reason (10+ characters).
                 Totals beyond ±{UW_AUTHORITY_PCT}% need a referral.
               </p>
               <table className="mt-2 w-full text-sm">
@@ -249,7 +326,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                   <WaitForSave hint={WAIT}>{issueForm}</WaitForSave>
                 ) : (
                   <p className="text-sm text-slate-500">
-                    {!rated ? "Save & rate the current inputs to quote the new terms." : `Clear ${openReferrals.length} open referral${openReferrals.length === 1 ? "" : "s"} to quote the new terms.`}
+                    {!rated ? "Save & rate the current inputs to quote the new terms." : <><a href="#referrals" className="text-indigo-600 hover:underline">Clear {openReferrals.length} open referral{openReferrals.length === 1 ? "" : "s"}</a> to quote the new terms.</>}
                   </p>
                 ))}
                 {!policy && latest?.status === "issued" && (
@@ -258,14 +335,11 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                   ) : (
                     // UX-002: Bind waits for unsaved rating edits to be saved & rated (or reverted).
                     <WaitForSave hint={WAIT}>
-                      <BindForm action={bindAction.bind(null, id, latest.id)} label={`Bind ${latest.quote_number} v${latest.version} for ${money(latest.total)}`}>
-                        <p className="text-sm font-medium">Bind {latest.quote_number} v{latest.version}</p>
-                        <p className="text-xs text-slate-500">Tick subjectivities already received. The rest stay open on the binder, due in 30 days.</p>
-                        {latest.subjectivities.map((text, i) => (
-                          <label key={i} className="flex items-start gap-2 text-xs">
-                            <input type="checkbox" name="received" value={i} className="mt-0.5" /> {text}
-                          </label>
-                        ))}
+                      <BindForm action={bindAction.bind(null, id, latest.id)} label={`Bind ${latest.quote_number} v${latest.version} for ${money(latest.total)}`} subjectivities={latest.subjectivities}
+                        heading={<>
+                          <p className="text-sm font-medium">Bind {latest.quote_number} v{latest.version}</p>
+                          <p className="text-xs text-slate-500">Tick subjectivities already received. The rest stay open on the binder, due in 30 days.</p>
+                        </>}>
                         {/* UX-009 "Binding…"; UX-003 outlined when the worksheet differs from what was quoted. */}
                         <SubmitButton pending="Binding…"
                           className={`w-full rounded-md px-4 py-2 text-sm font-medium ${differs ? "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50" : "bg-emerald-700 text-white hover:bg-emerald-600"}`}>
@@ -275,24 +349,31 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                     </WaitForSave>
                   )
                 )}
+                {!policy && latest?.status === "issued" && (
+                  <ReasonForm action={closeQuoteAction.bind(null, latest.id)} summary="Close quote as not taken…" reasons={NOT_TAKEN_REASONS} submitLabel="Close quote" pending="Closing…"
+                    confirmText={`Close ${latest.quote_number} v${latest.version} as not taken? It leaves Quotes out and your desk, and counts as lost.`} />
+                )}
                 {!policy && !differs && (ready ? (
-                  latest ? (
+                  latest && quoteState(latest, today) === "issued" ? (
                     <details>
                       <summary className="cursor-pointer text-xs text-indigo-600">Revise quote (v{latest.version + 1})</summary>
                       <div className="mt-3"><WaitForSave hint={WAIT}>{issueForm}</WaitForSave></div>
                     </details>
-                  ) : <WaitForSave hint={WAIT}>{issueForm}</WaitForSave>
+                  ) : <WaitForSave hint={WAIT}>{issueForm}</WaitForSave>   /* UX-054: nothing is on offer, so revising isn't tucked away */
                 ) : (
                   <p className="text-sm text-slate-500">
-                    {!rated ? "Save & rate the current inputs to quote." : `Clear ${openReferrals.length} open referral${openReferrals.length === 1 ? "" : "s"} to quote.`}
+                    {!rated ? "Save & rate the current inputs to quote." : <><a href="#referrals" className="text-indigo-600 hover:underline">Clear {openReferrals.length} open referral{openReferrals.length === 1 ? "" : "s"}</a> to quote.</>}
                   </p>
                 ))}
               </div>
             </Card>
 
+            {openRefers > 0 && !policy && referralsCard}
+
             <Card title={policy ? "Premium as bound" : "Indicative premium"}>
               {rating ? (
                 <div className="p-4">
+                  <Fresh frozen={!!policy}>
                   {!rated && !policy && (
                     <p className="mb-3 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
                       {staleRates ? `Rates changed since this rating (${staleRates.from} → ${staleRates.to}).` : "Inputs changed since this rating."} Save &amp; rate again.
@@ -303,7 +384,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                   <dl className="mt-4 grid grid-cols-2 gap-y-1 text-sm">
                     <dt className="text-slate-500">Premium</dt><dd className="text-right tabular-nums">{money(rating.premium)}</dd>
                     <dt className="text-slate-500">Policy fee</dt><dd className="text-right tabular-nums">{money(rating.policy_fee)}</dd>
-                    <dt className="text-slate-500">SL tax ({(Number(rating.surplus_lines_tax_rate) * 100).toFixed(2)}%)</dt>
+                    <dt className="text-slate-500">Surplus lines tax ({(Number(rating.surplus_lines_tax_rate) * 100).toFixed(2)}%)</dt>
                     <dd className="text-right tabular-nums">{money(rating.surplus_lines_tax)}</dd>
                   </dl>
                   <table className="mt-4 w-full text-xs">
@@ -321,59 +402,14 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                       ))}
                     </tbody>
                   </table>
+                  </Fresh>
                 </div>
               ) : (
                 <p className="p-4 text-sm text-slate-500">Not rated yet. Check the inputs and click Save &amp; rate.</p>
               )}
             </Card>
 
-            {/* UX-036: the same numbers as the header chip: what is still open, what was cleared, what only warns. */}
-            <Card title={referralsTitle}>
-              <ul className="divide-y divide-slate-100">
-                {panelFlags.map((f) => {
-                  const clearance = ws.referral_clearances[f.code];
-                  const status = clearanceStatus(f, clearance, !!policy);
-                  return (
-                    <li key={f.code} className="p-4 text-sm">
-                      <div className="flex items-center gap-2">
-                        <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${status === "cleared" || (policy && f.severity === "refer") ? "bg-slate-100 text-slate-500" : f.severity === "refer" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}`}>
-                          {status === "cleared" ? "cleared" : policy && f.severity === "refer" ? "since bind" : f.severity}
-                        </span>
-                        <span className="font-medium">{f.title}</span>
-                      </div>
-                      <p className="mt-1 text-xs text-slate-600">{f.detail}</p>
-                      {status === "cleared" && clearance && (
-                        // UX-017: who, when and why on one line.
-                        <p className="mt-2 text-xs text-slate-500">
-                          <span className="font-medium text-slate-700">{clearance.by}</span> · {when(clearance.at)}: “{clearance.note}”
-                          {clearance.detail && clearance.detail !== f.detail && <> That note is for “{clearance.detail}”. The worksheet history has the clearance this quote was issued under.</>}
-                        </p>
-                      )}
-                      {status !== "cleared" && f.severity === "refer" && policy && (
-                        <p className="mt-2 text-xs text-slate-500">Raised by the current rules, not the rules at bind. Nothing to clear on a bound policy.</p>
-                      )}
-                      {status === "stale" && clearance && !policy && (
-                        <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
-                          {clearance.by} cleared this for {clearance.detail ? `“${clearance.detail}”` : "earlier facts"} on {when(clearance.at)}; the facts changed, so it needs clearing again.
-                        </p>
-                      )}
-                      {status !== "cleared" && f.severity === "refer" && !policy && (
-                        // UX-002: Clear waits for unsaved rating edits, so a flag isn't cleared against stale facts.
-                        <WaitForSave hint={WAIT} className="mt-2">
-                          <form action={clearReferralAction.bind(null, id, f.code)} className="flex gap-2">
-                            <input type="hidden" name="detail" value={f.detail} />
-                            <input name="note" aria-label={`Why "${f.title}" is acceptable`} required minLength={10} placeholder="Why this is acceptable (authority, mitigation)"
-                              className="min-w-0 flex-1 rounded border border-slate-300 px-2 py-1 text-xs" />
-                            <SubmitButton pending="Clearing…" className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50">Clear</SubmitButton>
-                          </form>
-                        </WaitForSave>
-                      )}
-                    </li>
-                  );
-                })}
-                {!panelFlags.length && <li className="p-4 text-sm text-emerald-700">No referral rules triggered.</li>}
-              </ul>
-            </Card>
+            {!(openRefers > 0 && !policy) && referralsCard}
 
             <Card title="Worksheet history">
               <ul className="space-y-2 p-4 text-xs">
@@ -405,11 +441,16 @@ function editValue(d: (typeof INPUT_DEFS)[number], inputs: RatingInputs): string
   return d.kind === "money" ? t.replace(/^-?\$/, (m) => m.replace("$", "")) : d.kind === "pct" ? t.replace(/%$/, "") : t;
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <section id={id} className="scroll-mt-24 rounded-lg border border-slate-200 bg-white shadow-sm">
       <h2 className="border-b border-slate-100 px-4 py-2 text-xs font-medium uppercase tracking-wide text-slate-500">{title}</h2>
       {children}
     </section>
   );
+}
+
+/** A bound rating is what it is; a live one says when it no longer reflects the form (UX-078). */
+function Fresh({ frozen, children }: { frozen: boolean; children: React.ReactNode }) {
+  return frozen ? <>{children}</> : <RatingFreshness>{children}</RatingFreshness>;
 }

@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { FIELD_DEFS, MAX_UPLOAD_BYTES, UPLOAD_TOO_LARGE, fromInput, getPath, isEmpty, setPath, type SubmissionData } from "@/lib/submission";
+import { FIELD_DEFS, MAX_UPLOAD_BYTES, UPLOAD_TOO_LARGE, fieldLabel, fromInput, getPath, isEmpty, setPath, type SubmissionData } from "@/lib/submission";
+import { declineSubmission, reopenDeclined, reopenIntake } from "@/lib/file-closure";
 import { acceptSubmission, getSubmission, missingForRating, receiveSubmission, saveReview } from "@/lib/submissions";
 import { currentUser } from "@/lib/user";
 import type { FormState } from "./[id]/action-form";
@@ -25,6 +26,47 @@ export async function uploadSubmission(_: UploadState, form: FormData): Promise<
 
 function back(id: string, params: Record<string, string>): never {
   redirect(`/submissions/${id}?${new URLSearchParams(params)}`);
+}
+
+/** Decline a file, with a reason (UX-068). */
+export async function declineAction(id: string, form: FormData) {
+  const sub = await getSubmission(id);
+  if (!sub) back(id, { error: "Submission not found" });
+  try {
+    await declineSubmission(sub, { reason: String(form.get("reason") ?? ""), note: String(form.get("note") ?? "") }, await currentUser());
+  } catch (err) {
+    back(id, { error: (err as Error).message });
+  }
+  revalidatePath("/submissions");
+  revalidatePath("/");
+  back(id, { msg: `${sub.reference} declined` });
+}
+
+/** Undo a decline: the file goes back where it was. */
+export async function reopenDeclinedAction(id: string) {
+  const sub = await getSubmission(id);
+  if (!sub) back(id, { error: "Submission not found" });
+  try {
+    await reopenDeclined(sub, await currentUser());
+  } catch (err) {
+    back(id, { error: (err as Error).message });
+  }
+  revalidatePath("/submissions");
+  revalidatePath("/");
+  back(id, { msg: `${sub.reference} reopened` });
+}
+
+/** Reopen an accepted intake to correct it (UX-058). */
+export async function reopenIntakeAction(id: string) {
+  const sub = await getSubmission(id);
+  if (!sub) back(id, { error: "Submission not found" });
+  try {
+    await reopenIntake(sub, await currentUser());
+  } catch (err) {
+    back(id, { error: (err as Error).message });
+  }
+  revalidatePath("/submissions");
+  back(id, { msg: "Intake reopened. Correct the file and accept it again; issued quotes stay as sent, so reissue after correcting." });
 }
 
 /**
@@ -54,7 +96,7 @@ export async function reviewAction(id: string, _prev: FormState, form: FormData)
     const data = structuredClone(sub.data) as SubmissionData;
     for (const def of FIELD_DEFS) if (def.path in values) setPath(data, def.path, fromInput(def, values[def.path]));
     const missing = missingForRating(data);
-    if (missing.length) return { error: `Fill in before accepting: ${missing.join(", ")}`, field: missing[0], values };
+    if (missing.length) return { error: `Fill in before accepting: ${missing.map(fieldLabel).join(", ")}`, field: missing[0], values };
     if (isEmpty(getPath(data, "applicant.name"))) return { error: "Fill in the named insured before accepting", field: "applicant.name", values };
   }
   let changed: number;

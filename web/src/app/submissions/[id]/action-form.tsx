@@ -32,6 +32,20 @@ export function ActionFormProvider({ formId, action, children }: { formId: strin
     form.addEventListener("submit", onSubmit);
     return () => { form.removeEventListener("input", onInput); form.removeEventListener("submit", onSubmit); };
   }, [formId]);
+  // UX-076: leaving with unsaved edits asks first. The browser's Back inside the app isn't caught; an accepted limit.
+  const isDirty = dirty || !!state?.error;
+  useEffect(() => {
+    if (!isDirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    const onClick = (e: MouseEvent) => {
+      const a = (e.target as Element).closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!a || a.target === "_blank" || a.getAttribute("href")?.startsWith("#")) return;
+      if (!confirm("Leave without saving? Your changes on this page will be lost.")) { e.preventDefault(); e.stopPropagation(); }
+    };
+    window.addEventListener("beforeunload", warn);
+    document.addEventListener("click", onClick, true);
+    return () => { window.removeEventListener("beforeunload", warn); document.removeEventListener("click", onClick, true); };
+  }, [isDirty]);
   // After a successful redirect the action has no result and React hands back undefined: a clean form.
   // A rejected submit leaves the typed values unsaved, so the form counts as dirty until it goes through.
   return <ActionFormContext.Provider value={{ formId, state: state ?? {}, pending, dirty: dirty || !!state?.error, dispatch }}>{children}</ActionFormContext.Provider>;
@@ -49,6 +63,18 @@ export function ActionSubmit({ pending, children, ...rest }: React.ButtonHTMLAtt
     <SubmitButton {...rest} form={c.formId} pending={pending} disabled={c.pending || rest.disabled} aria-busy={c.pending}>
       {c.pending ? pending : children}
     </SubmitButton>
+  );
+}
+
+/** UX-078: the rating is greyed and says so while it doesn't reflect what is on screen. A text colour, so contrast holds. */
+export function RatingFreshness({ children }: { children: React.ReactNode }) {
+  const c = useCtx();
+  const stale = c?.dirty || c?.pending;
+  return (
+    <div className={stale ? "text-slate-500" : ""} aria-busy={c?.pending}>
+      {stale && <p className="mb-3 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800" role="status">{c?.pending ? "Rating…" : "Not rated with your changes. Save & rate to update."}</p>}
+      {children}
+    </div>
   );
 }
 

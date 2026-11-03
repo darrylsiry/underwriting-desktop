@@ -44,16 +44,18 @@ export async function saveAndRateAction(id: string, _prev: FormState, form: Form
   back(id, { msg });
 }
 
-export async function clearReferralAction(id: string, code: string, form: FormData) {
+/** Clear a referral (UX-076): a refusal returns state, so the note stays typed. Lands back on the Referrals card, with the next one in view (UX-069). */
+export async function clearReferralAction(id: string, code: string, _prev: FormState, form: FormData): Promise<FormState> {
   const sub = await getSubmission(id);
-  if (!sub) back(id, { error: "Submission not found" });
+  if (!sub) return { error: "Submission not found" };
+  const note = String(form.get("note") ?? "");
   try {
-    await clearReferral(sub, code, String(form.get("note") ?? ""), await currentUser(), null, String(form.get("detail") ?? "") || undefined);
+    await clearReferral(sub, code, note, await currentUser(), null, String(form.get("detail") ?? "") || undefined);
   } catch (err) {
-    back(id, { error: (err as Error).message });
+    return { error: (err as Error).message, values: { note } };
   }
   revalidatePath(`/submissions/${id}/workbench`);
-  back(id, { msg: "Referral cleared" });
+  redirect(`/submissions/${id}/workbench?${new URLSearchParams({ msg: "Referral cleared" })}#referrals`);
 }
 
 /** Issue a quote (UX-001): a refused submit returns state so the dates and subjectivities stay as typed. */
@@ -83,14 +85,14 @@ function quoteField(message: string): string | undefined {
   return /^Effective date/.test(message) ? "effective_date" : /^Expiration/.test(message) ? "expiration_date" : undefined;
 }
 
-export async function bindAction(id: string, quoteId: string, form: FormData) {
-  const received = new Set(form.getAll("received").map((v) => Number(v)));
+export async function bindAction(id: string, quoteId: string, _prev: FormState, form: FormData): Promise<FormState> {
+  const ticked = form.getAll("received").map(String);
   let msg: string;
   try {
-    const p = await bindQuote(quoteId, received, await currentUser());
+    const p = await bindQuote(quoteId, new Set(ticked.map(Number)), await currentUser());
     msg = `Bound: policy ${p.policy_number}, binder ${p.binder_number}`;
   } catch (err) {
-    back(id, { error: (err as Error).message });
+    return { error: (err as Error).message, values: { received: ticked.join(",") } };   // UX-076: the boxes stay ticked
   }
   revalidatePath(`/submissions/${id}/workbench`);
   revalidatePath("/policies");

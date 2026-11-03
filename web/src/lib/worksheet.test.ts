@@ -49,7 +49,7 @@ test("worksheetChips: the commercial chip persists while the worksheet chip trac
   assert.deepEqual(worksheetChips({ ...base, hasRating: false, rated: false, ready: false }), { commercial: null, worksheet: { label: "Not rated", tone: "quiet" } });
   assert.deepEqual(worksheetChips({ ...base, rated: false, ready: false, quote: { number: "Q-2026-0001", version: 1 } }),
     { commercial: { label: "Quoted · Q-2026-0001 v1", tone: "action" }, worksheet: { label: "Rating out of date", tone: "attention" } });
-  assert.deepEqual(worksheetChips({ ...base, ready: false, openReferrals: 2 }).worksheet, { label: "2 referrals open", tone: "attention" });
+  assert.deepEqual(worksheetChips({ ...base, ready: false, openReferrals: 2 }).worksheet, { label: "2 referrals open", tone: "attention", href: "#referrals" });
   assert.deepEqual(worksheetChips(base).worksheet, { label: "Ready to quote", tone: "done" });
   assert.equal(worksheetChips({ ...base, quote: { number: "Q", version: 1 }, quoteCurrent: true }).worksheet, null);
   assert.deepEqual(worksheetChips({ ...base, quote: { number: "Q", version: 1 }, quoteCurrent: false }).worksheet, { label: "Differs from quote", tone: "attention" });

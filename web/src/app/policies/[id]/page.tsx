@@ -1,15 +1,23 @@
+import { Flash } from "@/components/flash";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Fragment, cache } from "react";
+import { SubmitButton } from "@/components/submit-button";
+import { ConfirmForm } from "@/components/confirm-form";
+import { ProducerCard } from "@/components/producer-card";
+import { ReasonForm } from "@/components/reason-form";
 import { Empty, Pill, RowLink, Section, money, when, whenDate } from "@/components/ui";
+import { policyPeriodState } from "@/lib/book-metrics";
 import { RENEWAL_WINDOW_DAYS, daysUntil } from "@/lib/dashboard";
+import { NON_RENEWAL_REASONS, closureText } from "@/lib/file-closure";
 import { getPolicy } from "@/lib/policies";
+import { producerOf } from "@/lib/quote-terms";
 import { quotesForSubmission } from "@/lib/quotes";
 import { renewalOfPolicy } from "@/lib/renewals";
 import { listDocuments } from "@/lib/submissions";
 import { todayIso } from "@/lib/time";
-import { startRenewalAction } from "../actions";
+import { markReceivedAction, nonRenewAction, reverseNonRenewalAction, startRenewalAction } from "../actions";
 import { StartRenewalForm } from "../start-renewal-form";
 
 export const dynamic = "force-dynamic";
@@ -22,17 +30,19 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: p ? `${p.policy_number} · Policy` : "Policy" };
 }
 
-type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string }> };
+type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; msg?: string }> };
 
 type Doc = { group: string; title: string; detail: string; href: string };
 
 /** Policy overview: coverage, subjectivities, its renewal, and every document that belongs to it. */
 export default async function PolicyPage({ params, searchParams }: Props) {
   const { id } = await params;
-  const { error } = await searchParams;
+  const { error, msg } = await searchParams;
   const p = await load(id);
   if (!p) notFound();
-  const daysLeft = daysUntil(p.expiration_date, todayIso());   // UX-023
+  const today = todayIso();
+  const daysLeft = daysUntil(p.expiration_date, today);   // UX-023
+  const periodState = policyPeriodState(p, today);   // UX-071
   const [quotes, uploads, renewal] = await Promise.all([
     quotesForSubmission(p.submission_id), listDocuments(p.submission_id), renewalOfPolicy(p.renewal_submission_id),
   ]);
@@ -61,7 +71,7 @@ export default async function PolicyPage({ params, searchParams }: Props) {
       <RowLink href="/policies">← Policies</RowLink>
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold">{p.policy_number}</h1>
-        <Pill status={p.status} />
+        <Pill status={periodState} />
         {p.renewed_from && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">renewal of {p.renewed_from.policy_number}</span>}
         <a href={`/policies/${p.id}/policy`} target="_blank" className="rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-50">Policy PDF</a>
         <a href={`/policies/${p.id}/binder`} target="_blank" className="rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-50">Binder {p.binder_number}</a>
@@ -74,13 +84,16 @@ export default async function PolicyPage({ params, searchParams }: Props) {
         {" · "}bound by {p.bound_by} {when(p.bound_at)}
         {" · "}<RowLink href={`/audit?submission=${p.submission_id}`}>case history</RowLink>
       </p>
-      {error && <p className="mt-4 rounded bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+      <Flash msg={msg} error={error} />
 
       <div className="mt-6 grid gap-6 md:grid-cols-2">
         {/* UX-014: what is covered, from the terms frozen on the quote; the money has its own section. */}
         <Section title="Coverage">
           <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 p-4 text-sm">
-            <dt className="text-slate-500">Policy period</dt><dd className="text-right">{whenDate(p.effective_date)} → {whenDate(p.expiration_date)}</dd>
+            <dt className="text-slate-500">Policy period</dt>
+            <dd className="text-right">{whenDate(p.effective_date)} → {whenDate(p.expiration_date)}
+              {periodState === "not yet effective" && <span className="block text-xs text-slate-500">starts in {daysUntil(p.effective_date, today)}d</span>}
+            </dd>
             {p.terms.limits.map((l) => <Fragment key={l.label}><dt className="text-slate-500">{l.label}</dt><dd className="text-right tabular-nums">{money(l.amount)}</dd></Fragment>)}
             <dt className="text-slate-500">Deductible</dt><dd className="text-right tabular-nums">{p.terms.deductible ? money(p.terms.deductible) : "None"}</dd>
             <dt className="text-slate-500">Class</dt><dd className="text-right">{p.terms.class_code} {p.terms.class_description}</dd>
@@ -99,20 +112,38 @@ export default async function PolicyPage({ params, searchParams }: Props) {
         </Section>
         <Section title={`Subjectivities · ${open.length ? `${open.length} open` : "all received"}`}>
           <ul className="divide-y divide-slate-100 text-sm">
-            {p.subjectivities.map((s, i) => (
-              <li key={i} className="flex items-center gap-3 px-4 py-2">
-                <span className="flex-1">{s.text}</span>
-                {s.status === "open" && <span className="text-xs text-amber-800">due {whenDate(s.due_date!)}</span>}
-                <Pill status={s.status} />
-              </li>
-            ))}
+            {p.subjectivities.map((s, i) => {
+              const overdue = s.status === "open" && daysUntil(s.due_date!, today) < 0;
+              return (
+                <li key={i} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2">
+                  <span className="min-w-40 flex-1">{s.text}</span>
+                  {s.status === "open" && <span className={`text-xs ${overdue ? "font-medium text-rose-700" : "text-amber-800"}`}>
+                    {overdue ? `overdue by ${-daysUntil(s.due_date!, today)}d` : `due ${whenDate(s.due_date!)}`}
+                  </span>}
+                  {s.received_at && <span className="text-xs text-slate-500">received {whenDate(s.received_at)} by {s.received_by}</span>}
+                  {s.status === "open"
+                    ? <form action={markReceivedAction.bind(null, p.id, i)}><SubmitButton pending="Saving…" className="rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-50">Mark received</SubmitButton></form>
+                    : <Pill status={s.status} />}
+                </li>
+              );
+            })}
           </ul>
+          <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">The binder is kept as issued; receipts are recorded here.</p>
         </Section>
+        <ProducerCard producer={producerOf(p.terms)} subject={open.length ? `${p.policy_number}: open subjectivities` : p.policy_number} />
 
         {/* UX-023: when it expires, whether a renewal is due yet, and a confirm before one is created. */}
         <Section title={`Renewal · ${p.renewal_status.replace("_", " ")}`}>
           <div className="p-4 text-sm">
-            {!renewal ? (
+            {p.renewal_status === "non_renewed" && p.non_renewal ? (
+              <>
+                <p className="text-slate-700">{closureText("Marked non-renewed", p.non_renewal)}</p>
+                {renewal
+                  ? <p className="mt-2 text-xs text-slate-500">Reopen <RowLink href={`/submissions/${renewal.submission.id}`}>{renewal.submission.reference}</RowLink> to bring the renewal back.</p>
+                  : <div className="mt-3"><ConfirmForm action={reverseNonRenewalAction.bind(null, "desktop", p.id)} confirmText={`Reverse the non-renewal of ${p.policy_number}?`} pending="Reversing…" className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50">Reverse non-renewal</ConfirmForm></div>}
+              </>
+            ) : !renewal ? (
+              <>
               <StartRenewalForm action={startRenewalAction.bind(null, "desktop", p.id)} policyNumber={p.policy_number} inWindow={daysLeft <= RENEWAL_WINDOW_DAYS}>
                 <p className="font-medium">Expires {whenDate(p.expiration_date)} · {daysLeft < 0 ? `expired ${-daysLeft} day${daysLeft === -1 ? "" : "s"} ago` : `${daysLeft} day${daysLeft === 1 ? "" : "s"}`}</p>
                 <p className="mt-1 text-slate-600">
@@ -121,6 +152,11 @@ export default async function PolicyPage({ params, searchParams }: Props) {
                   the renewing terms are then compared with it factor by factor.
                 </p>
               </StartRenewalForm>
+              <div className="mt-3">
+                <ReasonForm action={nonRenewAction.bind(null, "desktop", p.id)} summary="Non-renew this policy…" reasons={NON_RENEWAL_REASONS} submitLabel="Mark non-renewed" pending="Saving…"
+                  confirmText={`Mark ${p.policy_number} non-renewed? It leaves the renewal list and can be reversed here.`} />
+              </div>
+              </>
             ) : (
               <>
                 <p>

@@ -9,10 +9,12 @@ import { rateOn } from "./rating-api";
 import type { SubmissionRow } from "./submissions";
 import { todayIso, whenDate } from "./time";
 import { StaleWorksheetError, type RatingInputs, type ScheduleItem } from "./worksheet";
+import type { Closure } from "./file-closure";
 import { activeRateVersion, getWorksheet, money, readiness, type Rating } from "./worksheets";
 
 export type QuoteRow = {
-  id: string; quote_number: string; version: number; status: "issued" | "superseded" | "bound";
+  id: string; quote_number: string; version: number; status: "issued" | "superseded" | "bound" | "not_taken";
+  closed?: Closure | null;   // why it was closed as not taken (UX-068)
   submission_id: string; submission_ref: string; insured_id: string | null; insured_name: string;   // UX-013: lists link the insured
   effective_date: string; expiration_date: string; valid_until: string;
   rating_id: string; rate_version: string; premium: string; policy_fee: string; surplus_lines_tax: string; total: string;
@@ -23,7 +25,7 @@ export type QuoteRow = {
 // Dates come back as JS Dates by default; keep them as YYYY-MM-DD strings.
 const COLUMNS = `id, quote_number, version, status, submission_id, submission_ref, insured_id, insured_name,
   effective_date::text, expiration_date::text, valid_until::text, rating_id, rate_version,
-  premium, policy_fee, surplus_lines_tax, total, subjectivities, issued_by, issued_at, (memo_pdf IS NOT NULL) AS has_memo`;
+  premium, policy_fee, surplus_lines_tax, total, subjectivities, issued_by, issued_at, closed, (memo_pdf IS NOT NULL) AS has_memo`;
 
 /** Where issuing a revised quote lands the underwriter: the Quotes page with that version called out. */
 export const issuedQuoteHref = (quoteId: string) => `/quotes?highlight=${quoteId}#quote-${quoteId}`;
@@ -71,6 +73,7 @@ export type QuoteForm = {
  * `at` back-dates the issue (seeded history); it defaults to now.
  */
 export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: string, at: Date | null = null): Promise<QuoteRow> {
+  if (sub.status === "declined") throw new Error(`${sub.reference} is declined; reopen it to quote`);
   const ws = await getWorksheet(sub.id);
   if (!ws) throw new Error("Open the workbench and rate first");
   const { effective, expiration } = quotePeriod(form);

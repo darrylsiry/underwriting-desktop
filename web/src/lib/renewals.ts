@@ -1,3 +1,4 @@
+import type { Closure } from "./file-closure";
 import { money } from "./format";
 import { isUuid, paddedSeq } from "./text.ts";
 import { whenDate } from "./time.ts";
@@ -26,6 +27,7 @@ export type BookPolicyRow = {
   states: string[]; home_state: string; producer: string; effective_date: string; expiration_date: string;
   premium: string; claims: number; incurred: string; open_claims: number; renewal_status: RenewalStatus;
   rating_inputs: RatingInputs | null; schedule: ScheduleItem[]; rate_version: string | null; renewal_submission_id: string | null;
+  non_renewal: Closure | null;
 };
 
 export async function getBookPolicy(id: string): Promise<BookPolicyRow | null> {
@@ -33,7 +35,7 @@ export async function getBookPolicy(id: string): Promise<BookPolicyRow | null> {
   const { rows } = await policyDb.query<BookPolicyRow>(
     `SELECT id, policy_number, insured_name, underwriter, class_code, class_description, states, home_state, producer,
             effective_date::text, expiration_date::text, premium, claims, incurred, open_claims, renewal_status,
-            rating_inputs, schedule, rate_version, renewal_submission_id
+            rating_inputs, schedule, rate_version, renewal_submission_id, non_renewal
      FROM book_policies WHERE id = $1`, [id]);
   return rows[0] ?? null;
 }
@@ -153,6 +155,7 @@ export async function startRenewal(source: "book" | "desktop", policyId: string,
   if (source === "book") {
     const p = await getBookPolicy(policyId);
     if (!p) throw new Error("Policy not found");
+    if (p.renewal_status === "non_renewed") throw new Error(`${p.policy_number} is marked non-renewed; reverse that to renew it`);
     existing = await liveRenewal(source, policyId, p.policy_number, p.renewal_submission_id, actor);
     if (!existing) {
       if (!p.rating_inputs) throw new Error(`${p.policy_number} has no rating inputs on file; it can't be re-rated`);
@@ -165,6 +168,7 @@ export async function startRenewal(source: "book" | "desktop", policyId: string,
   } else {
     const p = await desktopPolicyForRenewal(policyId);
     if (!p) throw new Error("Policy not found");
+    if (p.renewal_status === "non_renewed") throw new Error(`${p.policy_number} is marked non-renewed; reverse that to renew it`);
     existing = await liveRenewal(source, policyId, p.policy_number, p.renewal_submission_id, actor);
     if (!existing) {
       const from = (await customerDb.query<{ data: SubmissionData; renewal_of: ExpiringPolicy | null }>("SELECT data, renewal_of FROM submissions WHERE id = $1", [p.submission_id])).rows[0];

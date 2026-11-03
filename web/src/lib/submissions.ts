@@ -1,3 +1,4 @@
+import type { Decline } from "./file-closure";
 import { isUuid, paddedSeq, plural } from "./text.ts";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
@@ -8,15 +9,15 @@ import { INGESTION_SERVICE_URL } from "./services";
 import { ServiceError, describeServiceError, errorDetailOf } from "./service-errors";
 import {
   FIELD_DEFS, fromInput, getPath, missingForRating, normalizeFein, sameValue, setPath,
-  type Extraction, type SubmissionData, type Value,
-} from "./submission";
+  type Extraction, type SubmissionData, type Value, fieldLabel } from "./submission";
 
 export { missingForRating };
 
 export type SubmissionRow = {
   id: string;
   reference: string;
-  status: "needs_review" | "accepted";
+  status: "needs_review" | "accepted" | "declined";
+  decline?: Decline | null;
   applicant_name: string;
   data: SubmissionData;
   extraction: Extraction;
@@ -201,7 +202,7 @@ export async function saveReview(id: string, inputs: Record<string, string>, act
       const correlationId = crypto.randomUUID();
       await audit(...changes.map((c) => ({
         actor, action: "submission.field_corrected", entityType: "submission" as const, entityId: id,
-        summary: `${sub.reference}: ${c.path} corrected`, before: { [c.path]: c.before }, after: { [c.path]: c.after },
+        summary: `${sub.reference}: ${fieldLabel(c.path)} corrected`, before: { [c.path]: c.before }, after: { [c.path]: c.after },
         correlationId,
       })));
     }
@@ -213,7 +214,7 @@ export async function saveReview(id: string, inputs: Record<string, string>, act
 export async function acceptSubmission(id: string, actor: string, at: Date | null = null): Promise<void> {
   await withReviewLock(id, async (client, sub) => {
     const missing = missingForRating(sub.data);
-    if (missing.length) throw new Error(`Fill in before accepting: ${missing.join(", ")}`);
+    if (missing.length) throw new Error(`Fill in before accepting: ${missing.map(fieldLabel).join(", ")}`);
     const a = sub.data.applicant;
     const name = String(a.name ?? "").trim();
     if (!name) throw new Error("Fill in the named insured before accepting");

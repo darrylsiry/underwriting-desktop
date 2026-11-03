@@ -148,7 +148,7 @@ export const APP_TOOLS: AppTool[] = [
         ...listMeta(rows.length, rows[0]?.total_matching ?? 0, "submissions"),
         submissions: rows.map((s) => ({
           reference: s.reference, applicant: s.applicant_name, kind: s.kind, status: s.status,
-          stage: p.has(s.id) ? `bound as ${p.get(s.id)!.policy_number}` : q.get(s.id)?.issued ? "quoted" : s.rated_total ? "rated" : s.status === "accepted" ? "accepted, not rated" : "intake review",
+          stage: s.status === "declined" ? "declined" : p.has(s.id) ? `bound as ${p.get(s.id)!.policy_number}` : q.get(s.id)?.issued ? "quoted" : s.rated_total ? "rated" : s.status === "accepted" ? "accepted, not rated" : "intake review",
           class_code: s.class_code, state: s.state, gross_receipts: s.gross_receipts ? Number(s.gross_receipts) : null, agency: s.agency,
           rated_total: s.rated_total ? money(s.rated_total) : null, rate_version: s.rate_version, underwriter: s.received_by, received_at: s.received_at.toISOString(),
           url: `/submissions/${s.id}`, workbench_url: `/submissions/${s.id}/workbench`, policy_url: p.has(s.id) ? `/policies/${p.get(s.id)!.id}` : null,
@@ -198,7 +198,7 @@ export const APP_TOOLS: AppTool[] = [
   {
     name: "list_quotes",
     description: "Quote versions newest first. status=issued are not yet bound or superseded; add live=true for the quotes out, those still inside their valid-until date. Bound and superseded are history. `total` and `total_matching` cover every match even when the rows are cut by limit. Filter by the underwriter whose submissions they came from.",
-    input_schema: { type: "object", properties: { status: { type: "string", enum: ["issued", "superseded", "bound"] }, live: { type: "boolean", description: "Only quotes still inside their valid-until date" }, underwriter: UNDERWRITER, limit: { type: "integer", description: "Default 50, max 200" } } },
+    input_schema: { type: "object", properties: { status: { type: "string", enum: ["issued", "superseded", "bound", "not_taken"] }, live: { type: "boolean", description: "Only quotes still inside their valid-until date" }, underwriter: UNDERWRITER, limit: { type: "integer", description: "Default 50, max 200" } } },
     run: async (a) => {
       const ids = str(a.underwriter) ? await submissionIdsReceivedBy(str(a.underwriter)) : null;
       const rows = await listQuotes({ status: (str(a.status) || null) as QuoteRow["status"] | null, live: a.live === true, submissionIds: ids });
@@ -310,7 +310,7 @@ export const APP_TOOLS: AppTool[] = [
         ...book.rows.map((p) => ({ source: "prior system", policy_number: p.policy_number, insured: p.insured_name, underwriter: p.underwriter, class: p.class_description, states: p.states, producer: p.producer, effective_date: p.effective_date, expiration_date: p.expiration_date, days_left: daysUntil(p.expiration_date, ctx.today), premium: money(p.premium), claims: p.claims, incurred: money(p.incurred), open_claims: p.open_claims, renewal_status: p.renewal_status, renewal_url: p.renewal_submission_id ? `/submissions/${p.renewal_submission_id}/renewal` : null, url: `/policies/book/${p.id}` })),
         ...desk.rows.filter((p) => !uw || owners.get(p.submission_id)?.owner === uw).map((p) => ({ source: "UW Desktop", policy_number: p.policy_number, insured: p.insured_name, underwriter: owners.get(p.submission_id)?.owner ?? "", class: null, states: null, producer: null, effective_date: p.effective_date, expiration_date: p.expiration_date, days_left: daysUntil(p.expiration_date, ctx.today), premium: money(p.premium), ...(owners.get(p.submission_id)?.claims ?? claimsOnFile(null)), renewal_status: p.renewal_status, renewal_url: p.renewal_submission_id ? `/submissions/${p.renewal_submission_id}/renewal` : null, url: `/policies/${p.id}` })),
       ].sort((x, y) => x.expiration_date.localeCompare(y.expiration_date));
-      const rows = all.filter((r) => r.renewal_status !== "renewed");
+      const rows = all.filter((r) => r.renewal_status !== "renewed" && r.renewal_status !== "non_renewed");
       return { window_days: days, as_of: ctx.today, count: rows.length, already_renewed: all.length - rows.length, expiring_premium: money(rows.reduce((s, r) => s + r.premium, 0)), policies: rows, list_url: `/book?due=${days}` };
     },
   },

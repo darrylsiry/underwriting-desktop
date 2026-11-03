@@ -17,6 +17,8 @@ const PILL: Record<string, string> = {
   issued: "bg-indigo-50 text-indigo-700", superseded: "bg-slate-100 text-slate-500", bound: "bg-emerald-50 text-emerald-700",
   open: "bg-amber-50 text-amber-800", received: "bg-emerald-50 text-emerald-700",
   not_started: "bg-slate-100 text-slate-600", in_progress: "bg-indigo-50 text-indigo-700", renewed: "bg-emerald-50 text-emerald-700",
+  declined: "bg-slate-100 text-slate-700", not_taken: "bg-slate-100 text-slate-700", expired: "bg-amber-50 text-amber-800",
+  "in force": "bg-emerald-50 text-emerald-700", "not yet effective": "bg-indigo-50 text-indigo-700", "period ended": "bg-slate-100 text-slate-600",
   non_renewed: "bg-rose-50 text-rose-700", renewal: "bg-indigo-50 text-indigo-700", "prior system": "bg-slate-100 text-slate-500",
 };
 

@@ -19,9 +19,13 @@ export const isInForce = (p: Term, today: string) => p.effective_date <= today &
 /** Bound ahead of its effective date, such as a renewal waiting for the expiring term to end (CR-102). */
 export const isBoundNotEffective = (p: Term, today: string) => p.effective_date > today && p.expiration_date >= today;
 
-/** Expiring within `days` and still needing a renewal: a policy already renewed has nothing left to do (CR-066). */
+/** Whether a policy is in force, in the words the desk uses (UX-071). */
+export const policyPeriodState = (p: Term, today: string): "not yet effective" | "in force" | "period ended" =>
+  isBoundNotEffective(p, today) ? "not yet effective" : isInForce(p, today) ? "in force" : "period ended";
+
+/** Expiring within `days` and still needing a renewal: one renewed or marked non-renewed has nothing left to do (CR-066, UX-068). */
 export const dueWithin = <T extends Term & { renewal_status: string }>(rows: T[], today: string, days: number): T[] =>
-  rows.filter((p) => p.renewal_status !== "renewed" && daysUntil(p.expiration_date, today) <= days);
+  rows.filter((p) => p.renewal_status !== "renewed" && p.renewal_status !== "non_renewed" && daysUntil(p.expiration_date, today) <= days);
 
 /** Claims, incurred and open claims from a submission's loss rows, so the desk, the assistant and the renewal page agree (CR-135). */
 export function lossTotals(losses: { incurred: number; status: string }[] | null | undefined) {

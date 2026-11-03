@@ -169,6 +169,15 @@ export function sameValue(a: Value, b: Value): boolean {
   return JSON.stringify(isEmpty(a) ? null : a) === JSON.stringify(isEmpty(b) ? null : b);
 }
 
+/** A field's name as the form shows it, wherever the code only has its path (UX-053). */
+export const fieldLabel = (path: string): string => FIELD_DEFS.find((d) => d.path === path)?.label ?? path;
+
+/** A value as the form shows it, for a banner or a history line (UX-053). */
+export function fieldValueText(path: string, v: Value): string {
+  const def = FIELD_DEFS.find((d) => d.path === path);
+  return def ? formatValue(def.type, v) : isEmpty(v) ? "—" : String(v);
+}
+
 /** Why a field deserves the underwriter's attention, or null if it looks fine. */
 export function attention(path: string, value: Value, meta: FieldMeta | undefined, conflicted: boolean): string | null {
   if (missingRequired(path, value)) return "Required for rating";

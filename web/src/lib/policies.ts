@@ -1,3 +1,4 @@
+import type { Closure } from "./file-closure";
 import { isUuid } from "./text.ts";
 import { todayIso, whenDate } from "./time.ts";
 import { audit } from "./audit";
@@ -19,11 +20,12 @@ export type PolicyRow = {
   bound_by: string; bound_at: Date;
   renewal_status: "not_started" | "in_progress" | "renewed" | "non_renewed"; renewal_submission_id: string | null;
   renewed_from: { source: "book" | "desktop"; policy_id: string; policy_number: string } | null;
+  non_renewal: Closure | null;
 };
 
 const COLUMNS = `p.id, p.policy_number, p.binder_number, p.status, p.quote_id, q.quote_number, q.version AS quote_version,
   p.submission_id, p.insured_id, p.insured_name, p.effective_date::text, p.expiration_date::text, p.premium, p.policy_fee,
-  p.surplus_lines_tax, p.total, p.subjectivities, p.bound_by, p.bound_at, p.renewal_status, p.renewal_submission_id, p.renewed_from`;
+  p.surplus_lines_tax, p.total, p.subjectivities, p.bound_by, p.bound_at, p.renewal_status, p.renewal_submission_id, p.renewed_from, p.non_renewal`;
 
 export async function policiesForSubmission(submissionId: string): Promise<PolicyRow[]> {
   const { rows } = await policyDb.query<PolicyRow>(
@@ -33,7 +35,7 @@ export async function policiesForSubmission(submissionId: string): Promise<Polic
 
 /** What the policy covers, frozen on the quote it was bound from (UX-014). */
 export type PolicyTerms = {
-  terms: { limits: { label: string; amount: number }[]; deductible: number; class_code: string; class_description: string; operations: string; forms: string[] };
+  terms: { limits: { label: string; amount: number }[]; deductible: number; class_code: string; class_description: string; operations: string; forms: string[]; producer?: string[]; producer_fields?: ProducerFields };
   rating_inputs: RatingInputs;
 };
 

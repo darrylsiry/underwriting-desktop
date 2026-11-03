@@ -101,6 +101,17 @@ export async function activeRateVersion(timeoutMs = RATING_TIMEOUT_MS): Promise<
  */
 export const recentRateVersion = memoFor(30_000, () => activeRateVersion(3_000));
 
+/** Class code -> name, for the pages that show a code (UX-077). Remembered for five minutes; empty if the service can't say. */
+export const rateableClasses = memoFor(300_000, async (): Promise<Map<string, string>> => {
+  try {
+    const res = await fetch(`${RATING_SERVICE_URL}/classes`, { cache: "no-store", signal: AbortSignal.timeout(3_000) });
+    if (!res.ok) return new Map();
+    return new Map((await res.json() as { class_code: string; description: string }[]).map((c) => [String(c.class_code), c.description]));
+  } catch {
+    return new Map();
+  }
+});
+
 /**
  * Ready to quote: a rating of the current inputs on the currently active rate version, and every
  * "refer" flag cleared. `activeVersion` null means the rating service couldn't be asked.
@@ -122,6 +133,7 @@ function rate(sub: SubmissionRow, inputs: RatingInputs, schedule: ScheduleItem[]
 
 /** UX-037 / CR-100: a bound file's worksheet is the rating that was bound. Every change to it stops here, stale tabs included. */
 async function refuseIfBound(sub: SubmissionRow): Promise<void> {
+  if (sub.status === "declined") throw new Error(`${sub.reference} is declined; reopen it to change the worksheet`);
   const { rows } = await policyDb.query<{ policy_number: string }>("SELECT policy_number FROM policies WHERE submission_id = $1 LIMIT 1", [sub.id]);
   if (rows[0]) throw new Error(`Bound as ${rows[0].policy_number}; the worksheet can't change. Changes to a bound policy need an endorsement.`);
 }

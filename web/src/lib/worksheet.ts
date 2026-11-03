@@ -157,7 +157,7 @@ export function parseSchedule(form: Record<string, string>): ScheduleItem[] {
     if (!Number.isInteger(pct) || Math.abs(pct) > MAX_CATEGORY_PCT) {
       throw new FieldError(`${c.label}: enter a whole percent between -${MAX_CATEGORY_PCT} (credit) and +${MAX_CATEGORY_PCT} (debit)`, `schedule.${c.key}.pct`);
     }
-    if (pct !== 0 && rationale.length < 10) throw new FieldError(`${c.label}: write a reason for the ${pct < 0 ? "credit" : "debit"}`, `schedule.${c.key}.rationale`);
+    if (pct !== 0 && rationale.length < 10) throw new FieldError(`${c.label}: write at least 10 characters explaining the ${pct < 0 ? "credit" : "debit"}`, `schedule.${c.key}.rationale`);
     if (pct !== 0) items.push({ category: c.key, pct, rationale });
   }
   return items;
@@ -205,7 +205,7 @@ export function inputChanges(a: { inputs: RatingInputs; schedule: ScheduleItem[]
   return out;
 }
 
-export type Chip = { label: string; tone: "done" | "action" | "attention" | "quiet" };
+export type Chip = { label: string; tone: "done" | "action" | "attention" | "quiet"; href?: string };
 
 /**
  * The two header chips a file carries (UX-003): the commercial one persists (`Quoted · Q-… v1`,
@@ -213,15 +213,17 @@ export type Chip = { label: string; tone: "done" | "action" | "attention" | "qui
  * comparison both render this pair so the vocabulary is one.
  */
 export function worksheetChips(f: {
-  policyNumber?: string | null; quote?: { number: string; version: number } | null; quoteCurrent?: boolean;
+  policyNumber?: string | null; quote?: { number: string; version: number; state?: string } | null; quoteCurrent?: boolean;
   hasRating: boolean; rated: boolean; ready: boolean; openReferrals: number;
 }): { commercial: Chip | null; worksheet: Chip | null } {
   const commercial: Chip | null = f.policyNumber ? { label: `Bound · ${f.policyNumber}`, tone: "done" }
+    : f.quote?.state === "expired" ? { label: `Expired · ${f.quote.number} v${f.quote.version}`, tone: "attention" }
+    : f.quote?.state === "not_taken" ? { label: `Not taken · ${f.quote.number} v${f.quote.version}`, tone: "quiet" }
     : f.quote ? { label: `Quoted · ${f.quote.number} v${f.quote.version}`, tone: "action" } : null;
   if (f.policyNumber) return { commercial, worksheet: null };
   const worksheet: Chip | null = !f.hasRating ? { label: "Not rated", tone: "quiet" }
     : !f.rated ? { label: "Rating out of date", tone: "attention" }
-    : !f.ready ? { label: `${f.openReferrals} referral${f.openReferrals === 1 ? "" : "s"} open`, tone: "attention" }
+    : !f.ready ? { label: `${f.openReferrals} referral${f.openReferrals === 1 ? "" : "s"} open`, tone: "attention", href: "#referrals" }
     : f.quote && f.quoteCurrent ? null   // the quote says it: the worksheet is exactly what was quoted
     : f.quote ? { label: "Differs from quote", tone: "attention" }
     : { label: "Ready to quote", tone: "done" };

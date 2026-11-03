@@ -85,6 +85,7 @@ export default async function SubmissionsPage({ searchParams }: { searchParams: 
                 <td className="px-4 py-2 text-xs">
                   {/* UX-038: the next step follows the stage; a bound file's next step is its policy. */}
                   {st.key === "bound" && st.href ? <Link href={st.href} className="text-indigo-600 hover:underline">Policy →</Link>
+                    : s.status === "declined" ? <Link href={`/submissions/${s.id}`} className="text-indigo-600 hover:underline">Intake →</Link>
                     : s.status === "accepted" ? <Link href={`/submissions/${s.id}/workbench`} className="text-indigo-600 hover:underline">Workbench →</Link> : (
                     <span className="flex gap-2 whitespace-nowrap">
                       {missing > 0 && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-rose-700">{missing} missing</span>}

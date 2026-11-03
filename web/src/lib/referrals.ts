@@ -57,6 +57,10 @@ export function clearanceStatus(flag: Flag, clearance: Clearance | undefined, bo
   return bound || clearance.detail === flag.detail ? "cleared" : "stale";
 }
 
+/** Which inputs rest on an assumption, not the submission: the warning and the workbench's tags read this, so they can't disagree (UX-077). */
+export const assumedInputs = (data: SubmissionData, inputs: RatingInputs) =>
+  ASSUMED_LABELS.filter(({ key }) => data.operations?.[key] == null && inputs[key] === ASSUMED_INPUTS[key]);
+
 const ASSUMED_LABELS: { key: keyof typeof ASSUMED_INPUTS; text: string }[] = [
   { key: "max_height_ft", text: "max height 0 ft" },
   { key: "subcontracted_pct", text: "subcontracted 0%" },
@@ -134,7 +138,7 @@ export function referralFlags(ctx: ReferralContext): Flag[] {
   }
 
   // The assumptions are the lowest-rated bands and can never trip HEIGHT or UNINSURED_SUBS, so they aren't silent (CR-112).
-  const assumed = ASSUMED_LABELS.filter(({ key }) => data.operations?.[key] == null && inputs[key] === ASSUMED_INPUTS[key]);
+  const assumed = assumedInputs(data, inputs);
   if (assumed.length) {
     add("ASSUMED_INPUTS", "warn", "Inputs assumed, not stated",
       `Not stated in the submission, so rated as: ${assumed.map((a) => a.text).join(", ")}. Confirm with the broker.`);

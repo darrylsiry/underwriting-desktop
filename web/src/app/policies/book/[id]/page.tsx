@@ -1,3 +1,4 @@
+import { Flash } from "@/components/flash";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -9,8 +10,11 @@ import { inputText } from "@/lib/renewal-compare";
 import { getBookPolicy, renewalOfPolicy } from "@/lib/renewals";
 import { todayIso } from "@/lib/time";
 import { INPUT_DEFS, SCHEDULE_CATEGORIES } from "@/lib/worksheet";
-import { startRenewalAction } from "../../actions";
+import { nonRenewAction, reverseNonRenewalAction, startRenewalAction } from "../../actions";
 import { StartRenewalForm } from "../../start-renewal-form";
+import { ConfirmForm } from "@/components/confirm-form";
+import { ReasonForm } from "@/components/reason-form";
+import { NON_RENEWAL_REASONS, closureText } from "@/lib/file-closure";
 
 export const dynamic = "force-dynamic";
 
@@ -22,12 +26,12 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: p ? `${p.policy_number} · Policy` : "Policy" };
 }
 
-type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string }> };
+type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; msg?: string }> };
 
 /** A policy written in the prior policy system: what we know about it, and its renewal. */
 export default async function BookPolicyPage({ params, searchParams }: Props) {
   const { id } = await params;
-  const { error } = await searchParams;
+  const { error, msg } = await searchParams;
   const p = await load(id);
   if (!p) notFound();
   const daysLeft = daysUntil(p.expiration_date, todayIso());   // UX-023
@@ -47,7 +51,7 @@ export default async function BookPolicyPage({ params, searchParams }: Props) {
       <p className="mt-1 text-sm text-slate-500">
         {p.insured_name} · {p.class_code} {p.class_description} · {p.producer} · underwriter {p.underwriter}
       </p>
-      {error && <p className="mt-4 rounded bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+      <Flash msg={msg} error={error} />
 
       <div className="mt-6 grid gap-6 md:grid-cols-2">
         <Section title="Current policy">
@@ -85,7 +89,15 @@ export default async function BookPolicyPage({ params, searchParams }: Props) {
         {/* UX-023: when it expires, whether a renewal is due yet, and a confirm before one is created. */}
         <Section title={`Renewal · ${p.renewal_status.replace("_", " ")}`}>
           <div className="p-4 text-sm">
-            {!renewal ? (
+            {p.renewal_status === "non_renewed" && p.non_renewal ? (
+              <>
+                <p className="text-slate-700">{closureText("Marked non-renewed", p.non_renewal)}</p>
+                {renewal
+                  ? <p className="mt-2 text-xs text-slate-500">Reopen <RowLink href={`/submissions/${renewal.submission.id}`}>{renewal.submission.reference}</RowLink> to bring the renewal back.</p>
+                  : <div className="mt-3"><ConfirmForm action={reverseNonRenewalAction.bind(null, "book", p.id)} confirmText={`Reverse the non-renewal of ${p.policy_number}?`} pending="Reversing…" className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50">Reverse non-renewal</ConfirmForm></div>}
+              </>
+            ) : !renewal ? (
+              <>
               <StartRenewalForm action={startRenewalAction.bind(null, "book", p.id)} policyNumber={p.policy_number} inWindow={daysLeft <= RENEWAL_WINDOW_DAYS}>
                 <p className="font-medium">Expires {whenDate(p.expiration_date)} · {daysLeft < 0 ? `expired ${-daysLeft} day${daysLeft === -1 ? "" : "s"} ago` : `${daysLeft} day${daysLeft === 1 ? "" : "s"}`}</p>
                 <p className="mt-1 text-slate-600">
@@ -94,6 +106,11 @@ export default async function BookPolicyPage({ params, searchParams }: Props) {
                   renewing terms are rated on current rates so the two can be compared.
                 </p>
               </StartRenewalForm>
+              <div className="mt-3">
+                <ReasonForm action={nonRenewAction.bind(null, "book", p.id)} summary="Non-renew this policy…" reasons={NON_RENEWAL_REASONS} submitLabel="Mark non-renewed" pending="Saving…"
+                  confirmText={`Mark ${p.policy_number} non-renewed? It leaves the renewal list and can be reversed here.`} />
+              </div>
+              </>
             ) : (
               <>
                 <p>
