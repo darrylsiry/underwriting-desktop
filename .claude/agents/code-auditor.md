@@ -221,8 +221,12 @@ thing to fix next.
 2. List all source files in scope and read each one completely.
 3. If tooling is already installed, run (read-only, no installs):
    - `cd web && npx tsc --noEmit` and `npm run lint` and `npm test`
-   - `cd services/rating && uv run --frozen pytest -q` (only if `.venv` exists)
-   - `cd services/ingestion && uv run --frozen pytest -q` (only if `.venv` exists)
+   - `scripts/python-tests.sh`, from the repository root: both Python suites in throwaway containers.
+     It reads the checkout through a read-only mount and writes nothing to it, and is the one exception
+     to the no-install rule, because it installs `uv` only inside those containers. Skip it if Docker
+     isn't running, and say so.
+   `npm test` also creates and drops two `web_test_<pid>_*` databases on a local Postgres when one
+   answers, and skips those tests when none does. That is expected; note it in Coverage notes.
    Record results in Coverage notes. A failing test is evidence for a finding.
 4. Re-verify every previous finding against the current code.
 5. Write up new findings against the checklist and severity table.

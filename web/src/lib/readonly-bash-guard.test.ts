@@ -17,7 +17,7 @@ const blocked = (command: string) => {
 
 test("the checks the reviewers are told to run pass, alone or chained", () => {
   for (const c of [
-    "npx tsc --noEmit", "npx eslint .", "npm run lint", "npm test", "uv run --frozen pytest", "uv run --frozen pytest -q",
+    "npx tsc --noEmit", "npx eslint .", "npm run lint", "npm test", "uv run --frozen pytest", "uv run --frozen pytest -q", "scripts/python-tests.sh", "scripts/python-tests.sh 2>&1 | tail -20",
     "cd web && npx tsc --noEmit", "cd web && npm run lint", "cd web && npm test", "cd web && npx tsc --noEmit && npm run lint && npm test",
     "cd services/rating && uv run --frozen pytest -q", "cd services/ingestion && uv run --frozen pytest -q",
     "cd web && npm test 2>&1 | tail -20", "cd web; npx eslint . | head -40", "npm test 2>/dev/null",
@@ -38,7 +38,7 @@ test("what was already allowed still is", () => {
 
 test("a check with anything added, or anything else beside it, is still refused", () => {
   for (const c of [
-    "npm test > out.txt", "npm test 2> err.txt", "npm test >> out.txt", "npm test | tee out.txt", "npm test; rm -rf web", "npm test && git push",
+    "scripts/python-tests.sh > out.txt", "scripts/python-tests.sh; rm x", "docker run --rm alpine sh", "npm test > out.txt", "npm test 2> err.txt", "npm test >> out.txt", "npm test | tee out.txt", "npm test; rm -rf web", "npm test && git push",
     "cd web && npm test; touch x", "npm test\nrm x", "rm x && npm test", "npm test & rm x", "npx tsc --noEmit > types.txt", "npx tsc --noEmit && mv a b",
     "npm test -- --watch", "npm run lint -- --fix", "npx eslint . --fix", "npx eslint --fix .", "npx eslint web", "npx tsc", "npx tsc --outDir out", "npx tsc --noEmit --build",
     "npx prettier --write .", "npx rimraf web", "npm run build", "npm run dev", "npm install", "npm ci", "npm publish",
