@@ -967,3 +967,29 @@ read this to replay the build quickly.
   - The Markdown component draws headings as `<p>`, so a test looks for the text, not a heading role.
   - Reviewers can see `.fly-reports-publish` just as they can `.fly-credentials`. Their instructions already forbid reading files that may hold secrets.
 - **How to show it:** open App Tests on the live site and note "Reading the reports the agents last published" and its time. Run `/audit` locally. When it finishes, reload: the new run time and findings are there, with no push.
+
+## step-31: The code review backlog after step-30 (22 of 23; CR-096 needs the owner)
+- **Prompt used:** "fix all code quality open items"
+- **What was built:** No new feature. CR-152 to CR-173, plus CR-158, have fixes named in four `fix:` commits. CR-096 is still open, see below. What users will notice:
+  - **Intake types documents by what they are.** A first-page mention of loss runs no longer makes a document one, and a filled application is read from its fields whatever else it says. Claude now says what each document is, for files that can't say themselves, so a scanned or `.txt` loss run counts as one.
+  - **Fewer files are lost or doubled.** A file nested in `multipart/alternative` or `multipart/related` is read, and a signature logo isn't reported. Two different files with one name stay two documents (`LossRuns (2).pdf`), with a warning. A checkbox reads as its answer. An off-list class code on a form is caught at intake.
+  - **Claims survive a prior-system renewal.** The totals carried from the expiring policy hold through the bind, on the desk, `/book` and the assistant, and they fire the next renewal's loss referrals.
+  - **Quote periods make sense.** A renewal can't start before the expiring policy ends, and a later start states the gap on the memo and the renewal page. A period already over is refused before anything is written.
+  - **An experience credit refers.** A mod under 1.00 needs a clearance note, as a schedule credit needs a reason.
+  - **Worksheets record real changes.** The same states in another order, or an untouched multi-line field, are no change. Factors show every decimal they have.
+  - **The memo names a raised class minimum,** and says "none of its changes" only when the revision moved nothing.
+  - **Uploads get a straight answer.** Over 25 MB gets a sentence instead of "Something went wrong".
+  - **The assistant agrees with the workbench** on a bound file, can say who holds a customer's file and where its renewal stands, and links a rating row to a search that finds it.
+- **Files:** `services/ingestion/app/{documents,pipeline,claude,schema}.py`, `web/next.config.ts`, `web/src/lib/{book-metrics,dashboard,assistant-tools,assistant-audit,renewals,quotes,renewal-compare,renewal-memo-pdf,format,submission,inbox,referrals,worksheets,insureds,db}.ts`, `web/src/app/submissions/{actions.ts,upload-form.tsx}`, `web/src/app/submissions/[id]/{workbench,renewal}/*`, `web/src/app/quotes/[id]/page.tsx`, `uat/tests/sandbox/15-upload-size.spec.ts`, and tests alongside.
+- **Commit:** `step-31: the code review backlog after step-30 (build log and playbook)`, after four `fix:` commits.
+- **Decisions:**
+  - **CR-159 did not reproduce as written.** The finding said an upload over 10 MB is cut off by Next's middleware body limit. A 15 MB and a 24 MB upload both arrived whole through the sign-in gate on the production build, byte count checked. `middlewareClientMaxBodySize` stays unset: nothing needs it, and it would raise what a signed-out request can buffer (SEC-032). The real defect was the 30 MB case. The browser checks the size too, because the server refuses a body over its limit before the action can answer.
+  - **CR-161 is an underwriting call.** The finding allowed either a flag or a recorded decision that mods are free. A credit now refers; a debit doesn't. To undo it, remove the `EXPERIENCE_MOD` rule in `referrals.ts`.
+  - **CR-156 refuses a renewal that starts early** rather than warning, so no mid-term rewrite. **CR-164 still accepts a past effective date within the term;** UX-065 covers warning about it.
+  - **CR-158:** `npm test` keeps defaulting to local Postgres when one answers, and now drops databases whose process has gone. It never uses FORCE, so one in use isn't taken.
+- **Dead ends / gotchas:**
+  - **Check a finding before fixing it.** A real upload test written first is what showed CR-159's premise was wrong.
+  - **Fake Claude can't catch a schema change.** All suites pass with a stand-in, so CR-153's new required `document_types` was tried with one real call on samples: it returned types and raised no warnings.
+  - **Stubbing `pool.connect` hangs `pool.query`,** which calls it with a callback. Pass calls with arguments straight through.
+  - **CR-096 is still open.** `scripts/python-tests.sh` works, but the two edits that let reviewers use it, in `scripts/readonly-bash-guard.sh` and `.claude/agents/code-auditor.md`, were refused again as self-modification. So the auditor can't confirm these Python fixes by running them, and the note CR-158 asks for in its instructions isn't there either.
+- **How to show it:** upload a 30 MB file on `/submissions` for the size message. On a workbench, set the experience mod to 0.80 and Save & rate: a referral appears naming the 20% credit, and Issue is blocked until it is cleared.
