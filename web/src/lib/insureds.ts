@@ -29,8 +29,8 @@ export async function getInsured(id: string): Promise<InsuredRow | null> {
 }
 
 export async function submissionsForInsured(id: string) {
-  const { rows } = await customerDb.query<{ id: string; reference: string; status: string; received_at: Date; class_code: string | null; receipts: string | null }>(
-    `SELECT id, reference, status, received_at, data->'operations'->>'class_code' AS class_code,
+  const { rows } = await customerDb.query<{ id: string; reference: string; status: string; kind: string; received_by: string; received_at: Date; class_code: string | null; receipts: string | null }>(
+    `SELECT id, reference, status, kind, received_by, received_at, data->'operations'->>'class_code' AS class_code,
             data->'operations'->>'gross_receipts' AS receipts
      FROM submissions WHERE insured_id = $1 ORDER BY received_at DESC`, [id]);
   return rows;
@@ -44,8 +44,8 @@ export async function quotesForInsured(id: string) {
 }
 
 export async function policiesForInsured(id: string) {
-  const { rows } = await policyDb.query<{ id: string; policy_number: string; effective_date: string; expiration_date: string; premium: string; total: string; subjectivities: { status: string }[] }>(
-    `SELECT id, policy_number, effective_date::text, expiration_date::text, premium, total, subjectivities
+  const { rows } = await policyDb.query<{ id: string; policy_number: string; status: string; renewal_status: string; effective_date: string; expiration_date: string; premium: string; total: string; subjectivities: { status: string }[] }>(
+    `SELECT id, policy_number, status, renewal_status, effective_date::text, expiration_date::text, premium, total, subjectivities
      FROM policies WHERE insured_id = $1 ORDER BY effective_date DESC`, [id]);
   return rows;
 }

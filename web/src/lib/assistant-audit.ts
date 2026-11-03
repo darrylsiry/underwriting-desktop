@@ -26,6 +26,10 @@ export const entityUrl = (type: string, id: string) => ({
   book_policy: `/policies/book/${id}`, ledger: `/accounting?batch=${id}`, rate_version: `/admin/versions/${id}`,
 } as Record<string, string>)[type] ?? `/audit?q=${encodeURIComponent(id)}`;
 
+/** A rating row has no page of its own, and /audit's search reads its reference, not its id (CR-173). */
+const eventUrl = (e: { entityType: string; entityId: string; entityLabel?: string }) =>
+  e.entityType !== "rating" ? entityUrl(e.entityType, e.entityId) : e.entityLabel ? `/audit?q=${encodeURIComponent(e.entityLabel)}` : "/audit";
+
 /** Tells the model what wasn't searched, so it reports a cut history as cut and not as "nothing happened" (CR-103). */
 function cutNote(t: LoadedTimeline): string | undefined {
   if (!t.capped) return undefined;
@@ -51,7 +55,7 @@ export async function auditSearch(a: Record<string, unknown>, deps: AuditSearchD
   return {
     scope: t.scope, warnings: t.warnings, count: events.length, total_matching: matching.length,
     capped: t.capped, capped_sources: t.cappedBy, oldest_loaded_at: t.olderCursor, note: cutNote(t),
-    events: events.map((e) => ({ at: e.at, source: e.source, actor: e.actor, action: e.action, entity: `${e.entityType} ${t.labels.get(`${e.entityType}:${e.entityId}`) ?? e.entityLabel ?? e.entityId}`, summary: e.summary, url: entityUrl(e.entityType, e.entityId), correlation_id: e.correlationId })),
+    events: events.map((e) => ({ at: e.at, source: e.source, actor: e.actor, action: e.action, entity: `${e.entityType} ${t.labels.get(`${e.entityType}:${e.entityId}`) ?? e.entityLabel ?? e.entityId}`, summary: e.summary, url: eventUrl(e), correlation_id: e.correlationId })),
     audit_url: subId ? `/audit?submission=${subId}` : "/audit",
   };
 }

@@ -40,6 +40,7 @@ const { loadAgentActivity, mockupIds, readMockup, readReport } = await import(".
 const { addDays } = await import("./quote-terms.ts");
 const { loadDashboard } = await import("./dashboard.ts");
 const { migrate } = await import("./migrate.ts");
+const { APP_TOOLS } = await import("./assistant-tools.ts");
 const { bindQuote } = await import("./policies.ts");
 const { storePublished } = await import("./published-reports.ts");
 const { issueQuote } = await import("./quotes.ts");
@@ -53,8 +54,20 @@ const ACTOR = "underwriter1";
 const realFetch = globalThis.fetch;
 let duringRating: (() => Promise<void>) | null = null;
 
+/** What a killed run or a failed teardown left behind: databases named for a process that has gone (CR-158). Never FORCE: one in use isn't ours to take. */
+async function dropLeftovers() {
+  const { rows } = await admin.query<{ datname: string }>("SELECT datname FROM pg_database WHERE datname LIKE 'web\\_test\\_%'");
+  for (const { datname } of rows) {
+    const pid = Number(/^web_test_(\d+)_/.exec(datname)?.[1]);
+    let running = false;
+    try { process.kill(pid, 0); running = true; } catch (err) { running = (err as NodeJS.ErrnoException).code === "EPERM"; }
+    if (!running) await admin.query(`DROP DATABASE IF EXISTS "${datname}"`).catch(() => {});
+  }
+}
+
 before(async () => {
   if (!reachable) return;
+  await dropLeftovers();
   for (const db of Object.values(names)) await admin.query(`CREATE DATABASE ${db}`);
   await migrate();
   globalThis.fetch = (async (input: string | URL | Request) => {
@@ -446,4 +459,51 @@ test("retyping the same states in another order changes nothing; a new state doe
   await saveAndRate(sub, await states("TX, NJ, GA")(), ACTOR);
   assert.deepEqual((await getWorksheet(sub.id))!.rating_inputs.states, ["TX", "NJ", "GA"]);
   assert.equal(await changes(), count + 1);
+});
+
+const tool = (name: string) => APP_TOOLS.find((t) => t.name === name)!;
+const toolCtx = { actor: ACTOR, origin: "http://test", today: todayIso() };
+
+test("the assistant judges a bound file as the workbench does, by the terms that were bound (CR-155)", options, async () => {
+  const sub = await ratedSubmission();
+  const quote = await issueQuote(sub, period(), ACTOR);
+  const live = await tool("get_submission").run({ reference_or_id: sub.reference }, toolCtx as never) as { worksheet: Record<string, unknown> };
+  assert.equal(live.worksheet.ready_to_quote, true);
+
+  await saveAndRate(sub, formOf((await getWorksheet(sub.id))!.rating_inputs, { max_height_ft: "55" }), ACTOR);
+  await bindQuote(quote.id, new Set(), ACTOR);
+  const { worksheet } = await tool("get_submission").run({ reference_or_id: sub.reference }, toolCtx as never) as { worksheet: Record<string, unknown> & { referrals: { code: string }[]; rating_inputs: { max_height_ft: number } } };
+  assert.equal(worksheet.bound, true);
+  assert.ok(!("ready_to_quote" in worksheet) && !("rating_is_current" in worksheet));
+  assert.ok(!worksheet.referrals.some((r) => r.code === "HEIGHT"), "the bound terms were under the limit");
+  assert.equal(worksheet.rating_inputs.max_height_ft, 20, "the inputs that were bound, as the workbench shows them");
+});
+
+test("the assistant can say who holds a customer's file and where its renewal stands (CR-173)", options, async () => {
+  const sub = await ratedSubmission();
+  const quote = await issueQuote(sub, period(), ACTOR);
+  await bindQuote(quote.id, new Set(), ACTOR);
+  const found = await tool("get_insured").run({ name_or_id: (await getSubmission(sub.id))!.insured_id! }, toolCtx as never) as { submissions: Record<string, unknown>[]; policies: Record<string, unknown>[] };
+  assert.equal(found.submissions[0].received_by, ACTOR);
+  assert.equal(found.submissions[0].kind, "new");
+  assert.equal(found.policies[0].status, "bound");
+  assert.equal(found.policies[0].renewal_status, "not_started");
+});
+
+test("a dropped idle connection is a log line naming the pool, and the next query works (CR-172)", options, async (t) => {
+  const logged = t.mock.method(console, "error", () => {});
+  const { pid } = (await policyDb.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0];
+  await admin.query("SELECT pg_terminate_backend($1)", [pid]);
+  for (let i = 0; i < 100 && !logged.mock.callCount(); i++) await new Promise((r) => setTimeout(r, 20));
+  assert.match(String(logged.mock.calls[0]?.arguments[0]), /\[db\] idle policy connection lost/);
+  assert.equal((await policyDb.query<{ one: number }>("SELECT 1 AS one")).rows[0].one, 1);
+});
+
+test("leftover test databases go when their process has gone, and no others do (CR-158)", options, async () => {
+  const gone = "web_test_999999_customer";
+  await admin.query(`CREATE DATABASE ${gone}`);
+  await dropLeftovers();
+  const left = (await admin.query<{ datname: string }>("SELECT datname FROM pg_database WHERE datname LIKE 'web\\_test\\_%'")).rows.map((r) => r.datname);
+  assert.ok(!left.includes(gone));
+  for (const own of Object.values(names)) assert.ok(left.includes(own), own);
 });

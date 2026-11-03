@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { auditSearch, type AuditSearchDeps } from "./assistant-audit.ts";
-import { fromDesktop } from "./timeline-merge.ts";
+import { applyFilters, fromDesktop, fromRating } from "./timeline-merge.ts";
 
 type Loaded = Awaited<ReturnType<AuditSearchDeps["loadTimeline"]>>;
 
@@ -65,4 +65,14 @@ test("the limit cuts the list but not the count of what matched", async () => {
   const r = await auditSearch({ limit: 1 }, d) as { count: number; total_matching: number };
   assert.equal(r.count, 1);
   assert.equal(r.total_matching, 2);
+});
+
+test("a rating row's link finds that row: the page searches its reference, not its id (CR-173)", async () => {
+  const rated = fromRating({ id: "rating-uuid", created_at: new Date("2026-03-01T12:00:00Z"), requested_by: "pat", reference: "SUB-0012", rate_version: "2026.1", premium: "100", total: "120", class_code: "91580", recorded_at: null } as never);
+  const noReference = fromRating({ id: "other-uuid", created_at: new Date("2026-03-01T12:00:00Z"), requested_by: "pat", reference: null, rate_version: "2026.1", premium: "100", total: "120", class_code: "91580", recorded_at: null } as never);
+  const { d } = deps(timeline({ events: [rated, noReference] }));
+  const { events } = await auditSearch({}, d) as { events: { url: string }[] };
+  assert.equal(events[0].url, "/audit?q=SUB-0012");
+  assert.equal(events[1].url, "/audit");
+  assert.deepEqual(applyFilters([rated, noReference], { q: "SUB-0012" }).map((e) => e.key), [rated.key]);
 });

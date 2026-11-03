@@ -18,7 +18,7 @@ import {
   worksheetChips, worksheetFingerprint, type RatingInputs,
 } from "@/lib/worksheet";
 import { factorText } from "@/lib/format";
-import { activeRateVersion, flagsFor, money, openWorksheet, readiness } from "@/lib/worksheets";
+import { activeRateVersion, boundFlags, money, openWorksheet, readiness } from "@/lib/worksheets";
 import { inputText } from "@/lib/renewal-compare";
 import { expiringOf } from "@/lib/renewals";
 import { ActionDirtyHint, ActionError, ActionForm, ActionFormProvider, ActionInput, ActionSelect, ActionSubmit, FieldMessage, WaitForSave } from "../action-form";
@@ -95,7 +95,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
   );
 
   // CR-138: a bound file's panel judges the terms that were bound, like the inputs beside it, not a worksheet edited after the quote.
-  const panelFlags = boundQuote ? flagsFor(sub, { ...ws, rating_inputs: boundQuote.rating_inputs, schedule: boundQuote.schedule }) : flags;
+  const panelFlags = boundQuote ? boundFlags(sub, ws, boundQuote) : flags;
   const refers = panelFlags.filter((f) => f.severity === "refer");
   const openRefers = refers.filter((f) => clearanceStatus(f, ws.referral_clearances[f.code], !!policy) !== "cleared").length;
   const warns = panelFlags.length - refers.length;

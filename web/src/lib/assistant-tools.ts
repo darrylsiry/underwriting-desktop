@@ -22,7 +22,8 @@ import type { Loss } from "./submission";
 import { getSubmission, submissionIdsReceivedBy } from "./submissions";
 import { isUuid } from "./text.ts";
 import { loadTimeline } from "./timeline";
-import { activeRateVersion, flagsFor, getWorksheet, readiness } from "./worksheets";
+import { clearanceStatus } from "./referrals.ts";
+import { activeRateVersion, boundFlags, flagsFor, getWorksheet, readiness } from "./worksheets";
 
 export type AssistantContext = { actor: string; origin: string; today: string };
 
@@ -168,12 +169,15 @@ export const APP_TOOLS: AppTool[] = [
       let worksheet: unknown = null;
       if (ws) {
         const st = readiness(sub, ws, active);
-        const open = new Set(st.openReferrals.map((f) => f.code));
+        // A bound file reads as the workbench shows it: the terms that were bound, not a worksheet edited since (CR-155).
+        const boundQuote = policies[0] ? await getQuote(policies[0].quote_id) : null;
+        const shownRating = boundQuote?.rating ?? ws.last_rating;
         worksheet = {
-          rating_inputs: ws.rating_inputs, schedule: ws.schedule,
-          last_rating: ws.last_rating ? { premium: money(ws.last_rating.premium), policy_fee: money(ws.last_rating.policy_fee), surplus_lines_tax: money(ws.last_rating.surplus_lines_tax), total: money(ws.last_rating.total), rate_version: ws.last_rating.rate_version, minimum_premium_applied: ws.last_rating.minimum_premium_applied, steps: ws.last_rating.worksheet } : null,
-          rating_is_current: st.rated, rates_changed_since: st.staleRates, ready_to_quote: st.ready, active_rate_version: active,
-          referrals: flagsFor(sub, ws).map((f) => ({ code: f.code, severity: f.severity, title: f.title, detail: f.detail, status: f.severity === "warn" ? "note" : open.has(f.code) ? "open" : "cleared", clearance: ws.referral_clearances[f.code] ?? null })),
+          rating_inputs: boundQuote?.rating_inputs ?? ws.rating_inputs, schedule: boundQuote?.schedule ?? ws.schedule,
+          last_rating: shownRating ? { premium: money(shownRating.premium), policy_fee: money(shownRating.policy_fee), surplus_lines_tax: money(shownRating.surplus_lines_tax), total: money(shownRating.total), rate_version: shownRating.rate_version, minimum_premium_applied: shownRating.minimum_premium_applied, steps: shownRating.worksheet } : null,
+          ...(boundQuote ? { bound: true } : { rating_is_current: st.rated, rates_changed_since: st.staleRates, ready_to_quote: st.ready }),
+          active_rate_version: active,
+          referrals: (boundQuote ? boundFlags(sub, ws, boundQuote) : flagsFor(sub, ws)).map((f) => ({ code: f.code, severity: f.severity, title: f.title, detail: f.detail, status: f.severity === "warn" ? "note" : clearanceStatus(f, ws.referral_clearances[f.code], !!boundQuote) === "cleared" ? "cleared" : "open", clearance: ws.referral_clearances[f.code] ?? null })),
           bridge_rating_on_expiring_rates: ws.bridge_rating ? { premium: money(ws.bridge_rating.premium), total: money(ws.bridge_rating.total), rate_version: ws.bridge_rating.rate_version } : null,
           updated_by: ws.updated_by, updated_at: ws.updated_at.toISOString(),
         };

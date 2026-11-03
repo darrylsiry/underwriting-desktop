@@ -19,10 +19,14 @@ const TIMEOUTS = { connectionTimeoutMillis: 5_000, query_timeout: 30_000 };
 
 const globalPools = globalThis as unknown as { __pools?: Record<DbName, Pool> };
 
-export const pools: Record<DbName, Pool> = (globalPools.__pools ??= {
-  customer: new Pool({ connectionString: urls.customer, ...TIMEOUTS }),
-  policy: new Pool({ connectionString: urls.policy, ...TIMEOUTS }),
-});
+// An idle connection that drops is reported on its pool, and an emitter with no listener throws (CR-172).
+function newPool(name: DbName): Pool {
+  const pool = new Pool({ connectionString: urls[name], ...TIMEOUTS });
+  pool.on("error", (err) => console.error(`[db] idle ${name} connection lost: ${err.message}`));
+  return pool;
+}
+
+export const pools: Record<DbName, Pool> = (globalPools.__pools ??= { customer: newPool("customer"), policy: newPool("policy") });
 
 export const customerDb = pools.customer;
 export const policyDb = pools.policy;

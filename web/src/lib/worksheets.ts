@@ -211,6 +211,11 @@ async function rateAndStore(sub: SubmissionRow, inputs: RatingInputs, schedule: 
 /** A form post rewrites each line break in a field as CRLF, so text quoting a multi-line claim never comes back exactly as sent (CR-151). */
 const sameText = (a: string, b: string) => a.replace(/\r\n?/g, "\n") === b.replace(/\r\n?/g, "\n");
 
+/** A bound file is judged by the terms that were bound, not a worksheet edited after the quote (CR-138, CR-155). */
+export function boundFlags(sub: SubmissionRow, ws: WorksheetRow, bound: { rating_inputs: RatingInputs; schedule: ScheduleItem[] }): Flag[] {
+  return flagsFor(sub, { ...ws, rating_inputs: bound.rating_inputs, schedule: bound.schedule });
+}
+
 /**
  * Record why a referral is acceptable. Only flags that currently apply can be cleared. `at` back-dates it (seeded history).
  * `shownDetail` is the flag as the page showed it: a clearance covers only the facts it was given for, so if they moved, refuse (CR-148).
