@@ -62,7 +62,7 @@ test.describe("write buttons are wired, and the guard stops them", () => {
 
   test("Push to the GL", async ({ page, blocked }) => {
     await page.goto("/accounting?period=all");
-    const btn = page.getByRole("button", { name: "Export CSV" });
+    const btn = page.getByRole("button", { name: "Push & download CSV" });
     test.skip(await btn.isDisabled(), "nothing booked to push");
     const n = blocked.length;
     await btn.click();

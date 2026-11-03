@@ -103,7 +103,7 @@ export default async function Home() {
       </div>
 
       <form action="/assistant" method="get" className="mt-5 flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm focus-within:border-indigo-300">
-        <input name="q" placeholder="AI Assistant - Ask Me Anything" aria-label="Ask the AI Assistant" autoComplete="off" maxLength={4000}
+        <input name="q" placeholder="Ask the AI Assistant anything" aria-label="Ask the AI Assistant" autoComplete="off" maxLength={4000}
           className="flex-1 bg-transparent px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none" />
         <button className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Ask</button>
       </form>

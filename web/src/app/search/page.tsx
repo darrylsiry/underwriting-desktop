@@ -27,7 +27,7 @@ export default async function SearchPage({ searchParams }: Props) {
   // A full reference (SUB-0003, Q-2026-0001 v2, GL-26-00001) goes straight to the record.
   const hit = query && results && !all ? directHit(query, results) : null;
   if (hit) redirect(hit);
-  const total = results ? results.insureds.length + results.submissions.length + results.quotes.length + results.policies.length : 0;
+  const total = results ? results.insureds.length + results.submissions.length + results.quotes.length + results.policies.length + results.bookPolicies.length : 0;
 
   return (
     <main className="mx-auto max-w-6xl p-8">
@@ -73,7 +73,7 @@ export default async function SearchPage({ searchParams }: Props) {
               ))}
               {!results.quotes.length && <Empty>No quotes</Empty>}
             </Section>
-            <Section title={`Policies · ${results.policies.length}`}>
+            <Section title={`Policies · ${results.policies.length + results.bookPolicies.length}`}>
               {results.policies.map((p) => (
                 <Link key={p.id} href={`/policies/${p.id}`} className="flex items-center gap-3 border-t border-slate-100 px-4 py-2 text-sm first:border-0 hover:bg-slate-50">
                   <span className="font-mono text-xs">{p.policy_number}</span>
@@ -82,7 +82,16 @@ export default async function SearchPage({ searchParams }: Props) {
                   <span className="tabular-nums">{money(p.total)}</span>
                 </Link>
               ))}
-              {!results.policies.length && <Empty>No policies</Empty>}
+              {results.bookPolicies.map((p) => (
+                <Link key={p.id} href={`/policies/book/${p.id}`} className="flex items-center gap-3 border-t border-slate-100 px-4 py-2 text-sm first:border-0 hover:bg-slate-50">
+                  <span className="font-mono text-xs">{p.policy_number}</span>
+                  <span>{p.insured_name}</span>
+                  <Pill status="prior system" />
+                  <span className="ml-auto text-xs text-slate-500">eff. {whenDate(p.effective_date)}</span>
+                  <span className="tabular-nums" title="Premium">{money(p.premium)}</span>
+                </Link>
+              ))}
+              {!results.policies.length && !results.bookPolicies.length && <Empty>No policies</Empty>}
             </Section>
           </div>
           {total === 0 && <p className="mt-6 text-sm text-slate-500">Nothing found. Try part of a name, a FEIN, or a reference like <RowLink href="/search?q=SUB-0001">SUB-0001</RowLink>.</p>}

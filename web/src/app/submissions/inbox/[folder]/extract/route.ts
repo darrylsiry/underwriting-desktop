@@ -7,6 +7,15 @@ import { filesForm, storeSubmission } from "@/lib/submissions";
 import type { Extraction } from "@/lib/submission";
 import { currentUser } from "@/lib/user";
 
+/** A message already written for the reader. `final`: trying again can only fail the same way. */
+class Told extends Error {
+  final: boolean;
+  constructor(message: string, final = false) {
+    super(message);
+    this.final = final;
+  }
+}
+
 export const dynamic = "force-dynamic";
 
 /**
@@ -29,7 +38,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ folder:
       try {
         // Checked first so a second click or stale tab doesn't spend a Claude call; the unique index is the backstop.
         if (!(await listInbox()).some((f) => f.folder === folder)) {
-          throw new Error(`${folder} was already picked up or is no longer in the inbox. Refresh the page.`);
+          throw new Told(`${folder} was already picked up or is no longer in the inbox. Refresh the page.`, true);
         }
         const files = inboxFiles(folder);
         send({ type: "step", stage: "pickup", message: `${actor} picked up ${folder} from the broker drop folder (${files.length} document(s))` });
@@ -39,8 +48,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ folder:
           method: "POST", body: filesForm(files),
           signal: AbortSignal.any([req.signal, AbortSignal.timeout(300_000)]),
         });
-        if (!res.ok) throw new Error(describeServiceError(new ServiceError(res.status, errorDetailOf(await res.text())), "document reader"));
-        if (!res.body) throw new Error(describeServiceError(new ServiceError(502), "document reader"));
+        if (!res.ok) throw new Told(describeServiceError(new ServiceError(res.status, errorDetailOf(await res.text())), "document reader"));
+        if (!res.body) throw new Told(describeServiceError(new ServiceError(502), "document reader"));
         const offset = (Date.now() - started) / 1000;
 
         let extraction: Extraction | null = null;
@@ -56,17 +65,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ folder:
             if (!line) continue;
             const event = JSON.parse(line);
             if (event.type === "result") extraction = event.result;
-            else if (event.type === "error") throw new Error(event.message);
+            else if (event.type === "error") throw new Told(event.message);
             else send(event, offset + (event.t ?? 0));
           }
         }
-        if (!extraction) throw new Error("The ingestion service ended without a result");
+        if (!extraction) throw new Told("The document reader stopped before it finished. Nothing was saved; try again.");
 
         const { id, reference } = await storeSubmission(files, extraction, actor, folder);
         revalidatePath("/submissions");
         send({ type: "stored", id, reference, message: `Saved as ${reference}; opening intake review` });
       } catch (err) {
-        send({ type: "error", message: (err as Error).message });
+        // A service that gives no answer at all throws a raw "fetch failed": say what that means (UX-059).
+        send(err instanceof Told ? { type: "error", message: err.message, final: err.final } : { type: "error", message: describeServiceError(err, "document reader") });
       } finally {
         controller.close();
       }

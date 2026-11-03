@@ -9,7 +9,7 @@ const LABEL = "block text-xs font-medium uppercase tracking-wide text-slate-500"
 function Field({ id, label, hint, error, ...input }: { id: string; label: string; hint?: string; error?: string } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <div>
-      <label className={LABEL} htmlFor={id}>{label}{hint && <span className="ml-1 normal-case tracking-normal text-slate-400">{hint}</span>}</label>
+      <label className={LABEL} htmlFor={id}>{label}{hint && <span className="ml-1 normal-case tracking-normal text-slate-500">{hint}</span>}</label>
       <input id={id} name={id} aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-error` : undefined}
         className={`${INPUT} ${error ? "border-rose-400" : "border-slate-300"}`} {...input} />
       {error && <p id={`${id}-error`} className="mt-1 text-xs text-rose-700">{error}</p>}

@@ -37,7 +37,7 @@ test.describe.serial("workbench, quote and bind", () => {
     await page.locator('input[name="schedule.safety.pct"]').fill("3");
     await page.locator('input[name="schedule.safety.rationale"]').fill("");
     await page.getByRole("button", { name: "Save & rate" }).click();
-    await expect(page.getByText(/write a reason for the debit/).first()).toBeVisible();
+    await expect(page.getByText(/write at least 10 characters explaining the debit/).first()).toBeVisible();
   });
 
   test("a schedule beyond authority refers; clearing it with a note makes the file ready to quote", async ({ page }) => {

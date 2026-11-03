@@ -23,8 +23,9 @@ function Inlines({ nodes }: { nodes: Inline[] }) {
 function BlockView({ b }: { b: Block }) {
   switch (b.type) {
     case "heading": {
-      const cls = b.level <= 2 ? "text-base font-semibold text-slate-900" : "text-sm font-semibold text-slate-900";
-      return <p className={`${cls} mt-1`}><Inlines nodes={b.children} /></p>;
+      const Tag = b.level <= 1 ? "h2" : b.level === 2 ? "h3" : "h4";   // a level below the page's own h1
+      const cls = b.level <= 1 ? "text-lg" : b.level === 2 ? "text-base" : "text-sm";
+      return <Tag className={`${cls} mt-1 font-semibold text-slate-900`}><Inlines nodes={b.children} /></Tag>;
     }
     case "paragraph": return <p><Inlines nodes={b.children} /></p>;
     case "list": {

@@ -191,7 +191,7 @@ def test_activate_card_says_when_nothing_differs(client):
     vid = res.headers["location"].split("/versions/")[1].split("?")[0]
     page = client.get(f"/admin/versions/{vid}").text
     assert "0 values differ from active 2026.2" in page
-    assert "No differences from the active version; activating changes nothing." in page
+    assert "Nothing to activate: this draft matches active 2026.2." in page
     assert "copied from <strong>retired" not in page
     assert "no differences from active 2026.2" in page   # the confirm text says so as well
 
@@ -238,3 +238,35 @@ def test_admin_shows_the_desktop_nav_only_when_proxied_by_the_desktop(client):
     assert "Rating admin" in standalone and 'href="/submissions"' not in standalone
     # CR-072: the proxy percent-encodes the name; the page shows it as written, still escaped.
     assert "Łukasz K&lt;b&gt;" in client.get("/admin", headers={"x-uw-desktop": "1", "x-uw-user": "%C5%81ukasz%20K%3Cb%3E"}).text
+
+
+def untouched_draft(client, label):
+    active = next(v for v in client.get("/rate-versions").json() if v["status"] == "active")
+    res = client.post("/admin/versions", follow_redirects=False,
+                      data={"based_on": str(active["id"]), "label": label, "notes": "no-op", "actor": "pat"})
+    return res.headers["location"].split("/versions/")[1].split("?")[0]
+
+
+def test_a_draft_can_be_discarded_and_leaves_the_lists(client):
+    """UX-066: an abandoned draft had no way out, and stayed under Copy from."""
+    vid, label = untouched_draft(client, "2026.8"), "2026.8"
+    assert f">{label}</strong></a>" in client.get("/admin").text
+
+    refused = client.post(f"/admin/versions/{vid}/discard", data={"reason": " ", "actor": "pat"}, follow_redirects=False)
+    assert "error=" in refused.headers["location"]
+
+    done = client.post(f"/admin/versions/{vid}/discard", data={"reason": "Superseded", "actor": "pat"}, follow_redirects=False)
+    assert done.status_code in (302, 303) and "error=" not in done.headers["location"]
+    page = client.get("/admin").text
+    assert f">{label}</strong></a>" not in page and f">{label} (" not in page
+    assert next(v for v in client.get("/rate-versions").json() if v["label"] == label)["status"] == "discarded"
+    assert any(a["action"] == "discard" for a in client.get("/rate-table-audit", params={"version_id": vid}).json())
+
+    again = client.post(f"/admin/versions/{vid}/discard", data={"reason": "Twice", "actor": "pat"}, follow_redirects=False)
+    assert "error=" in again.headers["location"]
+
+
+def test_activate_is_disabled_when_a_draft_changes_nothing(client):
+    """UX-066: a pointless activation retires the active version for no change."""
+    page = client.get(f"/admin/versions/{untouched_draft(client, '2026.9')}").text
+    assert "Nothing to activate" in page and 'id="activate-button" disabled' in page

@@ -993,3 +993,31 @@ read this to replay the build quickly.
   - **Stubbing `pool.connect` hangs `pool.query`,** which calls it with a callback. Pass calls with arguments straight through.
   - **CR-096 only needed the auditor's instructions changed.** They now name `scripts/python-tests.sh` and say `npm test`'s temporary databases are expected (CR-158). The finding said the guard blocks the script, but a deny-list only reads the command as typed, so it never did: the guard is unchanged, and a test now pins that it allows the script alone and refuses it with a redirect or a second command. The permission check refuses edits to these files through a shell command; the edit tool, with the owner's go-ahead, went through.
 - **How to show it:** upload a 30 MB file on `/submissions` for the size message. On a workbench, set the experience mod to 0.80 and Save & rate: a referral appears naming the 20% credit, and Issue is blocked until it is cleared.
+
+## step-32: A file can end without a bind, and the rest of the UX backlog
+- **Prompt used:** "fix all 7 code findings and all UX findings"
+- **What was built:** All 7 code findings (CR-174 to CR-180) and all 26 UX findings. New capability, as the UX review's most valuable change: an underwriter can decline a submission, close a quote as not taken and non-renew a policy, each with a reason, audited and reversible, and can mark a subjectivity received and reopen an accepted intake. What else users will notice:
+  - **The desk keeps current work in view.** Overdue urgency has a floor, a quote 30 days past valid until leaves the desk, and "+ N more" opens the rest.
+  - **Every page says where a file stands.** An expired quote reads as expired everywhere and offers Revise instead of Bind. Policies say in force, not yet effective or period ended. Quotes and Policies have filter pills and state their order. Premium sits beside Total.
+  - **Who to chase.** A producer card on the pages the Chase tasks open, with the reference in the email's subject.
+  - **Intake:** a To check list with a jump to each row, Accept in the sticky bar, field labels instead of schema paths, and class names beside codes.
+  - **Workbench:** referrals lead while any are open and the chip links to them, assumed inputs are marked, the premium greys while edits are unsaved, a self-clearance is labelled, and a past effective date warns.
+  - **Typed work is safe.** Leaving with unsaved edits asks first, also in rate admin, and a refused Clear or Bind keeps the note and ticks. A result shows once and leaves the address, so a reload can't repeat it.
+  - **The quote and binder PDFs** lead with the total, period, limits and how to bind, and agree on when subjectivities are due.
+  - **Accounting:** the buttons say Push & download, ask first with the line count, and a read-only download is always offered.
+  - **Search** finds prior-system policies. **The assistant** shows the server's own error and offers Try again. **Rate admin** can discard a draft and won't activate one that changes nothing. **App Tests** keeps a mockup link after a finding resolves, and Full report keeps wireframes' columns.
+- **Files:** new `web/src/lib/file-closure.ts`, `web/src/components/{reason-form,confirm-form,producer-card,flash}.tsx`, `web/src/app/quotes/[id]/actions.ts`, `web/src/app/submissions/[id]/workbench/clear-referral-form.tsx`, migrations `customer/006`, `policy/015`, rating `007`, `uat/tests/sandbox/25-file-endings.spec.ts`; changes across the desk, intake, workbench, quote, policy, search, accounting, assistant and App Tests pages, the PDF builders, `services/ingestion/app/{documents,pipeline}.py`, `scripts/fly-deploy.sh`, `.claude/commands/ux-audit.md`.
+- **Commit:** `step-32: a file can end without a bind, and the rest of the UX backlog`, after `step-32 part 1` and a `fix:` commit for the code findings.
+- **Decisions:**
+  - **Declining reaches what hangs off the file.** A live quote closes with it, and declining a renewal non-renews its policy, so nothing is left waiting on a dead file. Reopening undoes both except the quote, which stays closed so a new version says what is on offer now.
+  - **Non-renew is offered only before a renewal starts.** After that, declining the renewal says the same thing.
+  - **Reasons are fixed lists,** and Other needs a note. The non-renewal list was chosen here; the other two come from the review.
+  - **Self-clearance is labelled, not refused.** The app still has no roles (SEC-001).
+  - **Mockups now stay after a finding resolves,** which meant changing `.claude/commands/ux-audit.md`. Ones already deleted aren't restored.
+  - **Left out on purpose:** editing loss rows on a reopened intake, which UX-058 calls a second, larger piece. The app's Back button isn't caught by the unsaved-edits question, which UX-076 accepts. Disabling Activate is in the page only; the API still activates a draft that changes nothing.
+- **Dead ends / gotchas:**
+  - **`status` compiles in a server component.** The DOM types declare a global `status`, so a leftover reference passed type-checking and returned a 500 on every filtered Quotes page. Only the sandbox caught it.
+  - **A `<form>` inside a `<p>` breaks hydration** (React error 418): the HTML parser closes the `<p>` first. The sandbox's page-error check caught it.
+  - **Check a truncated line before rewriting it.** The Bind confirmation lost its last sentence because the rewrite worked from a cut-off view; a sandbox test caught that too.
+  - **A link to a closed `<details>` needs its target inside.** With the id on the `<details>` the link scrolled but didn't open it.
+- **How to show it:** on a roofing file's workbench, click "or decline this file…", choose Outside appetite and confirm: it leaves the desk, reads Declined under its pill on Submissions, and Reopen brings it back. Then open a Chase bind order task: the broker's details are on the page.

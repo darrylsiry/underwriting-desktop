@@ -120,6 +120,7 @@ export async function createDocument(meta: { title: string; subject: string; foo
 }
 
 const RIGHT = PAGE.w - PAGE.margin;
+const BOX = rgb(0.96, 0.97, 0.99);
 
 /** Kicker and reference on the first line, big title, then subtitle with up to two right-aligned lines. */
 export function masthead(w: Writer, m: { reference: string; title: string; subtitle: string; right: string[] }) {
@@ -156,6 +157,24 @@ export function premiumBlock(w: Writer, p: { premium: number; policyFee: number;
   w.page.drawLine({ start: { x: 380, y: w.y + 10 }, end: { x: RIGHT, y: w.y + 10 }, thickness: 0.6, color: RULE });
   w.y -= 2;
   w.row("Total", money(p.total), { bold: true });
+}
+
+/** UX-055: what a broker opens the PDF to learn, first: the price, period, limits, and how to accept. */
+export function keyTerms(w: Writer, t: { total: number; period: string; limits: string; toBind: string }) {
+  const height = 58;
+  w.ensure(height + 8);
+  const top = w.y - 4;
+  w.page.drawRectangle({ x: PAGE.margin, y: top - height, width: RIGHT - PAGE.margin, height, color: BOX, borderColor: RULE, borderWidth: 0.6 });
+  w.y = top - 16;
+  w.text("Total cost", { x: PAGE.margin + 10, size: 8, bold: true, color: ACCENT });
+  w.text(money(t.total), { right: RIGHT - 10, size: 14, bold: true });
+  w.y -= 14;
+  w.text(t.period, { x: PAGE.margin + 10, size: 9 });
+  w.y -= 12;
+  w.text(t.limits, { x: PAGE.margin + 10, size: 9 });
+  w.y -= 12;
+  w.text(t.toBind, { x: PAGE.margin + 10, size: 9, bold: true });
+  w.y = top - height - 4;
 }
 
 export function surplusLinesNotice(w: Writer) {

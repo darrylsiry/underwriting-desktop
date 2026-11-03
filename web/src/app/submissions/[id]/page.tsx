@@ -88,10 +88,10 @@ export default async function ReviewPage({ params, searchParams }: Props) {
 
         <Flash msg={msg} error={error} />
         {declined && sub.decline && (
-          <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-800">
+          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-800">
             <span>{closureText("Declined", sub.decline)}.</span>
             <ConfirmForm action={reopenDeclinedAction.bind(null, id)} confirmText={`Reopen ${sub.reference}? It goes back where it was. A quote closed with it stays closed, so issue a new version.`} pending="Reopening…" className="font-medium text-indigo-700 hover:underline">Reopen</ConfirmForm>
-          </p>
+          </div>
         )}
         <ActionError />
         {editable && missing.length > 0 && (

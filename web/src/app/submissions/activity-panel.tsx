@@ -9,6 +9,7 @@ import { FIELD_DEFS } from "@/lib/submission";
 
 export type ActivityEvent = {
   type: "step" | "field" | "loss" | "thinking" | "warning" | "stored" | "error";
+  final?: boolean;   // an error trying again can only repeat (UX-059)
   t: number;
   stage?: string;
   message?: string;
@@ -160,7 +161,7 @@ export function ActivityPanel({ title, events, running, onClose, onRetry }: {
           <p className="border-t border-slate-800 bg-rose-950/40 px-5 py-3 text-sm text-rose-200" role="alert">{failure.message}</p>
         )}
         <div className="flex items-center justify-end gap-3 border-t border-slate-800 px-5 py-3">
-          {failed && !running && onRetry && (
+          {failed && !running && onRetry && !failure?.final && (
             <button onClick={onRetry} className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500">Try again</button>
           )}
           {done?.id && (

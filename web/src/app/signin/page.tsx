@@ -1,3 +1,4 @@
+import { SubmitButton } from "@/components/submit-button";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { loadUsers } from "@/lib/basic-auth";
@@ -35,7 +36,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
           <label className="mt-4 block text-xs font-medium uppercase tracking-wide text-slate-500" htmlFor="password">Password</label>
           <input id="password" name="password" type="password" autoComplete="current-password" required
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" />
-          <button className="mt-6 w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Sign in</button>
+          <SubmitButton pending="Signing in…" className="mt-6 w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Sign in</SubmitButton>
         </form>
         <p className="mt-4 text-center text-sm text-slate-600">
           Don&apos;t have a login? <Link href="/request-access" className="font-medium text-indigo-600 hover:underline">Request access</Link>

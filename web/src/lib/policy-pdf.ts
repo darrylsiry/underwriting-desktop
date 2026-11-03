@@ -65,6 +65,9 @@ export async function renderBinderPdf(p: PolicyDocument): Promise<Uint8Array> {
     subtitle: "Commercial General Liability  ·  Excess & surplus lines",
     right: [`Bound ${usDate(todayIso(p.boundAt))} by ${p.boundBy}`, `Policy ${p.policyNumber} to follow`],
   });
+  // UX-055: open items near the top, where a reader will see them.
+  const stillOpen = p.subjectivities.filter((s) => s.status === "open");
+  if (stillOpen.length) w.para(`${stillOpen.length} subjectivit${stillOpen.length === 1 ? "y" : "ies"} open  ·  due ${usDate(stillOpen[0].due_date!)}`, { bold: true });
   parties(w, "Named insured and producer", [p.insuredName, ...p.insuredAddress], p.producer);
 
   w.heading("Binder period");
@@ -86,7 +89,7 @@ export async function renderBinderPdf(p: PolicyDocument): Promise<Uint8Array> {
   w.para(open
     ? `Coverage is bound subject to the ${open} open subjectivit${open === 1 ? "y" : "ies"} above. If they are not received `
       + "by the due date, the company may amend or cancel coverage in line with the policy conditions."
-    : "All subjectivities have been received.", { size: 8.5, color: MUTED });
+    : "All subjectivities have been received.", open ? { size: 9.5 } : { size: 8.5, color: MUTED });
 
   w.heading("Terms");
   w.para(`Bound on the terms, conditions and forms of quotation ${p.quoteNumber} version ${p.quoteVersion}, `

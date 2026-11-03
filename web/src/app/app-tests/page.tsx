@@ -150,7 +150,7 @@ function OpenTable({ a, mockups }: { a: AgentView; mockups: Set<string> }) {
   );
 }
 
-function ClosedTable({ items }: { items: LedgerItem[] }) {
+function ClosedTable({ items, mockups }: { items: LedgerItem[]; mockups: Set<string> }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -161,7 +161,7 @@ function ClosedTable({ items }: { items: LedgerItem[] }) {
           {items.map((i) => (
             <tr key={i.key} className="border-t border-slate-100 align-top">
               <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-slate-700">{i.id}</td>
-              <td className="px-2 py-2 text-slate-800">{i.title ? <Inline text={i.title} /> : <span className="text-slate-500">—</span>}{i.severity && <span className="ml-2"><Severity s={i.severity} /></span>}</td>
+              <td className="px-2 py-2 text-slate-800">{i.title ? <Inline text={i.title} /> : <span className="text-slate-500">—</span>}{mockups.has(i.id) && <a href={`/app-tests/mockups/${i.id}`} target="_blank" rel="noopener" className="ml-2 whitespace-nowrap text-xs text-indigo-600 hover:underline">Before / after mockup ↗</a>}{i.severity && <span className="ml-2"><Severity s={i.severity} /></span>}</td>
               <td className="whitespace-nowrap px-2 py-2 text-slate-600">{day(i.firstSeen)}</td>
               <td className="whitespace-nowrap px-2 py-2 text-slate-600"><Stamp at={i.closedAt} /></td>
               <td className="px-2 py-2 text-xs text-slate-600"><Status item={i} />
@@ -214,11 +214,11 @@ function Findings({ a, mockups }: { a: AgentView; mockups: Set<string> }) {
         {a.resolved.length ? (
           <details className="group">
             <summary className="cursor-pointer px-4 py-2 text-sm text-indigo-600 hover:underline">Show all {a.resolved.length}, newest first</summary>
-            <ClosedTable items={a.resolved} />
+            <ClosedTable items={a.resolved} mockups={mockups} />
           </details>
         ) : <Empty>Nothing resolved yet.</Empty>}
       </Section>
-      {closedElsewhere.length > 0 && <Section title={`Declined or accepted · ${closedElsewhere.length}`}><ClosedTable items={closedElsewhere} /></Section>}
+      {closedElsewhere.length > 0 && <Section title={`Declined or accepted · ${closedElsewhere.length}`}><ClosedTable items={closedElsewhere} mockups={mockups} /></Section>}
     </div>
   );
 }

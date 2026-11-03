@@ -7,6 +7,7 @@ import { inboxWarning, listInbox } from "@/lib/inbox";
 import { StageChip } from "@/components/stage-chip";
 import { STAGE_FILTERS, isStageKey, stageSummary } from "@/lib/stage";
 import { listSubmissions, missingForRating } from "@/lib/submissions";
+import { rateableClasses } from "@/lib/worksheets";
 import { FIELD_DEFS, getPath, openAttention } from "@/lib/submission";
 import { iso } from "@/lib/time";
 import { InboxList } from "./inbox-list";
@@ -19,7 +20,7 @@ export const metadata: Metadata = { title: "Submissions" };   // UX-010
 // UX-005: the stage chip, in the colours the rest of the app uses (amber: needs attention, emerald: done, indigo: out the door).
 /** `?stage=` keeps one stage (UX-005). */
 export default async function SubmissionsPage({ searchParams }: { searchParams: Promise<{ stage?: string }> }) {
-  const [all, inbox, { stage }] = await Promise.all([listSubmissions(), listInbox(), searchParams]);
+  const [all, inbox, { stage }, classes] = await Promise.all([listSubmissions(), listInbox(), searchParams, rateableClasses()]);
   const stages = await submissionStages(all);
   const stageFilter = isStageKey(stage) ? stage : null;
   const submissions = stageFilter ? all.filter((s) => stages.get(s.id)?.key === stageFilter) : all;
@@ -79,7 +80,8 @@ export default async function SubmissionsPage({ searchParams }: { searchParams: 
                 <td className="whitespace-nowrap px-4 py-2 font-mono text-xs"><Link href={`/submissions/${s.id}`} className="text-indigo-600 hover:underline">{s.reference}</Link>
                   {s.kind === "renewal" && <Link href={`/submissions/${s.id}/renewal`} className="ml-1 rounded bg-indigo-50 px-1 py-0.5 font-sans text-[10px] text-indigo-700 hover:underline" title={`Renewal of ${s.renewal_of?.policy_number}`}>renewal</Link>}</td>
                 <td className="px-4 py-2 font-medium">{s.applicant_name || <span className="text-slate-500">unnamed</span>}</td>
-                <td className="px-4 py-2 font-mono text-xs">{String(getPath(s.data, "operations.class_code") ?? "") || "—"}</td>
+                <td className="px-4 py-2 text-xs"><span className="font-mono">{String(getPath(s.data, "operations.class_code") ?? "") || "—"}</span>
+                  {classes.get(String(getPath(s.data, "operations.class_code") ?? "")) && <span className="block max-w-40 truncate text-slate-500">{classes.get(String(getPath(s.data, "operations.class_code")))}</span>}</td>
                 <td className="px-4 py-2">{(getPath(s.data, "operations.states") as string[] | null)?.join(", ") || "—"}</td>
                 <td className="px-4 py-2 text-right tabular-nums">{receipts ? moneyExact(receipts as string | number) : "—"}</td>
                 <td className="px-4 py-2 text-xs">

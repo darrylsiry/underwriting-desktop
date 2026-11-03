@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { Card, Code, Crumbs, Json, Pill, btn, btnPrimary } from "@/components/docs";
@@ -7,6 +8,8 @@ import { requestOrigin } from "@/lib/http";
 import { listPostings } from "@/lib/ledger";
 import { currentUser } from "@/lib/user";
 import { McpConsole } from "./mcp-console";
+
+export const metadata: Metadata = { title: "Accounting MCP server" };
 
 export const dynamic = "force-dynamic";
 

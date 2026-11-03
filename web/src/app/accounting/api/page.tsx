@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { Card, Code, Crumbs, Json, Method, btn, btnPrimary } from "@/components/docs";
@@ -8,6 +9,8 @@ import { periodsDocument } from "@/lib/gl-service";
 import { requestOrigin } from "@/lib/http";
 import { listPostings } from "@/lib/ledger";
 import { currentUser } from "@/lib/user";
+
+export const metadata: Metadata = { title: "Accounting API" };
 
 export const dynamic = "force-dynamic";
 

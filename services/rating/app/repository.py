@@ -314,6 +314,16 @@ def activate(version_id: int, actor: str, reason: str) -> None:
                               "Check which version is active, then activate this one again if it's still wanted.") from e
 
 
+def discard(version_id: int, actor: str, reason: str) -> None:
+    """Set aside a draft nobody will use. Its row and audit stay; it leaves the lists and Copy from (UX-066)."""
+    if not reason.strip():
+        raise ValueError("A reason is required to discard a draft")
+    with _transaction() as conn:
+        version = _lock_draft(conn, version_id)
+        conn.execute("UPDATE rate_versions SET status = 'discarded' WHERE id = %s", (version_id,))
+        _audit(conn, version_id, actor, "discard", before={"status": "draft"}, after={"status": "discarded", "label": version["label"]}, reason=reason)
+
+
 def audit_trail(version_id: int | None = None, limit: int = 200,
                 since: str | None = None, until: str | None = None, tz: str = "UTC",
                 before: str | None = None) -> list[dict]:

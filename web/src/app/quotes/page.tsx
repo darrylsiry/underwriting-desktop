@@ -58,7 +58,7 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
       </p>
       {(filtered || underwriter) && (
         <p className="mt-4 flex flex-wrap items-center gap-x-3 rounded bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
-          <span className="font-medium">{p.status === "issued" ? (live ? "Quotes out: issued, still valid and not yet bound or superseded" : "Issued and not yet bound or superseded, expired ones included") : status ? `Status: ${status}` : "All statuses"}{underwriter ? `, from ${underwriter}'s submissions` : ""}</span>
+          <span className="font-medium">{p.status === "issued" ? (live ? "Quotes out: issued, still valid and not yet bound or superseded" : "Issued and not yet bound or superseded, expired ones included") : pill ? `${pill.label} quotes` : "Quotes"}{underwriter ? ` from ${underwriter}'s submissions` : ""}</span>
           <span>{quotes.length} quote{quotes.length === 1 ? "" : "s"} · {money(quotes.reduce((n, q) => n + Number(q.total), 0))} total</span>
           <Link href="/quotes" className="ml-auto text-xs underline">Show all quotes</Link>
         </p>

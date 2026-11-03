@@ -36,8 +36,10 @@ export function AdminMenu({ items }: { items: AdminItem[] }) {
       </button>
       {open && (
         <div role="menu" className="absolute left-0 top-full z-20 mt-2 w-40 overflow-hidden rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg">
-          {items.map((i) => {
-            const active = pathname === i.href || pathname.startsWith(`${i.href}/`);
+          {items.map((i, _, all) => {
+            // The longest match only: on /audit/logins that is Sign-ins, not Audit as well.
+            const matches = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+            const active = matches(i.href) && !all.some((o) => o.href.length > i.href.length && matches(o.href));
             const cls = `block whitespace-nowrap px-3 py-2 hover:bg-slate-50 ${active ? "bg-indigo-50/60 font-medium text-indigo-700" : "text-slate-700"}`;
             return i.external
               ? <a key={i.href} href={i.href} role="menuitem" className={cls}>{i.label}</a>

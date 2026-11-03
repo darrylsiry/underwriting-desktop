@@ -2,6 +2,7 @@ import { moneyCents as money } from "@/lib/format";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AutoDownload } from "@/components/auto-download";
+import { ConfirmingForm } from "@/components/confirm-form";
 import { SubmitButton } from "@/components/submit-button";
 import { Section, when, whenDate } from "@/components/ui";
 import {
@@ -122,17 +123,19 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
         <Tile label="Journals" value={String(t.journals)} sub={Object.entries(t.byType).map(([k, n]) => `${n} ${TRANSACTION_LABEL[k as TransactionType].toLowerCase()}`).join(" · ") || "none"} />
       </div>
 
+      <div className="mt-6">
       <Section title="Push to the general ledger">
         {/* UX-022 / UX-009: a server action (same push as POST /api/gl/exports) so the buttons can show their pending state. */}
-        <form action={pushToGlAction} className="flex flex-wrap items-center gap-3 p-4 text-sm">
+        <ConfirmingForm action={pushToGlAction} className="flex flex-wrap items-center gap-3 p-4 text-sm"
+          confirmText={rows.length > pushed ? `Push ${rows.length - pushed} line${rows.length - pushed === 1 ? "" : "s"} as a new GL batch? They will be marked pushed.` : undefined}>
           <input type="hidden" name="period" value={preset} />
           <input type="hidden" name="from" value={isIsoDate(p.from) ? p.from : ""} />
           <input type="hidden" name="to" value={isIsoDate(p.to) ? p.to : ""} />
           <input type="hidden" name="type" value={filter.type} />
           <input type="hidden" name="batch" value={filter.batch} />
-          <SubmitButton pending="Preparing file…" name="format" value="xlsx" disabled={!rows.length} className="rounded-md bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 disabled:opacity-50">Export Excel (.xlsx)</SubmitButton>
-          <SubmitButton pending="Preparing file…" name="format" value="csv" disabled={!rows.length} className="rounded-md border border-slate-300 px-4 py-2 font-medium hover:bg-slate-50 disabled:opacity-50">Export CSV</SubmitButton>
-          <SubmitButton pending="Preparing file…" name="format" value="json" disabled={!rows.length} className="rounded-md border border-slate-300 px-4 py-2 font-medium hover:bg-slate-50 disabled:opacity-50">Export JSON</SubmitButton>
+          <SubmitButton pending="Preparing file…" name="format" value="xlsx" disabled={!rows.length} className="rounded-md bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 disabled:opacity-50">Push &amp; download Excel</SubmitButton>
+          <SubmitButton pending="Preparing file…" name="format" value="csv" disabled={!rows.length} className="rounded-md border border-slate-300 px-4 py-2 font-medium hover:bg-slate-50 disabled:opacity-50">Push &amp; download CSV</SubmitButton>
+          <SubmitButton pending="Preparing file…" name="format" value="json" disabled={!rows.length} className="rounded-md border border-slate-300 px-4 py-2 font-medium hover:bg-slate-50 disabled:opacity-50">Push &amp; download JSON</SubmitButton>
           <span className="text-xs text-slate-500">
             Downloads the {rows.length} line{rows.length === 1 ? "" : "s"} shown: Excel and CSV as one row per journal line, JSON as journals with their lines, each with the policy details and a link to the underwriting action.{" "}
             {rows.length > 0 && pushed === rows.length
@@ -140,8 +143,17 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
               : <>Lines not pushed before are marked with this batch ({pushed} of {rows.length} already pushed).</>}{" "}
             Other systems can pull the same data from the <Link href="/accounting/api" className="text-indigo-600 hover:underline">API</Link>; agents through the <Link href="/accounting/mcp" className="text-indigo-600 hover:underline">MCP server</Link>.
           </span>
-        </form>
+          {rows.length > 0 && (
+            <span className="basis-full text-xs text-slate-500">
+              Download without pushing:{" "}
+              {EXPORT_FORMATS.map((f, i) => (
+                <span key={f}>{i > 0 && " · "}<a href={`/api/gl/postings?${ledgerFileQuery(filter, f, { download: f === "json" })}`} className="text-indigo-600 hover:underline">{f === "xlsx" ? "Excel" : f.toUpperCase()}</a></span>
+              ))}
+            </span>
+          )}
+        </ConfirmingForm>
       </Section>
+      </div>
 
       <div className="mt-6 space-y-6">
         {periods.map((g) => (

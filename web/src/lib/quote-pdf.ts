@@ -1,4 +1,5 @@
-import { MUTED, createDocument, masthead, money, parties, premiumBlock, surplusLinesNotice, usDate } from "./pdf-writer";
+import { SUBJECTIVITY_DUE_DAYS } from "./bind-rules";
+import { MUTED, createDocument, masthead, money, parties, premiumBlock, surplusLinesNotice, usDate, keyTerms } from "./pdf-writer";
 import { todayIso } from "./time";
 
 export type QuoteDocument = {
@@ -50,6 +51,13 @@ export async function renderQuotePdf(q: QuoteDocument): Promise<Uint8Array> {
       `Underwriter: ${q.issuedBy}`,
     ],
   });
+  const occurrence = q.limits[0], aggregate = q.limits[1];
+  keyTerms(w, {
+    total: q.total,
+    period: `${usDate(q.effectiveDate)} to ${usDate(q.expirationDate)}`,
+    limits: [occurrence && `${money(occurrence.amount)} ${occurrence.label.toLowerCase()}`, aggregate && `${money(aggregate.amount)} ${aggregate.label.toLowerCase()}`, q.deductible ? `${money(q.deductible)} deductible` : "no deductible"].filter(Boolean).join("  ·  "),
+    toBind: `To bind: confirm acceptance with ${q.issuedBy} by ${usDate(q.validUntil)}.`,
+  });
   parties(w, "Named insured and producer", [q.insuredName, ...q.insuredAddress], q.producer);
 
   w.heading("Policy period");
@@ -71,7 +79,7 @@ export async function renderQuotePdf(q: QuoteDocument): Promise<Uint8Array> {
   w.text("Premium is fully earned at inception.", { size: 8, color: MUTED });
   w.y -= 6;
 
-  w.heading("Subjectivities (required before binding)");
+  w.heading(`Subjectivities (due within ${SUBJECTIVITY_DUE_DAYS} days of binding unless received first)`);
   q.subjectivities.forEach((s, i) => w.para(`${i + 1}.  ${s}`));
 
   w.heading("Forms and endorsements (illustrative)");

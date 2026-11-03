@@ -12,3 +12,14 @@ export function ConfirmForm({ action, confirmText, pending, className, children 
     </form>
   );
 }
+
+/** A form that asks first only when `confirmText` is given, so a step that changes nothing goes straight through. */
+export function ConfirmingForm({ action, confirmText, className, children }: {
+  action: (form: FormData) => void | Promise<void>; confirmText?: string; className?: string; children: React.ReactNode;
+}) {
+  return (
+    <form action={action} className={className} onSubmit={(e) => { if (confirmText && !confirm(confirmText)) e.preventDefault(); }}>
+      {children}
+    </form>
+  );
+}

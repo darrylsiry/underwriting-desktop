@@ -59,7 +59,7 @@ test.describe.serial("rate tables", () => {
     await page.goto("/admin");
     await page.getByRole("link", { name: label, exact: true }).first().click();
     await expect(page.getByText(new RegExp(`Activate ${label.replace(".", "\\.")} · 1 value differs`))).toBeVisible();
-    await page.getByLabel("Reason", { exact: true }).fill("UAT: activation check");
+    await page.locator('form[action$="/activate"]').getByLabel("Reason", { exact: true }).fill("UAT: activation check");
     let asked = "";
     page.once("dialog", (d) => { asked = d.message(); d.accept(); });
     await page.locator("#activate-button").click();

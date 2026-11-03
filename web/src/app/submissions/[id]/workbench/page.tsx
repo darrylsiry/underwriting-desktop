@@ -234,11 +234,12 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                       </ActionSelect>
                     ) : (
                       // UX-004: formatted with its unit, the same text as the "expiring:" line below it.
-                      <WorksheetInput def={d} saved={editValue(d, shownInputs)} unit={inputUnit(d)} />
+                      <WorksheetInput def={d} saved={editValue(d, shownInputs)} unit={inputUnit(d)} list={d.key === "class_code" ? "rateable-classes" : undefined} />
                     )}
                     <FieldMessage name={d.key} />
                     {!policy && assumed.has(d.key) && <span className="text-[11px] font-medium text-amber-700">assumed, not stated</span>}
                     {d.key === "class_code" && <>
+                      <datalist id="rateable-classes">{[...classes].map(([code, name]) => <option key={code} value={code}>{name}</option>)}</datalist>
                       <span className="text-[11px] text-slate-600">{classes.size ? classes.get(shownInputs.class_code) ?? "Not a rated class" : ""}</span>
                       {flags.some((f) => f.code === "CLASS_INFERRED") && !policy && <span className="text-[11px] font-medium text-amber-700">inferred, confirm with broker</span>}
                     </>}

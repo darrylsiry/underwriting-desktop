@@ -1,5 +1,6 @@
 "use client";
 
+import { ServiceError, describeServiceError, errorDetailOf } from "@/lib/service-errors";
 import { useEffect, useRef, useState } from "react";
 import { Markdown } from "@/components/markdown";
 import type { AssistantEvent, Turn } from "@/lib/assistant";
@@ -33,19 +34,19 @@ export function AssistantChat({ user, model, enabled, suggestions, initialQuesti
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuestion, enabled]);
 
-  async function ask(question: string) {
+  async function ask(question: string, earlier: Message[] = messages) {
     const q = question.trim();
     if (!q || busy) return;
     setInput("");
     setBusy(true);
-    const history: Turn[] = messages.filter((m) => !m.error && !m.pending).map((m) => ({ role: m.role, text: m.text }));
+    const history: Turn[] = earlier.filter((m) => !m.error && !m.pending).map((m) => ({ role: m.role, text: m.text }));
     setMessages((prev) => [...prev, { role: "user", text: q, steps: [] }, { role: "assistant", text: "", steps: [], pending: true }]);
     const update = (fn: (m: Message) => Message) => setMessages((prev) => prev.map((m, i) => (i === prev.length - 1 ? fn(m) : m)));
     const stop = new AbortController();
     stopper.current = stop;
     try {
       const res = await fetch("/assistant/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q, history }), signal: stop.signal });
-      if (!res.ok || !res.body) throw new Error(`Request failed (${res.status})`);
+      if (!res.ok || !res.body) throw new ServiceError(res.status, errorDetailOf(await res.text()));   // the server's own words, such as "sign in again"
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -65,7 +66,7 @@ export function AssistantChat({ user, model, enabled, suggestions, initialQuesti
       }
       update((m) => (m.pending ? { ...m, pending: false, error: m.error ?? "The connection closed before an answer arrived." } : m));
     } catch (err) {
-      update((m) => ({ ...m, error: stop.signal.aborted ? "Stopped." : (err as Error).message, pending: false }));
+      update((m) => ({ ...m, error: stop.signal.aborted ? "Stopped." : describeServiceError(err, "assistant"), pending: false }));
     } finally {
       setBusy(false);
       box.current?.focus();
@@ -118,6 +119,14 @@ export function AssistantChat({ user, model, enabled, suggestions, initialQuesti
                 {m.pending && !m.text && <p className="text-sm text-slate-500"><span className="inline-block animate-pulse">Thinking…</span></p>}
                 {m.text && <Markdown source={m.text} />}
                 {m.error && <p className="mt-2 rounded bg-rose-50 px-3 py-2 text-sm text-rose-700">{m.error}</p>}
+                {m.error && !busy && i === messages.length - 1 && (
+                  // UX-060: ask again without retyping, in place of the turn that failed.
+                  <button type="button" className="mt-2 rounded border border-slate-300 bg-white px-2 py-1 text-xs hover:bg-slate-50" onClick={() => {
+                    const earlier = messages.slice(0, -2);
+                    setMessages(earlier);
+                    void ask(messages[i - 1].text, earlier);
+                  }}>Try again</button>
+                )}
                 {m.meta && <p className="mt-2 text-[11px] text-slate-500">{m.meta}</p>}
               </div>
             )}

@@ -10,9 +10,10 @@ export function ReasonForm({ action, summary, reasons, confirmText, submitLabel,
   action: (form: FormData) => void | Promise<void>; summary: string; reasons: string[]; confirmText: string; submitLabel: string; pending: string; id?: string;
 }) {
   return (
-    <details id={id} className="scroll-mt-24 text-xs">
+    <details className="text-xs">
       <summary className="cursor-pointer text-rose-700 hover:underline">{summary}</summary>
-      <form action={action} onSubmit={(e) => { if (!confirm(confirmText)) e.preventDefault(); }} className="mt-2 space-y-2">
+      {/* The id is inside, so a link to it opens the details. */}
+      <form id={id} action={action} onSubmit={(e) => { if (!confirm(confirmText)) e.preventDefault(); }} className="mt-2 scroll-mt-24 space-y-2">
         <label className="flex flex-col gap-1 text-slate-500">Reason
           <select name="reason" required defaultValue="" className="rounded border border-slate-300 px-2 py-1 text-sm text-slate-900">
             <option value="" disabled>Choose a reason</option>

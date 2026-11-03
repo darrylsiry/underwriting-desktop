@@ -267,8 +267,8 @@ def next_label(versions: list[dict]) -> str:
 def versions_page(request: Request, msg: str = "", error: str = ""):
     versions = repository.list_versions()
     return templates.TemplateResponse(request, "versions.html", {
-        "versions": versions,
-        "next_label": next_label(versions),
+        "versions": [v for v in versions if v["status"] != "discarded"],
+        "next_label": next_label(versions),   # a discarded label stays taken: its audit still names it
         "active": next((v for v in versions if v["status"] == "active"), None),
         "audit": repository.audit_trail(limit=25),
         "actor": signed_in_user(request) or remembered_actor(request),
@@ -387,6 +387,17 @@ async def save_section(request: Request, version_id: int, section: str):
         return await again(str(e))
     msg = f"Saved {changed} change{'s' if changed != 1 else ''}" if changed else "Nothing changed"
     return remember_actor(request, redirect(back, section=section, msg=msg), actor)
+
+
+@router.post("/versions/{version_id}/discard", dependencies=[Depends(same_origin)])
+async def discard_version(request: Request, version_id: int):
+    form = await request.form()
+    actor = form_actor(request, form)
+    try:
+        await run_in_threadpool(repository.discard, version_id, actor, str(form.get("reason", "")))
+    except (LookupError, ValueError, repository.VersionNotEditable) as e:
+        return redirect(f"/admin/versions/{version_id}", error=str(e))
+    return remember_actor(request, redirect("/admin", msg="Draft discarded. It stays in the audit."), actor)
 
 
 @router.post("/versions/{version_id}/activate", dependencies=[Depends(same_origin)])

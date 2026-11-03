@@ -44,6 +44,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
   // A date that isn't on the calendar counts as not given (CR-068).
   const params: Params = { ...raw, from: isIsoDate(raw.from) ? raw.from : undefined, to: isIsoDate(raw.to) ? raw.to : undefined };
   const { events: all, labels, warnings, scope, capped, cappedBy, olderCursor } = await loadTimeline(params.submission, params);
+  const scopeStatus = scope ? (await getSubmission(scope.submissionId))?.status : undefined;
   const withoutBefore = Object.fromEntries(Object.entries(params).filter(([k, v]) => v && k !== "before")) as Record<string, string>;
   const events = applyFilters(all, params);
   const groups = groupByCorrelation(events);
@@ -56,7 +57,9 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
     <main className="mx-auto max-w-6xl p-8">
       {scope ? (
         <>
-          <RowLink href={`/submissions/${scope.submissionId}/workbench`}>← {scope.reference} workbench</RowLink>
+          {scopeStatus === "accepted"
+            ? <RowLink href={`/submissions/${scope.submissionId}/workbench`}>← {scope.reference} workbench</RowLink>
+            : <RowLink href={`/submissions/${scope.submissionId}`}>← {scope.reference} intake</RowLink>}
           <h1 className="mt-2 text-2xl font-semibold">Case history · {scope.reference} {scope.applicant}</h1>
           <p className="mt-1 text-sm text-slate-500">
             Everything about this submission across services: intake, worksheet, referrals, quotes, binding, its insured, and every rating call.{" "}
@@ -165,6 +168,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
                                 <td className="align-top text-emerald-700">{display(c.after)}</td>
                               </tr>
                             ))}
+                            {diff.length > 8 && <tr><td colSpan={3} className="pt-0.5 text-slate-500">and {diff.length - 8} more</td></tr>}
                           </tbody>
                         </table>
                       )}

@@ -83,7 +83,7 @@
             {% endfor %}
           </ul>
           {% else %}
-          <p class="flash err" style="margin:8px 0">No differences from the active version; activating changes nothing.</p>
+          <p class="flash warn" style="margin:8px 0">Nothing to activate: this draft matches active {{ active.label }}.</p>
           {% endif %}
           {% if base_version and base_version.status == "retired" %}
           <p class="flash warn" style="margin:8px 0">This draft was copied from <strong>retired {{ base_version.label }}</strong>, not from active {{ active.label }}: anything that changed between the two is listed above and would be reverted.</p>
@@ -97,11 +97,24 @@
       </div>
       <label style="flex:1">Reason <input name="reason" required placeholder="e.g. Approved by pricing committee"></label>
       {% if not signed_in %}<label>Your name <input name="actor" value="{{ actor }}" required size="14"></label>{% endif %}
-      <button id="activate-button">Activate {{ version.label }}</button>
+      <button id="activate-button" {% if active and not live_diff %}disabled title="Nothing differs from the active version"{% endif %}>Activate {{ version.label }}</button>
+    </form>
+    {# UX-066: a draft nobody will use can be set aside; it leaves the list and Copy from, and the audit keeps it. #}
+    <h2>Discard</h2>
+    <form class="card row" method="post" action="/admin/versions/{{ version.id }}/discard"
+          onsubmit="return confirm('Discard draft {{ version.label }}? It leaves the list, and the audit keeps it.') && pending(this, 'Discarding…')">
+      <label style="flex:1">Reason <input name="reason" required placeholder="e.g. Superseded by the Q3 review"></label>
+      {% if not signed_in %}<label>Your name <input name="actor" value="{{ actor }}" required size="14"></label>{% endif %}
+      <button>Discard draft</button>
     </form>
     <script>
+      // UX-076: leaving with an unsaved edit asks first; saving doesn't.
+      var unsaved = false;
+      window.addEventListener("beforeunload", function (e) { if (unsaved) { e.preventDefault(); e.returnValue = ""; } });
+      document.addEventListener("submit", function (e) { if (!e.defaultPrevented) { unsaved = false; } });
       // UX-007: an edit in the editor is not part of the activation until it is saved (the page reloads then).
       function unsavedEdits() {
+        unsaved = true;
         var b = document.getElementById("activate-button"), n = document.getElementById("unsaved-note");
         if (b) { b.disabled = true; b.title = "Save the editor first"; }
         if (n) { n.className = "unsaved"; }

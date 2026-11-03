@@ -49,10 +49,13 @@ export function parseMarkdown(src: string): Block[] {
   while (i < lines.length) {
     const line = lines[i];
     if (!line.trim()) { i++; continue; }
-    if (/^```/.test(line)) {
+    const fence = /^(\s*)```/.exec(line);
+    if (fence) {
+      // A fence indented under a bullet is still a fence, and its indent isn't part of the code (UX-063).
+      const indent = fence[1].length;
       const buf: string[] = [];
       i++;
-      while (i < lines.length && !/^```/.test(lines[i])) buf.push(lines[i++]);
+      while (i < lines.length && !/^\s*```/.test(lines[i])) buf.push(lines[i++].replace(new RegExp(`^ {0,${indent}}`), ""));
       i++;
       blocks.push({ type: "code", text: buf.join("\n") });
       continue;
@@ -73,6 +76,7 @@ export function parseMarkdown(src: string): Block[] {
       const ordered = /\d/.test(li[1]);
       const items: Inline[][] = [];
       while (i < lines.length) {
+        if (/^\s*```/.test(lines[i])) break;   // a fence ends the list, so it stays a block
         const m = /^\s*([-*+]|\d+[.)])\s+(.*)$/.exec(lines[i]);
         if (m && /\d/.test(m[1]) !== ordered) break;   // a numbered list after bullets (or the reverse) is a new list
         if (m) { items.push(parseInline(m[2].trim())); i++; }
@@ -92,7 +96,7 @@ export function parseMarkdown(src: string): Block[] {
       continue;
     }
     const buf: string[] = [];
-    while (i < lines.length && lines[i].trim() && !/^(#{1,6}\s|```|\s*([-*+]|\d+[.)])\s|\s*>\s?)/.test(lines[i]) && !(lines[i].includes("|") && i + 1 < lines.length && isTableRule(lines[i + 1]))) {
+    while (i < lines.length && lines[i].trim() && !/^(#{1,6}\s|\s*```|\s*([-*+]|\d+[.)])\s|\s*>\s?)/.test(lines[i]) && !(lines[i].includes("|") && i + 1 < lines.length && isTableRule(lines[i + 1]))) {
       buf.push(lines[i++].trim());
     }
     if (buf.length) blocks.push({ type: "paragraph", children: parseInline(buf.join(" ")) });

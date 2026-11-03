@@ -49,9 +49,8 @@ Steps:
    with one line `- docs/ux-mockups/UX-NNN.html` so the report stays
    readable.
 5. Write the report to `docs/UX_REVIEW.md` (overwrite).
-6. For each ID listed under `## Resolved since last run`, remove
-   `docs/ux-mockups/UX-NNN.html` if it exists (the mockup described a
-   change that has now been made). Leave every other mockup in place.
+6. Leave every mockup in place, including those of resolved findings: App
+   Tests shows them beside the fix, which is the point of that page (UX-063).
 7. Run `scripts/ux-review-fingerprint.sh record` so the next run can tell
    whether the UI changed.
 8. In chat, print: the Summary table, the Outstanding items table, every P1

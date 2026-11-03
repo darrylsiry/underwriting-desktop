@@ -43,3 +43,13 @@ Done.`);
   assert.equal((blocks[4] as unknown as { ordered: boolean }).ordered, true);
   assert.equal((blocks[7] as unknown as { text: string }).text, "raw");
 });
+
+test("a fence indented under a bullet stays a block with its columns, and ends the list (UX-063)", () => {
+  const blocks = parseMarkdown("- **Before / after:**\n  ```\n  BEFORE    AFTER\n  a  b      c\n  ```\n- **Verify:** it works");
+  assert.deepEqual(blocks.map((b) => b.type), ["list", "code", "list"]);
+  assert.equal((blocks[1] as { text: string }).text, "BEFORE    AFTER\na  b      c");
+});
+
+test("a paragraph stops at an indented fence", () => {
+  assert.deepEqual(parseMarkdown("Some text\n  ```\n  code\n  ```").map((b) => b.type), ["paragraph", "code"]);
+});
