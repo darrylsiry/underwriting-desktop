@@ -1,8 +1,9 @@
 import { customerDb } from "./db";
 import { inboxDir, loadFolder, readInbox, type InboxFolder } from "./inbox-files";
 import { INBOX_MIN_OUTSTANDING, INBOX_TOP_UP, generateInboxSubmissions } from "./inbox-generate";
+import { MAX_UPLOAD_BYTES } from "./submission";
 
-export const INBOX_MAX_BYTES = 25 * 1024 * 1024; // same cap as an upload
+export const INBOX_MAX_BYTES = MAX_UPLOAD_BYTES;
 
 /** Drop-folder submissions not yet picked up (a picked-up folder has a submission row). */
 async function outstanding(): Promise<InboxFolder[]> {

@@ -174,3 +174,10 @@ test("every section's fields are in FIELD_DEFS, one path each", () => {
   assert.equal(new Set(paths).size, paths.length);
   assert.deepEqual(paths, SECTIONS.flatMap((s) => s.fields.map((f) => f.path)));
 });
+
+test("a multi-line field posted back unchanged isn't a correction, and is stored as it was (CR-154)", () => {
+  const def = FIELD_DEFS.find((d) => d.path === "operations.description")!;
+  assert.ok(sameValue("a\nb", fromInput(def, "a\r\nb")));
+  assert.equal(fromInput(def, "a\r\nb\rc"), "a\nb\nc");
+  assert.ok(!sameValue("a\nb", fromInput(def, "a\r\nchanged")));
+});

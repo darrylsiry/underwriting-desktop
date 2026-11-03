@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { FIELD_DEFS, fromInput, getPath, isEmpty, setPath, type SubmissionData } from "@/lib/submission";
+import { FIELD_DEFS, MAX_UPLOAD_BYTES, UPLOAD_TOO_LARGE, fromInput, getPath, isEmpty, setPath, type SubmissionData } from "@/lib/submission";
 import { acceptSubmission, getSubmission, missingForRating, receiveSubmission, saveReview } from "@/lib/submissions";
 import { currentUser } from "@/lib/user";
 import type { FormState } from "./[id]/action-form";
@@ -12,6 +12,7 @@ export type UploadState = { error?: string };
 export async function uploadSubmission(_: UploadState, form: FormData): Promise<UploadState> {
   const files = form.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
   if (!files.length) return { error: "Choose at least one document" };
+  if (files.reduce((n, f) => n + f.size, 0) > MAX_UPLOAD_BYTES) return { error: UPLOAD_TOO_LARGE };
   let id: string;
   try {
     id = await receiveSubmission(files, await currentUser());

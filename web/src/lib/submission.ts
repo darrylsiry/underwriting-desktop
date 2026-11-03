@@ -128,9 +128,13 @@ export function toInput(type: FieldType, v: Value): string {
   return String(v);
 }
 
+export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+export const UPLOAD_TOO_LARGE = "Uploads exceed 25 MB in total. Send fewer files or smaller scans.";
+
 /** Parse what the underwriter typed back into the schema type; throws with a readable message. */
 export function fromInput(def: FieldDef, raw: string): Value {
-  const text = raw.trim();
+  // A form post rewrites each line break as CRLF, so an untouched multi-line value must not read as a correction (CR-154).
+  const text = raw.replace(/\r\n?/g, "\n").trim();
   if (!text) return def.type === "str" ? "" : null;
   switch (def.type) {
     case "str":

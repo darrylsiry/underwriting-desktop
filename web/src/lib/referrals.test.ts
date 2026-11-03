@@ -203,3 +203,13 @@ test("a clearance reads as one change, keyed by the rule code (CR-053)", () => {
   assert.deepEqual(diff[0].before, { status: "open" });
   assert.deepEqual(diff[0].after, { status: "cleared", by: "pat", note: "Rope access certified", detail: flag.detail });
 });
+
+test("an experience credit refers, so it has a reason on file; a debit or none doesn't (CR-161)", () => {
+  const withMod = (experience_mod: number) => ctx({ inputs: { ...inputs, experience_mod } });
+  assert.ok(codes(withMod(0.8)).includes("refer:EXPERIENCE_MOD"));
+  assert.ok(codes(withMod(0.99)).includes("refer:EXPERIENCE_MOD"));
+  assert.ok(!codes(withMod(1)).includes("refer:EXPERIENCE_MOD"));
+  assert.ok(!codes(withMod(1.1)).includes("refer:EXPERIENCE_MOD"));
+  const flag = referralFlags(withMod(0.8)).find((f) => f.code === "EXPERIENCE_MOD")!;
+  assert.match(flag.detail, /0\.80.*20% credit/);
+});

@@ -143,6 +143,9 @@ export async function saveAndRate(sub: SubmissionRow, form: Record<string, strin
     if (form._fingerprint && form._fingerprint !== worksheetFingerprint(ws.rating_inputs, ws.schedule)) {
       throw new StaleWorksheetError(`${sub.reference} was changed by someone else since you opened it. Nothing was saved: reload to see their edits, then save again.`);
     }
+    // The worst territory applies whatever the order, so the same states retyped are no change: not to the audit, the hash or a memo (CR-168).
+    const stored = ws.rating_inputs.states;
+    if (inputs.states.length === stored.length && inputs.states.every((s) => stored.includes(s))) inputs.states = stored;
     const changed = INPUT_DEFS.filter((d) => JSON.stringify(ws.rating_inputs[d.key]) !== JSON.stringify(inputs[d.key]));
     const scheduleChanged = scheduleKey(ws.schedule) !== scheduleKey(schedule);
     await client.query(

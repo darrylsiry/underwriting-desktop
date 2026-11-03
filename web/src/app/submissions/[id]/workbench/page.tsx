@@ -17,6 +17,7 @@ import {
   INPUT_DEFS, MAX_CATEGORY_PCT, SCHEDULE_CATEGORIES, UW_AUTHORITY_PCT, inputChanges, inputUnit, inputsHash, scheduleMod, scheduleTotal,
   worksheetChips, worksheetFingerprint, type RatingInputs,
 } from "@/lib/worksheet";
+import { factorText } from "@/lib/format";
 import { activeRateVersion, flagsFor, money, openWorksheet, readiness } from "@/lib/worksheets";
 import { inputText } from "@/lib/renewal-compare";
 import { expiringOf } from "@/lib/renewals";
@@ -319,7 +320,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
                       {rating.worksheet.map((w, i) => (
                         <tr key={i} className="border-t border-slate-100">
                           <td className="py-1.5 pr-2"><span className="font-medium">{w.step}</span><br /><span className="text-slate-500">{w.detail}</span></td>
-                          <td className="whitespace-nowrap py-1.5 pr-2 text-right tabular-nums text-slate-500">{w.factor ? `× ${Number(w.factor).toFixed(2)}` : ""}</td>
+                          <td className="whitespace-nowrap py-1.5 pr-2 text-right tabular-nums text-slate-500">{w.factor ? `× ${factorText(w.factor)}` : ""}</td>
                           <td className="py-1.5 text-right tabular-nums">{money(w.premium)}</td>
                         </tr>
                       ))}

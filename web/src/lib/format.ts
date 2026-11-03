@@ -16,6 +16,10 @@ export const moneyCents = (v: string | number): string =>
 /** A difference, always with its sign: `+$500`, `-$500`. */
 export const moneySigned = (n: number): string => `${n >= 0 ? "+" : "-"}$${Math.round(Math.abs(n)).toLocaleString("en-US")}`;
 
+/** A rate factor: at least two decimals, and every one the rate table holds (`1.00`, `1.125`) (CR-163). */
+export const factorText = (v: string | number): string =>
+  Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+
 /** Short, for a tile: `$1.28M`, `$243K`, `$9,500`. */
 export const moneyShort = (n: number): string =>
   n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)}M` : n >= 10_000 ? `$${Math.round(n / 1000)}K` : money(n);

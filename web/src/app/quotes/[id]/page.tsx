@@ -4,6 +4,7 @@ import { inputText } from "@/lib/renewal-compare";
 import { notFound } from "next/navigation";
 import { Fragment, cache } from "react";
 import { Pill, RowLink, Section, money, when, whenDate } from "@/components/ui";
+import { factorText } from "@/lib/format";
 import { policiesForSubmission } from "@/lib/policies";
 import { getQuote, quoteVersions } from "@/lib/quotes";
 import { changeSummary } from "@/lib/renewal-compare";
@@ -78,7 +79,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
               {r.worksheet.map((w, i) => (
                 <tr key={i} className="border-t border-slate-100">
                   <td className="px-4 py-1.5"><span className="font-medium">{w.step}</span> <span className="text-xs text-slate-500">{w.detail}</span></td>
-                  <td className="whitespace-nowrap px-4 py-1.5 text-right text-xs text-slate-500">{w.factor ? `× ${Number(w.factor).toFixed(2)}` : ""}</td>
+                  <td className="whitespace-nowrap px-4 py-1.5 text-right text-xs text-slate-500">{w.factor ? `× ${factorText(w.factor)}` : ""}</td>
                   <td className="px-4 py-1.5 text-right tabular-nums">{money(w.premium)}</td>
                 </tr>
               ))}

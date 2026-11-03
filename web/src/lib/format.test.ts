@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { money, moneyCents, moneyExact, moneyShort, moneySigned } from "./format.ts";
+import { factorText, money, moneyCents, moneyExact, moneyShort, moneySigned } from "./format.ts";
 
 test("whole dollars, from a number or a database string", () => {
   assert.equal(money(1_250_000), "$1,250,000");
@@ -26,4 +26,11 @@ test("signed differences and short tiles", () => {
   assert.equal(moneyShort(1_280_000), "$1.28M");
   assert.equal(moneyShort(243_000), "$243K");
   assert.equal(moneyShort(9_500), "$9,500");
+});
+
+test("a factor shows every decimal it has, so the premium column can be reproduced from the screen (CR-163)", () => {
+  assert.equal(factorText(1), "1.00");
+  assert.equal(factorText("1.1"), "1.10");
+  assert.equal(factorText("1.1250"), "1.125");
+  assert.equal(factorText(0.9875), "0.9875");
 });

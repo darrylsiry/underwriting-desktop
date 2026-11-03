@@ -8,6 +8,7 @@ import { policiesForSubmission } from "@/lib/policies";
 import { addYears, producerOf, suggestedSubjectivities } from "@/lib/quote-terms";
 import { getQuote, quotesForSubmission } from "@/lib/quotes";
 import { changeSummary, compareRenewal, coverageGapNote, inputText, pctText, signed, type Comparison, type Side } from "@/lib/renewal-compare";
+import { factorText } from "@/lib/format";
 import { expiringOf } from "@/lib/renewals";
 import { getSubmission } from "@/lib/submissions";
 import { currentUser } from "@/lib/user";
@@ -174,7 +175,7 @@ export default async function RenewalPage({ params, searchParams }: Props) {
                           {l ? (
                             <>
                               <span className="text-slate-600">{l.detail}</span>
-                              <span className="ml-2 whitespace-nowrap tabular-nums">{l.factor !== null ? `× ${Number(l.factor).toFixed(2)}` : ""} → {money(l.premium)}</span>
+                              <span className="ml-2 whitespace-nowrap tabular-nums">{l.factor !== null ? `× ${factorText(l.factor)}` : ""} → {money(l.premium)}</span>
                             </>
                           ) : <span className="text-slate-500">—</span>}
                         </td>

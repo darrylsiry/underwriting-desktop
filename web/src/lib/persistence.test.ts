@@ -428,3 +428,22 @@ test("a quote for a period already over is refused before anything is written, b
   const issuedThen = new Date(`${longAgo}T12:00:00Z`);
   assert.equal((await issueQuote(seeded, period(longAgo), ACTOR, issuedThen)).version, 1);
 });
+
+test("retyping the same states in another order changes nothing; a new state does (CR-168)", options, async () => {
+  const sub = await ratedSubmission();
+  const states = (v: string) => async () => formOf((await getWorksheet(sub.id))!.rating_inputs, { states: v });
+  await saveAndRate(sub, await states("TX, NJ")(), ACTOR);
+  const before = (await getWorksheet(sub.id))!;
+  const changes = async () => (await auditTrail("submission", sub.id)).filter((e) => e.action === "worksheet.input_changed").length;
+  const count = await changes();
+
+  await saveAndRate(sub, await states("NJ, TX")(), ACTOR);
+  const after = (await getWorksheet(sub.id))!;
+  assert.deepEqual(after.rating_inputs.states, ["TX", "NJ"]);
+  assert.equal(after.rated_inputs_hash, before.rated_inputs_hash);
+  assert.equal(await changes(), count);
+
+  await saveAndRate(sub, await states("TX, NJ, GA")(), ACTOR);
+  assert.deepEqual((await getWorksheet(sub.id))!.rating_inputs.states, ["TX", "NJ", "GA"]);
+  assert.equal(await changes(), count + 1);
+});

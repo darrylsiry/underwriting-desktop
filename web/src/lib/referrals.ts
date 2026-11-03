@@ -31,6 +31,7 @@ export const LIMITS = {
   receipts: 15_000_000,
   occurrenceLimit: 1_000_000,
   scheduleAuthorityPct: 15,
+  experienceMod: 1,
   newVentureYears: 3,
 };
 
@@ -124,6 +125,12 @@ export function referralFlags(ctx: ReferralContext): Flag[] {
   if (Math.abs(total) > LIMITS.scheduleAuthorityPct) {
     add("SCHEDULE_AUTHORITY", "refer", "Schedule mod above authority",
       `Total schedule ${total > 0 ? "+" : ""}${total}% (authority ±${LIMITS.scheduleAuthorityPct}%)`);
+  }
+
+  // A schedule credit needs a reason per category. This multiplies the premium the same way, so its clearance note is its reason (CR-161).
+  if (inputs.experience_mod < LIMITS.experienceMod) {
+    add("EXPERIENCE_MOD", "refer", "Experience credit",
+      `Experience mod ${inputs.experience_mod.toFixed(2)} (${Math.round((1 - inputs.experience_mod) * 100)}% credit); confirm it against the bureau worksheet`);
   }
 
   // The assumptions are the lowest-rated bands and can never trip HEIGHT or UNINSURED_SUBS, so they aren't silent (CR-112).
