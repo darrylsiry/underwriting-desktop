@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>UX-069: open referrals one click away</title>
+<style>
+  body { margin: 0; padding: 24px; background: #f8fafc; color: #0f172a; font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: #64748b; margin: 0 0 20px; }
+  .grid { display: grid; grid-template-columns: 400px 400px; gap: 32px; }
+  .label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #64748b; margin-bottom: 8px; }
+  .bar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .bar strong { font-size: 16px; }
+  .chip { border-radius: 999px; padding: 2px 8px; font-size: 12px; font-weight: 500; background: #fffbeb; color: #92400e; }
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 12px; }
+  .head { border-bottom: 1px solid #f1f5f9; padding: 8px 16px; font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: .05em; color: #64748b; }
+  .body { padding: 12px 16px; }
+  .big { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .small { font-size: 12px; color: #64748b; }
+  table { width: 100%; font-size: 12px; border-collapse: collapse; margin-top: 8px; }
+  td { padding: 4px 0; border-top: 1px solid #f1f5f9; }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .ref { padding: 10px 16px; border-top: 1px solid #f1f5f9; }
+  .ref:first-of-type { border-top: 0; }
+  .pill { border-radius: 4px; padding: 2px 6px; font-size: 12px; font-weight: 500; background: #ffe4e6; color: #be123c; }
+  .form { display: flex; gap: 8px; margin-top: 6px; }
+  input { flex: 1; min-width: 0; font: inherit; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 8px; }
+  button { font: inherit; font-size: 12px; border: 1px solid #cbd5e1; background: #fff; border-radius: 4px; padding: 4px 8px; }
+  a { color: #4f46e5; }
+  .new { outline: 2px solid #4f46e5; outline-offset: 2px; }
+  .fold { border-top: 2px dashed #94a3b8; color: #64748b; font-size: 12px; margin: 8px 0; padding-top: 2px; }
+</style>
+</head>
+<body>
+<h1>UX-069: open referrals one click away</h1>
+<p class="sub">Workbench right column. The dashed line marks about where a 1440×900 screen ends; outlined items changed.</p>
+<div class="grid">
+  <div>
+    <div class="label">Before</div>
+    <div class="bar"><strong>Evergreen Summit Roofing</strong><span class="chip">3 referrals open</span></div>
+    <div class="card"><div class="head">Quote</div><div class="body small">Clear 3 open referrals to quote.</div></div>
+    <div class="card">
+      <div class="head">Indicative premium</div>
+      <div class="body">
+        <div class="big">$14,230</div><div class="small">total cost to insured · rates 2026.2</div>
+        <table>
+          <tr><td>Base premium</td><td class="n">$9,200</td></tr>
+          <tr><td>Territory × 1.25</td><td class="n">$11,500</td></tr>
+          <tr><td>Limits × 1.00</td><td class="n">$11,500</td></tr>
+          <tr><td>Deductible × 0.95</td><td class="n">$10,925</td></tr>
+          <tr><td>Residential × 1.05</td><td class="n">$11,471</td></tr>
+          <tr><td>Height × 1.10</td><td class="n">$12,618</td></tr>
+          <tr><td>Schedule × 1.04</td><td class="n">$13,123</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="fold">end of screen</div>
+    <div class="card">
+      <div class="head">Referrals · 3 open</div>
+      <div class="ref"><span class="pill">refer</span> <strong>Roofing class</strong><div class="form"><input placeholder="Why this is acceptable"><button>Clear</button></div></div>
+      <div class="ref"><span class="pill">refer</span> <strong>Work at height</strong><div class="form"><input placeholder="Why this is acceptable"><button>Clear</button></div></div>
+      <div class="ref"><span class="pill">refer</span> <strong>Loss frequency</strong><div class="form"><input placeholder="Why this is acceptable"><button>Clear</button></div></div>
+    </div>
+  </div>
+  <div>
+    <div class="label">After</div>
+    <div class="bar"><strong>Evergreen Summit Roofing</strong><a class="chip new" href="#r">3 referrals open</a></div>
+    <div class="card"><div class="head">Quote</div><div class="body small"><a class="new" href="#r">Clear 3 open referrals</a> to quote.</div></div>
+    <div class="card new" id="r">
+      <div class="head">Referrals · 3 open</div>
+      <div class="ref"><span class="pill">refer</span> <strong>Roofing class</strong><div class="small">Roofing (98677) is written only with manager approval</div><div class="form"><input placeholder="Why this is acceptable"><button>Clear</button></div></div>
+      <div class="ref"><span class="pill">refer</span> <strong>Work at height</strong><div class="small">Maximum working height 55 ft (limit 50 ft)</div><div class="form"><input placeholder="Why this is acceptable"><button>Clear</button></div></div>
+      <div class="ref"><span class="pill">refer</span> <strong>Loss frequency</strong><div class="small">3 claims in the loss history, $84,000 incurred</div><div class="form"><input placeholder="Why this is acceptable"><button>Clear</button></div></div>
+    </div>
+    <div class="card">
+      <div class="head">Indicative premium</div>
+      <div class="body"><div class="big">$14,230</div><div class="small">total cost to insured · rates 2026.2</div></div>
+    </div>
+    <div class="fold">end of screen</div>
+  </div>
+</div>
+</body>
+</html>

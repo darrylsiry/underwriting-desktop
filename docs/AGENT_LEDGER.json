@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-02T04:51:17.147Z",
+  "updatedAt": "2026-11-03T01:24:28.429Z",
   "runs": [
     {
       "agent": "code",
@@ -176,6 +176,86 @@
       "runAt": "2026-11-02T01:12:00.000Z",
       "commit": "8dbe665",
       "open": 97,
+      "closed": 0
+    },
+    {
+      "agent": "security",
+      "run": "2026-11-02 00:10",
+      "runAt": "2026-11-02T05:10:00.000Z",
+      "commit": "0bd7865",
+      "open": 24,
+      "closed": 0
+    },
+    {
+      "agent": "code",
+      "run": "2026-11-02 00:12",
+      "runAt": "2026-11-02T05:12:00.000Z",
+      "commit": "0bd7865",
+      "open": 99,
+      "closed": 0
+    },
+    {
+      "agent": "security",
+      "run": "2026-11-02 04:10",
+      "runAt": "2026-11-02T09:10:00.000Z",
+      "commit": "9d36018",
+      "open": 25,
+      "closed": 2
+    },
+    {
+      "agent": "code",
+      "run": "2026-11-02 04:12",
+      "runAt": "2026-11-02T09:12:00.000Z",
+      "commit": "9d36018",
+      "open": 10,
+      "closed": 96
+    },
+    {
+      "agent": "ux",
+      "run": "2026-11-02 07:35",
+      "runAt": "2026-11-02T12:35:00.000Z",
+      "commit": "9d36018",
+      "open": 22,
+      "closed": 4
+    },
+    {
+      "agent": "code",
+      "run": "2026-11-02 08:12",
+      "runAt": "2026-11-02T13:12:00.000Z",
+      "commit": "9d36018",
+      "open": 15,
+      "closed": 0
+    },
+    {
+      "agent": "code",
+      "run": "2026-11-02 12:12",
+      "runAt": "2026-11-02T17:12:00.000Z",
+      "commit": "9d36018",
+      "open": 19,
+      "closed": 0
+    },
+    {
+      "agent": "security",
+      "run": "2026-11-02 16:10",
+      "runAt": "2026-11-02T21:10:00.000Z",
+      "commit": "08b78c7",
+      "open": 26,
+      "closed": 0
+    },
+    {
+      "agent": "code",
+      "run": "2026-11-02 16:12",
+      "runAt": "2026-11-02T21:12:00.000Z",
+      "commit": "08b78c7",
+      "open": 9,
+      "closed": 18
+    },
+    {
+      "agent": "code",
+      "run": "2026-11-02 20:12",
+      "runAt": "2026-11-03T01:12:00.000Z",
+      "commit": "08b78c7",
+      "open": 16,
       "closed": 0
     }
   ],
@@ -477,6 +557,11 @@
           "sha": "a13274d",
           "date": "2026-10-23T03:33:10.000Z",
           "subject": "docs: build-log notes for the code review fixes (CR-001..CR-016)"
+        },
+        {
+          "sha": "ac9e611",
+          "date": "2026-11-02T05:26:42.000Z",
+          "subject": "fix: CR-122 CR-060 use the loss run for any date it covers; ignore state order in conflicts"
         }
       ]
     },
@@ -509,19 +594,29 @@
       "key": "CR-014",
       "id": "CR-014",
       "agent": "code",
-      "title": "Add web tests for input parsing and the persistence paths",
+      "title": "Add web tests for the persistence paths",
       "severity": "Suggestion",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-22",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
+      "lastSeen": "2026-11-02T21:12:00.000Z",
+      "closedAt": "2026-11-02T18:44:30.000Z",
+      "closedNote": "resolved: `persistence.test.ts` covers the locks and multi-database orderings (`46e61da`). `docs/UAT_REPORT.md` still dates from 2026-10-31, so its re-run suggestion wasn't done.",
       "commits": [
         {
           "sha": "a13274d",
           "date": "2026-10-23T03:33:10.000Z",
           "subject": "docs: build-log notes for the code review fixes (CR-001..CR-016)"
+        },
+        {
+          "sha": "dc88e66",
+          "date": "2026-11-02T05:44:06.000Z",
+          "subject": "fix: CR-014 test input parsing and the renewal submission, and pin the rating tests"
+        },
+        {
+          "sha": "46e61da",
+          "date": "2026-11-02T18:44:30.000Z",
+          "subject": "test: CR-014 the locks and multi-database orderings run against a throwaway Postgres"
         }
       ]
     },
@@ -531,17 +626,27 @@
       "agent": "code",
       "title": "Pin the duplicated schema with a contract test",
       "severity": "Suggestion",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-22",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:54:15.000Z",
+      "closedNote": "resolved: `samples/schema.json` asserted on both sides, one `format.ts`, and a test for the authority constant (`1bc0da1`, `3f9c72b`).",
       "commits": [
         {
           "sha": "a13274d",
           "date": "2026-10-23T03:33:10.000Z",
           "subject": "docs: build-log notes for the code review fixes (CR-001..CR-016)"
+        },
+        {
+          "sha": "1bc0da1",
+          "date": "2026-11-02T05:30:51.000Z",
+          "subject": "fix: CR-064 CR-015 declare ingestion response models; pin the duplicated schema with a contract test"
+        },
+        {
+          "sha": "3f9c72b",
+          "date": "2026-11-02T05:54:15.000Z",
+          "subject": "fix: CR-015 one money formatter, lib/format.ts"
         }
       ]
     },
@@ -581,13 +686,19 @@
       "agent": "code",
       "title": "Guard worksheet Save & rate against lost updates (the same gap CR-006 closed for intake)",
       "severity": "Medium",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:31:05.000Z",
+      "closedNote": "resolved: hidden fingerprint checked under `FOR UPDATE` (`381a128`).",
+      "commits": [
+        {
+          "sha": "381a128",
+          "date": "2026-11-02T05:31:05.000Z",
+          "subject": "fix: CR-017 CR-100 worksheet saves can't lose updates, and a bound file stays as bound"
+        }
+      ]
     },
     "CR-018": {
       "key": "CR-018",
@@ -595,13 +706,19 @@
       "agent": "code",
       "title": "`/audit?submission=<non-uuid>` is a 500, not \"Submission not found\"",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:35:15.000Z",
+      "closedNote": "resolved: `isSubmissionId` (`f7e1025`).",
+      "commits": [
+        {
+          "sha": "f7e1025",
+          "date": "2026-11-02T05:35:15.000Z",
+          "subject": "fix: CR-095 CR-103 CR-092 CR-018 CR-056 CR-088 CR-068 audit paging and the assistant's lookups"
+        }
+      ]
     },
     "CR-019": {
       "key": "CR-019",
@@ -609,13 +726,19 @@
       "agent": "code",
       "title": "`issueQuote` does side-effecting work before it has fully validated dates or taken a lock",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:37:23.000Z",
+      "closedNote": "resolved: `quotePeriod` runs first, and the version check is locked (`ddde221`).",
+      "commits": [
+        {
+          "sha": "ddde221",
+          "date": "2026-11-02T05:37:23.000Z",
+          "subject": "fix: CR-113 CR-019 CR-050 CR-034 CR-125 CR-024 CR-084 CR-111 quoting, binding and starting renewals"
+        }
+      ]
     },
     "CR-020": {
       "key": "CR-020",
@@ -623,13 +746,19 @@
       "agent": "code",
       "title": "A Claude call can retry for about 15 minutes, and non-API failures escape as 500s",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:29:15.000Z",
+      "closedNote": "resolved: `timeout=240.0, max_retries=1`, and parsing is wrapped (`f27c786`).",
+      "commits": [
+        {
+          "sha": "f27c786",
+          "date": "2026-11-02T05:29:15.000Z",
+          "subject": "fix: CR-020 CR-087 bound Claude calls, stop them when the client leaves, cap concurrent streams"
+        }
+      ]
     },
     "CR-021": {
       "key": "CR-021",
@@ -637,13 +766,24 @@
       "agent": "code",
       "title": "`.env.example` has drifted from the code",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T21:12:00.000Z",
+      "closedAt": "2026-11-02T18:46:15.000Z",
+      "closedNote": "resolved: the variables are regrouped and `env-example.test.ts` guards the file (`be791c9`).",
+      "commits": [
+        {
+          "sha": "a86bc9a",
+          "date": "2026-11-02T05:38:42.000Z",
+          "subject": "fix: CR-021 CR-043 document every env var and make the compose healthcheck use TCP"
+        },
+        {
+          "sha": "be791c9",
+          "date": "2026-11-02T18:46:15.000Z",
+          "subject": "fix: CR-139 CR-146 CR-021 a bad filter can't widen a push; the API docs and .env.example tell the truth"
+        }
+      ]
     },
     "CR-023": {
       "key": "CR-023",
@@ -651,13 +791,19 @@
       "agent": "code",
       "title": "Duplicate React keys on lists keyed by content",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:24:20.000Z",
+      "closedNote": "resolved: index keys on the listed rows (`d4c1de4`).",
+      "commits": [
+        {
+          "sha": "d4c1de4",
+          "date": "2026-11-02T05:24:20.000Z",
+          "subject": "fix: CR-023 CR-061 list keys that can't collide and one shared roofing class list"
+        }
+      ]
     },
     "CR-024": {
       "key": "CR-024",
@@ -665,13 +811,19 @@
       "agent": "code",
       "title": "The quote prints a products-completed-ops aggregate the underwriter never saw",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:37:23.000Z",
+      "closedNote": "resolved: `quoteLimits` (`ddde221`).",
+      "commits": [
+        {
+          "sha": "ddde221",
+          "date": "2026-11-02T05:37:23.000Z",
+          "subject": "fix: CR-113 CR-019 CR-050 CR-034 CR-125 CR-024 CR-084 CR-111 quoting, binding and starting renewals"
+        }
+      ]
     },
     "CR-025": {
       "key": "CR-025",
@@ -679,13 +831,19 @@
       "agent": "code",
       "title": "Claude candidates are collapsed by confidence alone, bypassing the documented merge order",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:27:53.000Z",
+      "closedNote": "resolved: all reach `merge` (`dad18ca`).",
+      "commits": [
+        {
+          "sha": "dad18ca",
+          "date": "2026-11-02T05:27:53.000Z",
+          "subject": "fix: CR-025 CR-058 let merge choose among Claude's candidates; drop off-list class codes"
+        }
+      ]
     },
     "CR-026": {
       "key": "CR-026",
@@ -693,13 +851,19 @@
       "agent": "code",
       "title": "The web DB pools have no connection timeout, so health checks, pages and sign-in hang when Postgres is unreachable",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:37:18.000Z",
+      "closedNote": "resolved: connection and query timeouts (`351356c`).",
+      "commits": [
+        {
+          "sha": "351356c",
+          "date": "2026-11-02T05:37:18.000Z",
+          "subject": "fix: CR-026 give the web DB pools connection and query timeouts"
+        }
+      ]
     },
     "CR-027": {
       "key": "CR-027",
@@ -727,13 +891,19 @@
       "agent": "code",
       "title": "`npm test` relies on the shell expanding `**` as a single directory level",
       "severity": "Suggestion",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:26:04.000Z",
+      "closedNote": "resolved (`705755c`).",
+      "commits": [
+        {
+          "sha": "705755c",
+          "date": "2026-11-02T05:26:04.000Z",
+          "subject": "fix: CR-028 npm test finds test files at any depth"
+        }
+      ]
     },
     "CR-029": {
       "key": "CR-029",
@@ -741,13 +911,19 @@
       "agent": "code",
       "title": "One unreadable or forwarded attachment discards the whole broker email",
       "severity": "Medium",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:25:10.000Z",
+      "closedNote": "resolved: each attachment fails alone, with a warning (`bfd5870`).",
+      "commits": [
+        {
+          "sha": "bfd5870",
+          "date": "2026-11-02T05:25:10.000Z",
+          "subject": "fix: CR-029 CR-117 report unread email attachments instead of losing the email or the file"
+        }
+      ]
     },
     "CR-030": {
       "key": "CR-030",
@@ -775,13 +951,19 @@
       "agent": "code",
       "title": "A loose uuid regex still lets malformed ids reach the Postgres cast (500 instead of 404), at ten sites",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:23:50.000Z",
+      "closedNote": "resolved: strict `isUuid`, and a search finds no loose pattern left (`1b3b1d8`).",
+      "commits": [
+        {
+          "sha": "1b3b1d8",
+          "date": "2026-11-02T05:23:50.000Z",
+          "subject": "fix: CR-031 CR-033 strict uuid check and reference numbers that outgrow their pad"
+        }
+      ]
     },
     "CR-032": {
       "key": "CR-032",
@@ -789,13 +971,19 @@
       "agent": "code",
       "title": "Out-of-range rate values are a 500 from the admin UI and API, not a validation message",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:26:16.000Z",
+      "closedNote": "resolved: `_check_storable` and `_transaction` (`a0d1242`).",
+      "commits": [
+        {
+          "sha": "a0d1242",
+          "date": "2026-11-02T05:26:16.000Z",
+          "subject": "fix: CR-052 CR-105 CR-032 rate saves touch only what the user changed, and only what a column can hold"
+        }
+      ]
     },
     "CR-033": {
       "key": "CR-033",
@@ -803,13 +991,19 @@
       "agent": "code",
       "title": "`lpad(…, n)` truncates reference, quote and GL batch numbers past their pad width, producing collisions",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:23:50.000Z",
+      "closedNote": "resolved: `paddedSeq` (`1b3b1d8`).",
+      "commits": [
+        {
+          "sha": "1b3b1d8",
+          "date": "2026-11-02T05:23:50.000Z",
+          "subject": "fix: CR-031 CR-033 strict uuid check and reference numbers that outgrow their pad"
+        }
+      ]
     },
     "CR-034": {
       "key": "CR-034",
@@ -817,13 +1011,19 @@
       "agent": "code",
       "title": "Quote, bind and renewal audit events are written after the policy-DB COMMIT, although `audit()` can now join a transaction",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:37:23.000Z",
+      "closedNote": "resolved: written inside the policy transaction (`ddde221`).",
+      "commits": [
+        {
+          "sha": "ddde221",
+          "date": "2026-11-02T05:37:23.000Z",
+          "subject": "fix: CR-113 CR-019 CR-050 CR-034 CR-125 CR-024 CR-084 CR-111 quoting, binding and starting renewals"
+        }
+      ]
     },
     "CR-035": {
       "key": "CR-035",
@@ -831,13 +1031,19 @@
       "agent": "code",
       "title": "\"Today\" for the desk, quote validity, bind and the renewal window is the UTC date",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:22:50.000Z",
+      "closedNote": "resolved: `todayIso`; the remaining UTC uses are file names, labelled report dates and demo-data generation (`8c25542`).",
+      "commits": [
+        {
+          "sha": "8c25542",
+          "date": "2026-11-02T05:22:50.000Z",
+          "subject": "fix: CR-035 today is the books' date, not the UTC date"
+        }
+      ]
     },
     "CR-036": {
       "key": "CR-036",
@@ -845,13 +1051,24 @@
       "agent": "code",
       "title": "Check-then-insert races on unique keys surface as raw constraint errors (rate activation, draft label, insured FEIN)",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:37:23.000Z",
+      "closedNote": "resolved: `ON CONFLICT` and `VersionConflict` (`fad4be6`, `8d7050b`).",
+      "commits": [
+        {
+          "sha": "fad4be6",
+          "date": "2026-11-02T05:26:58.000Z",
+          "subject": "fix: CR-045 CR-036 CR-064 exact reference match, rate version races, read response models"
+        },
+        {
+          "sha": "8d7050b",
+          "date": "2026-11-02T05:37:23.000Z",
+          "subject": "fix: CR-040 CR-036 CR-049 one insured per FEIN, and a committed upload stays a success"
+        }
+      ]
     },
     "CR-037": {
       "key": "CR-037",
@@ -879,13 +1096,24 @@
       "agent": "code",
       "title": "Serialize startup migrations across instances with an advisory lock",
       "severity": "Suggestion",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:33:44.000Z",
+      "closedNote": "resolved: advisory locks (`99a9a06`, `ea7e42e`).",
+      "commits": [
+        {
+          "sha": "99a9a06",
+          "date": "2026-11-02T05:33:43.000Z",
+          "subject": "fix: CR-038 CR-096 serialize startup migrations and allow an owner URL for them"
+        },
+        {
+          "sha": "ea7e42e",
+          "date": "2026-11-02T05:33:44.000Z",
+          "subject": "fix: CR-121 CR-076 CR-075 CR-038 seeded history is repeatable and resumes"
+        }
+      ]
     },
     "CR-039": {
       "key": "CR-039",
@@ -893,13 +1121,19 @@
       "agent": "code",
       "title": "The rate admin's `num` filter still shows two-digit version labels wrongly in the audit \"Change\" column (\"2026.10\" as \"2026.1\")",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:25:34.000Z",
+      "closedNote": "resolved: `audit_value` (`e6cd942`).",
+      "commits": [
+        {
+          "sha": "e6cd942",
+          "date": "2026-11-02T05:25:34.000Z",
+          "subject": "fix: CR-110 CR-057 CR-039 non-ASCII tokens and names, two-digit version labels in the audit"
+        }
+      ]
     },
     "CR-040": {
       "key": "CR-040",
@@ -907,13 +1141,19 @@
       "agent": "code",
       "title": "Insureds are matched on the FEIN string byte for byte, so formatting variants create duplicate customers",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:37:23.000Z",
+      "closedNote": "resolved: `normalizeFein` and migration 005 (`8d7050b`).",
+      "commits": [
+        {
+          "sha": "8d7050b",
+          "date": "2026-11-02T05:37:23.000Z",
+          "subject": "fix: CR-040 CR-036 CR-049 one insured per FEIN, and a committed upload stays a success"
+        }
+      ]
     },
     "CR-041": {
       "key": "CR-041",
@@ -941,13 +1181,19 @@
       "agent": "code",
       "title": "Documents Claude never read are reported and audited as `method: \"claude\"`",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:25:53.000Z",
+      "closedNote": "resolved: `not_read` (`5be1b9e`).",
+      "commits": [
+        {
+          "sha": "5be1b9e",
+          "date": "2026-11-02T05:25:53.000Z",
+          "subject": "fix: CR-126 CR-042 read only real applications from form fields, report who read each document"
+        }
+      ]
     },
     "CR-043": {
       "key": "CR-043",
@@ -955,13 +1201,19 @@
       "agent": "code",
       "title": "Make the compose Postgres healthcheck use TCP so it cannot pass during the init phase",
       "severity": "Suggestion",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:38:42.000Z",
+      "closedNote": "resolved (`a86bc9a`).",
+      "commits": [
+        {
+          "sha": "a86bc9a",
+          "date": "2026-11-02T05:38:42.000Z",
+          "subject": "fix: CR-021 CR-043 document every env var and make the compose healthcheck use TCP"
+        }
+      ]
     },
     "CR-044": {
       "key": "CR-044",
@@ -989,13 +1241,19 @@
       "agent": "code",
       "title": "`GET /ratings?reference_prefix=` is an unanchored, unescaped prefix match",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:26:58.000Z",
+      "closedNote": "resolved: exact match or `starts_with` plus a space (`fad4be6`).",
+      "commits": [
+        {
+          "sha": "fad4be6",
+          "date": "2026-11-02T05:26:58.000Z",
+          "subject": "fix: CR-045 CR-036 CR-064 exact reference match, rate version races, read response models"
+        }
+      ]
     },
     "CR-046": {
       "key": "CR-046",
@@ -1003,13 +1261,19 @@
       "agent": "code",
       "title": "`pdfSafe` turns line breaks and tabs into \"?\" in the frozen quote, binder, policy and memo PDFs",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-23",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:28:50.000Z",
+      "closedNote": "resolved (`72e6851`).",
+      "commits": [
+        {
+          "sha": "72e6851",
+          "date": "2026-11-02T05:28:50.000Z",
+          "subject": "fix: CR-046 CR-109 CR-118 issued PDFs wrap long text and keep line breaks readable"
+        }
+      ]
     },
     "CR-047": {
       "key": "CR-047",
@@ -1037,13 +1301,19 @@
       "agent": "code",
       "title": "A required field that was corrected and then blanked is \"missing\" to the accept gate but invisible to the attention flags",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-24",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:27:00.000Z",
+      "closedNote": "resolved: `openAttention` (`13393d1`).",
+      "commits": [
+        {
+          "sha": "13393d1",
+          "date": "2026-11-02T05:27:00.000Z",
+          "subject": "fix: CR-101 CR-112 CR-130 CR-048 CR-104 CR-053 CR-067 referrals and worksheet inputs tell the truth"
+        }
+      ]
     },
     "CR-049": {
       "key": "CR-049",
@@ -1051,13 +1321,19 @@
       "agent": "code",
       "title": "An audit-insert failure after a committed upload is reported as an upload error, which invites a duplicate submission",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-24",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:37:23.000Z",
+      "closedNote": "resolved: logged, not thrown (`8d7050b`).",
+      "commits": [
+        {
+          "sha": "8d7050b",
+          "date": "2026-11-02T05:37:23.000Z",
+          "subject": "fix: CR-040 CR-036 CR-049 one insured per FEIN, and a committed upload stays a success"
+        }
+      ]
     },
     "CR-050": {
       "key": "CR-050",
@@ -1065,13 +1341,19 @@
       "agent": "code",
       "title": "A bind that commits while a re-quote is in flight leaves a bound v1 and an issued v2, and writes a false `quote.superseded` event",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-24",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:37:23.000Z",
+      "closedNote": "resolved: quote rows locked and superseded events follow `RETURNING` (`ddde221`).",
+      "commits": [
+        {
+          "sha": "ddde221",
+          "date": "2026-11-02T05:37:23.000Z",
+          "subject": "fix: CR-113 CR-019 CR-050 CR-034 CR-125 CR-024 CR-084 CR-111 quoting, binding and starting renewals"
+        }
+      ]
     },
     "CR-051": {
       "key": "CR-051",
@@ -1099,13 +1381,19 @@
       "agent": "code",
       "title": "The rate admin's \"Save <section>\" writes every stale cell back, silently reverting a colleague's change and auditing it under the wrong name and reason",
       "severity": "Medium",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-24",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:26:16.000Z",
+      "closedNote": "resolved: `|was` inputs and `_changes` (`a0d1242`).",
+      "commits": [
+        {
+          "sha": "a0d1242",
+          "date": "2026-11-02T05:26:16.000Z",
+          "subject": "fix: CR-052 CR-105 CR-032 rate saves touch only what the user changed, and only what a column can hold"
+        }
+      ]
     },
     "CR-053": {
       "key": "CR-053",
@@ -1113,13 +1401,19 @@
       "agent": "code",
       "title": "`referral.cleared` stores the flag as `before` and the clearance as `after`, so the audit viewer shows a six-row \"deleted/added\" diff",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-25",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:27:00.000Z",
+      "closedNote": "resolved: `clearanceAudit` (`13393d1`).",
+      "commits": [
+        {
+          "sha": "13393d1",
+          "date": "2026-11-02T05:27:00.000Z",
+          "subject": "fix: CR-101 CR-112 CR-130 CR-048 CR-104 CR-053 CR-067 referrals and worksheet inputs tell the truth"
+        }
+      ]
     },
     "CR-054": {
       "key": "CR-054",
@@ -1167,13 +1461,19 @@
       "agent": "code",
       "title": "A repeated query parameter crashes `/search`, `/audit`, `/quotes`, `/policies` and `/assistant` with a 500",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-26",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:35:15.000Z",
+      "closedNote": "resolved: `firstParams` on the listed pages (`f7e1025`).",
+      "commits": [
+        {
+          "sha": "f7e1025",
+          "date": "2026-11-02T05:35:15.000Z",
+          "subject": "fix: CR-095 CR-103 CR-092 CR-018 CR-056 CR-088 CR-068 audit paging and the assistant's lookups"
+        }
+      ]
     },
     "CR-057": {
       "key": "CR-057",
@@ -1181,13 +1481,19 @@
       "agent": "code",
       "title": "A \"Your name\" outside Latin-1 makes a successful standalone rate-admin save answer with a 500 after the change is committed",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-26",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:25:34.000Z",
+      "closedNote": "resolved: quoted cookie (`e6cd942`).",
+      "commits": [
+        {
+          "sha": "e6cd942",
+          "date": "2026-11-02T05:25:34.000Z",
+          "subject": "fix: CR-110 CR-057 CR-039 non-ASCII tokens and names, two-digit version labels in the audit"
+        }
+      ]
     },
     "CR-058": {
       "key": "CR-058",
@@ -1195,13 +1501,19 @@
       "agent": "code",
       "title": "The \"Claude can only pick rateable class codes\" guard exists only in the prompt",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-26",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:27:53.000Z",
+      "closedNote": "resolved: `_rateable_only` (`dad18ca`).",
+      "commits": [
+        {
+          "sha": "dad18ca",
+          "date": "2026-11-02T05:27:53.000Z",
+          "subject": "fix: CR-025 CR-058 let merge choose among Claude's candidates; drop off-list class codes"
+        }
+      ]
     },
     "CR-059": {
       "key": "CR-059",
@@ -1223,13 +1535,19 @@
       "agent": "code",
       "title": "The ingestion merge reports \"Documents disagree\" for `operations.states` when two sources list the same states in a different order",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-28",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:26:42.000Z",
+      "closedNote": "resolved: `_same_value` (`ac9e611`).",
+      "commits": [
+        {
+          "sha": "ac9e611",
+          "date": "2026-11-02T05:26:42.000Z",
+          "subject": "fix: CR-122 CR-060 use the loss run for any date it covers; ignore state order in conflicts"
+        }
+      ]
     },
     "CR-061": {
       "key": "CR-061",
@@ -1237,13 +1555,19 @@
       "agent": "code",
       "title": "The roofing class code `98677` is a literal in two web-tier rules, while the rating database owns the class table",
       "severity": "Suggestion",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-28",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:24:20.000Z",
+      "closedNote": "resolved: `ROOFING_CLASSES` (`d4c1de4`).",
+      "commits": [
+        {
+          "sha": "d4c1de4",
+          "date": "2026-11-02T05:24:20.000Z",
+          "subject": "fix: CR-023 CR-061 list keys that can't collide and one shared roofing class list"
+        }
+      ]
     },
     "CR-062": {
       "key": "CR-062",
@@ -1271,13 +1595,19 @@
       "agent": "code",
       "title": "`contentDisposition` leaves `'`, `(`, `)` and `*` unencoded inside `filename*=UTF-8''…`",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-29",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:28:49.000Z",
+      "closedNote": "resolved (`830a5c3`).",
+      "commits": [
+        {
+          "sha": "830a5c3",
+          "date": "2026-11-02T05:28:49.000Z",
+          "subject": "fix: CR-116 CR-063 parse the post-sign-in path; encode RFC 8187 delimiters in filenames"
+        }
+      ]
     },
     "CR-064": {
       "key": "CR-064",
@@ -1285,13 +1615,29 @@
       "agent": "code",
       "title": "Declare response models on the FastAPI read endpoints the web tier consumes",
       "severity": "Suggestion",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-29",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:54:49.000Z",
+      "closedNote": "resolved (`1bc0da1`, `fad4be6`).",
+      "commits": [
+        {
+          "sha": "fad4be6",
+          "date": "2026-11-02T05:26:58.000Z",
+          "subject": "fix: CR-045 CR-036 CR-064 exact reference match, rate version races, read response models"
+        },
+        {
+          "sha": "1bc0da1",
+          "date": "2026-11-02T05:30:51.000Z",
+          "subject": "fix: CR-064 CR-015 declare ingestion response models; pin the duplicated schema with a contract test"
+        },
+        {
+          "sha": "bd8e7d0",
+          "date": "2026-11-02T05:54:49.000Z",
+          "subject": "fix: CR-074 CR-064 recorded_at survives the rating response models"
+        }
+      ]
     },
     "CR-065": {
       "key": "CR-065",
@@ -1319,13 +1665,19 @@
       "agent": "code",
       "title": "The desk's \"New business\" tile counts renewals bound in the Desktop, and \"Renewals · 90 days\" counts policies already renewed, which the table below leaves out",
       "severity": "Medium",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-30",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:26:40.000Z",
+      "closedNote": "resolved: `is_renewal` and `dueWithin` (`b83cbf6`).",
+      "commits": [
+        {
+          "sha": "b83cbf6",
+          "date": "2026-11-02T05:26:40.000Z",
+          "subject": "fix: CR-102 CR-066 CR-124 CR-089 CR-080 one definition of the book's numbers"
+        }
+      ]
     },
     "CR-067": {
       "key": "CR-067",
@@ -1333,13 +1685,19 @@
       "agent": "code",
       "title": "A transient rating-service failure while computing the renewal bridge is swallowed and stored as \"rate version X couldn't be rated on\"",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-30",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:27:00.000Z",
+      "closedNote": "resolved: only refused inputs return null (`13393d1`).",
+      "commits": [
+        {
+          "sha": "13393d1",
+          "date": "2026-11-02T05:27:00.000Z",
+          "subject": "fix: CR-101 CR-112 CR-130 CR-048 CR-104 CR-053 CR-067 referrals and worksheet inputs tell the truth"
+        }
+      ]
     },
     "CR-068": {
       "key": "CR-068",
@@ -1347,13 +1705,29 @@
       "agent": "code",
       "title": "Calendar-invalid dates pass the regex-only filters and reach the Postgres cast as a 500",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-30",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:39:59.000Z",
+      "closedNote": "resolved: `isIsoDate` on the web side and `_real_time` in rating (`dcc3bef`, `0fce129`, `f7e1025`).",
+      "commits": [
+        {
+          "sha": "0fce129",
+          "date": "2026-11-02T05:30:04.000Z",
+          "subject": "fix: CR-127 CR-114 CR-119 CR-107 CR-086 CR-068 the GL push and filters say what they did"
+        },
+        {
+          "sha": "f7e1025",
+          "date": "2026-11-02T05:35:15.000Z",
+          "subject": "fix: CR-095 CR-103 CR-092 CR-018 CR-056 CR-088 CR-068 audit paging and the assistant's lookups"
+        },
+        {
+          "sha": "dcc3bef",
+          "date": "2026-11-02T05:39:59.000Z",
+          "subject": "fix: CR-068 CR-124 quote and intake dates use the shared check; plain tile sub-label"
+        }
+      ]
     },
     "CR-069": {
       "key": "CR-069",
@@ -1389,13 +1763,19 @@
       "agent": "code",
       "title": "The CSV export neutralizes `=`, `+` and `@` but not `-`, tab or CR",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-30",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:30:04.000Z",
+      "closedNote": "resolved (`7bdaa55`).",
+      "commits": [
+        {
+          "sha": "7bdaa55",
+          "date": "2026-11-02T05:30:04.000Z",
+          "subject": "fix: CR-071 the CSV export neutralizes -, tab and CR as well"
+        }
+      ]
     },
     "CR-072": {
       "key": "CR-072",
@@ -1403,13 +1783,19 @@
       "agent": "code",
       "title": "A \"Working as\" name outside Latin-1 makes every `/admin` page a 500 through the proxy (local dev only)",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-30",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:37:18.000Z",
+      "closedNote": "resolved: percent-encoded header (`424e07d`).",
+      "commits": [
+        {
+          "sha": "424e07d",
+          "date": "2026-11-02T05:37:18.000Z",
+          "subject": "fix: CR-094 CR-072 CR-108 a bad time zone, a non-Latin-1 name or a stopped rating service no longer gives a 500"
+        }
+      ]
     },
     "CR-073": {
       "key": "CR-073",
@@ -1437,13 +1823,24 @@
       "agent": "code",
       "title": "Audit timestamps are supplied by the caller and there is no record of insertion time, so back-dated rows look like real ones",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-30",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:54:49.000Z",
+      "closedNote": "resolved: `recorded_at` by trigger on both logs (`bad17de`, `bd8e7d0`); rows older than the column stay NULL, by recorded decision.",
+      "commits": [
+        {
+          "sha": "bad17de",
+          "date": "2026-11-02T05:37:58.000Z",
+          "subject": "fix: CR-074 record when audit and rating rows were really written"
+        },
+        {
+          "sha": "bd8e7d0",
+          "date": "2026-11-02T05:54:49.000Z",
+          "subject": "fix: CR-074 CR-064 recorded_at survives the rating response models"
+        }
+      ]
     },
     "CR-075": {
       "key": "CR-075",
@@ -1451,13 +1848,19 @@
       "agent": "code",
       "title": "Seeded submissions carry `method: \"form_fields\"` and `doc_type: \"acord_125\"`, values outside the extraction contract",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-30",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:33:44.000Z",
+      "closedNote": "resolved (`ea7e42e`).",
+      "commits": [
+        {
+          "sha": "ea7e42e",
+          "date": "2026-11-02T05:33:44.000Z",
+          "subject": "fix: CR-121 CR-076 CR-075 CR-038 seeded history is repeatable and resumes"
+        }
+      ]
     },
     "CR-076": {
       "key": "CR-076",
@@ -1465,13 +1868,19 @@
       "agent": "code",
       "title": "A seeded file that fails after intake acceptance is skipped on every later run, leaving an accepted-but-unquoted submission on the desk",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-30",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:33:44.000Z",
+      "closedNote": "resolved: `advanceFile` resumes it (`ea7e42e`).",
+      "commits": [
+        {
+          "sha": "ea7e42e",
+          "date": "2026-11-02T05:33:44.000Z",
+          "subject": "fix: CR-121 CR-076 CR-075 CR-038 seeded history is repeatable and resumes"
+        }
+      ]
     },
     "CR-077": {
       "key": "CR-077",
@@ -1539,13 +1948,19 @@
       "agent": "code",
       "title": "`book_summary` for \"everyone\" counts Desktop policies in `renewals_due_90_days` but sums only prior-system premium",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-30",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:26:40.000Z",
+      "closedNote": "resolved: `teamSummary` (`b83cbf6`).",
+      "commits": [
+        {
+          "sha": "b83cbf6",
+          "date": "2026-11-02T05:26:40.000Z",
+          "subject": "fix: CR-102 CR-066 CR-124 CR-089 CR-080 one definition of the book's numbers"
+        }
+      ]
     },
     "CR-081": {
       "key": "CR-081",
@@ -1587,13 +2002,19 @@
       "agent": "code",
       "title": "With `SESSION_SECRET` set, a session cookie stays valid for up to 7 days after its user is removed from `BASIC_AUTH_USERS`",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-30",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:28:49.000Z",
+      "closedNote": "resolved: `sessionUser` checks the login exists (`4117b7e`).",
+      "commits": [
+        {
+          "sha": "4117b7e",
+          "date": "2026-11-02T05:28:49.000Z",
+          "subject": "fix: CR-099 CR-083 run the gate on public paths too; a session needs a login that still exists"
+        }
+      ]
     },
     "CR-084": {
       "key": "CR-084",
@@ -1601,13 +2022,19 @@
       "agent": "code",
       "title": "`startRenewal` claims the policy before it connects to the customer DB, and the connect is outside the `try` that undoes the claim, so one failed connection leaves a dangling `renewal_submission_id` that 404s that policy's renewal for good",
       "severity": "Medium",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-30",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:37:23.000Z",
+      "closedNote": "resolved: the claim commits last and a stranded claim is released (`ddde221`).",
+      "commits": [
+        {
+          "sha": "ddde221",
+          "date": "2026-11-02T05:37:23.000Z",
+          "subject": "fix: CR-113 CR-019 CR-050 CR-034 CR-125 CR-024 CR-084 CR-111 quoting, binding and starting renewals"
+        }
+      ]
     },
     "CR-085": {
       "key": "CR-085",
@@ -1615,13 +2042,19 @@
       "agent": "code",
       "title": "The desk page awaits live `/health` probes of both services (15 s timeout each) on every render",
       "severity": "Suggestion",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-30",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:37:54.000Z",
+      "closedNote": "resolved: `Suspense` and a 3 s probe (`bc81acd`).",
+      "commits": [
+        {
+          "sha": "bc81acd",
+          "date": "2026-11-02T05:37:54.000Z",
+          "subject": "fix: CR-085 a stopped service can't hold the desk blank"
+        }
+      ]
     },
     "CR-086": {
       "key": "CR-086",
@@ -1629,13 +2062,19 @@
       "agent": "code",
       "title": "The Accounting page ignores `from`/`to` unless `period=custom` is also present, but the GL API's `summary` links to `/accounting?from=…&to=…`",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-31",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:30:04.000Z",
+      "closedNote": "resolved: the page uses `parseLedgerQuery` (`0fce129`).",
+      "commits": [
+        {
+          "sha": "0fce129",
+          "date": "2026-11-02T05:30:04.000Z",
+          "subject": "fix: CR-127 CR-114 CR-119 CR-107 CR-086 CR-068 the GL push and filters say what they did"
+        }
+      ]
     },
     "CR-087": {
       "key": "CR-087",
@@ -1643,13 +2082,19 @@
       "agent": "code",
       "title": "Cancelling a streamed extraction does not stop the Claude call already running, and `/extract/stream` starts an unbounded thread per request",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-31",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:29:15.000Z",
+      "closedNote": "resolved: a cancel event and bounded stream slots (`f27c786`).",
+      "commits": [
+        {
+          "sha": "f27c786",
+          "date": "2026-11-02T05:29:15.000Z",
+          "subject": "fix: CR-020 CR-087 bound Claude calls, stop them when the client leaves, cap concurrent streams"
+        }
+      ]
     },
     "CR-088": {
       "key": "CR-088",
@@ -1657,13 +2102,19 @@
       "agent": "code",
       "title": "The assistant's `rate_versions` tool is still on an 8 s timeout, shorter than a Fly cold start",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-31",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:35:15.000Z",
+      "closedNote": "resolved: `listRateVersions` (`f7e1025`).",
+      "commits": [
+        {
+          "sha": "f7e1025",
+          "date": "2026-11-02T05:35:15.000Z",
+          "subject": "fix: CR-095 CR-103 CR-092 CR-018 CR-056 CR-088 CR-068 audit paging and the assistant's lookups"
+        }
+      ]
     },
     "CR-089": {
       "key": "CR-089",
@@ -1671,13 +2122,19 @@
       "agent": "code",
       "title": "The assistant's team-wide `book_summary`, `renewals_due` and `underwriters` tools attribute Desktop policies to `bound_by`, while the desk uses `received_by`",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-31",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:26:40.000Z",
+      "closedNote": "resolved: desks are summed through `received_by` (`b83cbf6`).",
+      "commits": [
+        {
+          "sha": "b83cbf6",
+          "date": "2026-11-02T05:26:40.000Z",
+          "subject": "fix: CR-102 CR-066 CR-124 CR-089 CR-080 one definition of the book's numbers"
+        }
+      ]
     },
     "CR-090": {
       "key": "CR-090",
@@ -1685,13 +2142,19 @@
       "agent": "code",
       "title": "Unauthenticated sign-in attempts put raw `Accept-Language` and `User-Agent` text, unescaped and unbounded, into the Markdown sign-in report that a scheduled Claude task reads",
       "severity": "Medium",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-31",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:34:23.000Z",
+      "closedNote": "resolved: headers are reduced to known tokens, unknown users keep none, and failures are limited per network (`86ced24`).",
+      "commits": [
+        {
+          "sha": "86ced24",
+          "date": "2026-11-02T05:34:23.000Z",
+          "subject": "fix: CR-090 CR-115 CR-091 CR-098 harden the sign-in report and the access-request throttle"
+        }
+      ]
     },
     "CR-091": {
       "key": "CR-091",
@@ -1699,13 +2162,19 @@
       "agent": "code",
       "title": "The sign-in report re-runs permanently failed geo lookups on every render",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-31",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:34:23.000Z",
+      "closedNote": "resolved: attempt counter and batched retry (`86ced24`).",
+      "commits": [
+        {
+          "sha": "86ced24",
+          "date": "2026-11-02T05:34:23.000Z",
+          "subject": "fix: CR-090 CR-115 CR-091 CR-098 harden the sign-in report and the access-request throttle"
+        }
+      ]
     },
     "CR-092": {
       "key": "CR-092",
@@ -1713,13 +2182,19 @@
       "agent": "code",
       "title": "The assistant's `audit_search` tool falls back to the global timeline when the submission reference does not exist",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-31",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:35:15.000Z",
+      "closedNote": "resolved: returns an error (`f7e1025`).",
+      "commits": [
+        {
+          "sha": "f7e1025",
+          "date": "2026-11-02T05:35:15.000Z",
+          "subject": "fix: CR-095 CR-103 CR-092 CR-018 CR-056 CR-088 CR-068 audit paging and the assistant's lookups"
+        }
+      ]
     },
     "CR-093": {
       "key": "CR-093",
@@ -1727,13 +2202,19 @@
       "agent": "code",
       "title": "API logins are recorded only on the GL document routes and the MCP endpoint",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-31",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:37:53.000Z",
+      "closedNote": "resolved: recorded from the middleware (`93c3911`).",
+      "commits": [
+        {
+          "sha": "93c3911",
+          "date": "2026-11-02T05:37:53.000Z",
+          "subject": "fix: CR-093 record every HTTP Basic login once, from the middleware"
+        }
+      ]
     },
     "CR-094": {
       "key": "CR-094",
@@ -1741,13 +2222,19 @@
       "agent": "code",
       "title": "`DISPLAY_TZ` is never validated: a misspelt value throws `RangeError` on every page that formats a time, and gets a 500 from the rating feeds",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-31",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:37:18.000Z",
+      "closedNote": "resolved: `resolveTimeZone`, and `_zone` in rating (`424e07d`).",
+      "commits": [
+        {
+          "sha": "424e07d",
+          "date": "2026-11-02T05:37:18.000Z",
+          "subject": "fix: CR-094 CR-072 CR-108 a bad time zone, a non-Latin-1 name or a stopped rating service no longer gives a 500"
+        }
+      ]
     },
     "CR-095": {
       "key": "CR-095",
@@ -1755,27 +2242,49 @@
       "agent": "code",
       "title": "The audit trail's \"Older →\" paging still pages the rating sources independently: their 500-row cap is silent, overlapping rows repeat across pages, and `?correlation=` filters after the cap",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-31",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:35:15.000Z",
+      "closedNote": "resolved: `pageEnd`, `onPage`, an exact `before` instant and correlation in SQL (`f7e1025`).",
+      "commits": [
+        {
+          "sha": "f7e1025",
+          "date": "2026-11-02T05:35:15.000Z",
+          "subject": "fix: CR-095 CR-103 CR-092 CR-018 CR-056 CR-088 CR-068 audit paging and the assistant's lookups"
+        }
+      ]
     },
     "CR-096": {
       "key": "CR-096",
       "id": "CR-096",
       "agent": "code",
-      "title": "`db/roles.sql` prescribes a role split the apps cannot run, and `scripts/readonly-bash-guard.sh` blocks the exact check commands the auditor is told to run",
+      "title": "The Python checks the auditor is told to run cannot run on this host",
       "severity": "Suggestion",
       "status": "open",
       "statusText": "Open",
       "firstSeen": "2026-10-31",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
+      "lastSeen": "2026-11-03T01:12:00.000Z",
       "closedAt": null,
       "closedNote": "",
-      "commits": []
+      "commits": [
+        {
+          "sha": "99a9a06",
+          "date": "2026-11-02T05:33:43.000Z",
+          "subject": "fix: CR-038 CR-096 serialize startup migrations and allow an owner URL for them"
+        },
+        {
+          "sha": "39c9081",
+          "date": "2026-11-02T05:42:18.000Z",
+          "subject": "fix: CR-096 the read-only guard allows the prescribed checks and discarded output"
+        },
+        {
+          "sha": "be791c9",
+          "date": "2026-11-02T18:46:15.000Z",
+          "subject": "fix: CR-139 CR-146 CR-021 a bad filter can't widen a push; the API docs and .env.example tell the truth"
+        }
+      ]
     },
     "CR-097": {
       "key": "CR-097",
@@ -1783,13 +2292,19 @@
       "agent": "code",
       "title": "App Tests shows every signed-in login the full security review, including open High findings with steps to reproduce them",
       "severity": "Medium",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:26:49.000Z",
+      "closedNote": "resolved: `SECURITY_REVIEW.md` no longer ships in the image and `/app-tests/security` is a 404 there (`d7d7329`). Finding titles stay in the ledger and `CODE_REVIEW.md` still ships, by recorded decision.",
+      "commits": [
+        {
+          "sha": "d7d7329",
+          "date": "2026-11-02T05:26:49.000Z",
+          "subject": "fix: CR-097 keep the full security report out of the web image"
+        }
+      ]
     },
     "CR-098": {
       "key": "CR-098",
@@ -1797,13 +2312,19 @@
       "agent": "code",
       "title": "The access-request throttle is check-then-insert and has a global daily cap, so concurrent or rotated-address posts exceed it, and one sender can lock real requesters out for the day",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:34:23.000Z",
+      "closedNote": "resolved: advisory lock, /64 keys, a kept-not-emailed cap and `mailtoHref` (`86ced24`).",
+      "commits": [
+        {
+          "sha": "86ced24",
+          "date": "2026-11-02T05:34:23.000Z",
+          "subject": "fix: CR-090 CR-115 CR-091 CR-098 harden the sign-in report and the access-request throttle"
+        }
+      ]
     },
     "CR-099": {
       "key": "CR-099",
@@ -1811,13 +2332,24 @@
       "agent": "code",
       "title": "Routes outside the sign-in gate skip the middleware that strips `x-uw-signed-in-user`, so a client can set the signed-in identity those pages see",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:59:47.000Z",
+      "closedNote": "resolved: middleware runs on those paths, with an anchored `PUBLIC_PATH` (`4117b7e`).",
+      "commits": [
+        {
+          "sha": "4117b7e",
+          "date": "2026-11-02T05:28:49.000Z",
+          "subject": "fix: CR-099 CR-083 run the gate on public paths too; a session needs a login that still exists"
+        },
+        {
+          "sha": "f783397",
+          "date": "2026-11-02T05:59:47.000Z",
+          "subject": "test: CR-099 the UAT renewal flow signs in from a signed-out browser"
+        }
+      ]
     },
     "CR-100": {
       "key": "CR-100",
@@ -1825,13 +2357,19 @@
       "agent": "code",
       "title": "Re-rate still runs after a renewal is bound, so \"Premium as bound\" can show a number the policy was not bound at",
       "severity": "Medium",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:31:05.000Z",
+      "closedNote": "resolved: `refuseIfBound` in the library, and pages show figures frozen on the bound quote (`381a128`).",
+      "commits": [
+        {
+          "sha": "381a128",
+          "date": "2026-11-02T05:31:05.000Z",
+          "subject": "fix: CR-017 CR-100 worksheet saves can't lose updates, and a bound file stays as bound"
+        }
+      ]
     },
     "CR-101": {
       "key": "CR-101",
@@ -1839,13 +2377,19 @@
       "agent": "code",
       "title": "A renewal of a prior-system policy can never fire the loss referrals, whatever claims the book shows",
       "severity": "Medium",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:27:00.000Z",
+      "closedNote": "resolved: `expiringLosses` feeds `LOSS_FREQUENCY` and the new `OPEN_CLAIMS_NO_DETAIL` (`13393d1`).",
+      "commits": [
+        {
+          "sha": "13393d1",
+          "date": "2026-11-02T05:27:00.000Z",
+          "subject": "fix: CR-101 CR-112 CR-130 CR-048 CR-104 CR-053 CR-067 referrals and worksheet inputs tell the truth"
+        }
+      ]
     },
     "CR-102": {
       "key": "CR-102",
@@ -1853,13 +2397,19 @@
       "agent": "code",
       "title": "\"In-force premium\" counts policies not yet effective, and counts both sides of a renewal once it is bound",
       "severity": "Medium",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:26:40.000Z",
+      "closedNote": "resolved: `isInForce` plus a separate \"Bound, not yet effective\" row (`b83cbf6`); the one-day boundary is now CR-136.",
+      "commits": [
+        {
+          "sha": "b83cbf6",
+          "date": "2026-11-02T05:26:40.000Z",
+          "subject": "fix: CR-102 CR-066 CR-124 CR-089 CR-080 one definition of the book's numbers"
+        }
+      ]
     },
     "CR-103": {
       "key": "CR-103",
@@ -1867,13 +2417,19 @@
       "agent": "code",
       "title": "The assistant's `audit_search` ignores its dates at the query, so \"what happened in January\" can return nothing, with no sign the history was cut",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:35:15.000Z",
+      "closedNote": "resolved: dates reach the queries, and cuts are reported (`f7e1025`).",
+      "commits": [
+        {
+          "sha": "f7e1025",
+          "date": "2026-11-02T05:35:15.000Z",
+          "subject": "fix: CR-095 CR-103 CR-092 CR-018 CR-056 CR-088 CR-068 audit paging and the assistant's lookups"
+        }
+      ]
     },
     "CR-104": {
       "key": "CR-104",
@@ -1881,13 +2437,19 @@
       "agent": "code",
       "title": "An experience mod with three decimals is shown rounded to two and rewritten on the next save, silently changing the premium",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:27:00.000Z",
+      "closedNote": "resolved: two decimals enforced (`13393d1`).",
+      "commits": [
+        {
+          "sha": "13393d1",
+          "date": "2026-11-02T05:27:00.000Z",
+          "subject": "fix: CR-101 CR-112 CR-130 CR-048 CR-104 CR-053 CR-067 referrals and worksheet inputs tell the truth"
+        }
+      ]
     },
     "CR-105": {
       "key": "CR-105",
@@ -1895,13 +2457,19 @@
       "agent": "code",
       "title": "A rate value with more decimals than its column holds is rounded by Postgres, while the audit trail records the unrounded value",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:26:16.000Z",
+      "closedNote": "resolved: `_check_storable` refuses it (`a0d1242`).",
+      "commits": [
+        {
+          "sha": "a0d1242",
+          "date": "2026-11-02T05:26:16.000Z",
+          "subject": "fix: CR-052 CR-105 CR-032 rate saves touch only what the user changed, and only what a column can hold"
+        }
+      ]
     },
     "CR-106": {
       "key": "CR-106",
@@ -1909,13 +2477,19 @@
       "agent": "code",
       "title": "A numeric field reading \"inf\" or \"1e999\" raises `OverflowError`, which no extraction path catches",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:23:57.000Z",
+      "closedNote": "resolved: `to_int` refuses non-finite and negative values (`a5a8a5c`).",
+      "commits": [
+        {
+          "sha": "a5a8a5c",
+          "date": "2026-11-02T05:23:57.000Z",
+          "subject": "fix: CR-106 CR-132 reject non-finite and negative numbers, accept AND between states"
+        }
+      ]
     },
     "CR-107": {
       "key": "CR-107",
@@ -1923,13 +2497,19 @@
       "agent": "code",
       "title": "`type=constructor` passes the ledger filter's validation, and a push with it writes function source text into the audit trail",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:30:04.000Z",
+      "closedNote": "resolved: `Object.hasOwn` (`0fce129`).",
+      "commits": [
+        {
+          "sha": "0fce129",
+          "date": "2026-11-02T05:30:04.000Z",
+          "subject": "fix: CR-127 CR-114 CR-119 CR-107 CR-086 CR-068 the GL push and filters say what they did"
+        }
+      ]
     },
     "CR-108": {
       "key": "CR-108",
@@ -1937,13 +2517,19 @@
       "agent": "code",
       "title": "The `/admin` proxy has no error handling, so a stopped or slow rating service gives a bare 500",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:37:18.000Z",
+      "closedNote": "resolved: `proxyFailurePage` (`424e07d`).",
+      "commits": [
+        {
+          "sha": "424e07d",
+          "date": "2026-11-02T05:37:18.000Z",
+          "subject": "fix: CR-094 CR-072 CR-108 a bad time zone, a non-Latin-1 name or a stopped rating service no longer gives a 500"
+        }
+      ]
     },
     "CR-109": {
       "key": "CR-109",
@@ -1951,13 +2537,19 @@
       "agent": "code",
       "title": "The binder prints each free-text subjectivity on one unwrapped line, so a long one overprints its status and runs off the page",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:28:50.000Z",
+      "closedNote": "resolved: `subjectivitiesBlock` (`72e6851`).",
+      "commits": [
+        {
+          "sha": "72e6851",
+          "date": "2026-11-02T05:28:50.000Z",
+          "subject": "fix: CR-046 CR-109 CR-118 issued PDFs wrap long text and keep line breaks readable"
+        }
+      ]
     },
     "CR-110": {
       "key": "CR-110",
@@ -1965,13 +2557,19 @@
       "agent": "code",
       "title": "A non-ASCII bearer token makes any rating call a 500 instead of a 401",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:25:34.000Z",
+      "closedNote": "resolved: compares bytes (`e6cd942`).",
+      "commits": [
+        {
+          "sha": "e6cd942",
+          "date": "2026-11-02T05:25:34.000Z",
+          "subject": "fix: CR-110 CR-057 CR-039 non-ASCII tokens and names, two-digit version labels in the audit"
+        }
+      ]
     },
     "CR-111": {
       "key": "CR-111",
@@ -1979,13 +2577,19 @@
       "agent": "code",
       "title": "A prior-system renewal attaches to any existing insured with the same name, whatever its FEIN or state",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:37:23.000Z",
+      "closedNote": "resolved: `insuredWithoutFein` matches name and state among insureds with no FEIN (`ddde221`).",
+      "commits": [
+        {
+          "sha": "ddde221",
+          "date": "2026-11-02T05:37:23.000Z",
+          "subject": "fix: CR-113 CR-019 CR-050 CR-034 CR-125 CR-024 CR-084 CR-111 quoting, binding and starting renewals"
+        }
+      ]
     },
     "CR-112": {
       "key": "CR-112",
@@ -1993,13 +2597,19 @@
       "agent": "code",
       "title": "Rating inputs the broker never stated silently rate at the cheapest band and switch off the referrals that depend on them",
       "severity": "Medium",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:27:00.000Z",
+      "closedNote": "resolved: an `ASSUMED_INPUTS` warning and a suggested subjectivity (`13393d1`).",
+      "commits": [
+        {
+          "sha": "13393d1",
+          "date": "2026-11-02T05:27:00.000Z",
+          "subject": "fix: CR-101 CR-112 CR-130 CR-048 CR-104 CR-053 CR-067 referrals and worksheet inputs tell the truth"
+        }
+      ]
     },
     "CR-113": {
       "key": "CR-113",
@@ -2007,13 +2617,19 @@
       "agent": "code",
       "title": "A quote charges the same annual premium whatever policy period is typed, from one day to many years",
       "severity": "Medium",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:37:23.000Z",
+      "closedNote": "resolved: `quotePeriod` requires exactly one year, before rating (`ddde221`).",
+      "commits": [
+        {
+          "sha": "ddde221",
+          "date": "2026-11-02T05:37:23.000Z",
+          "subject": "fix: CR-113 CR-019 CR-050 CR-034 CR-125 CR-024 CR-084 CR-111 quoting, binding and starting renewals"
+        }
+      ]
     },
     "CR-114": {
       "key": "CR-114",
@@ -2021,13 +2637,19 @@
       "agent": "code",
       "title": "The `file_url` a GL push returns loses its period, so an \"all periods\" push links to this month's lines only",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:30:04.000Z",
+      "closedNote": "resolved: `ledgerFileQuery` (`0fce129`).",
+      "commits": [
+        {
+          "sha": "0fce129",
+          "date": "2026-11-02T05:30:04.000Z",
+          "subject": "fix: CR-127 CR-114 CR-119 CR-107 CR-086 CR-068 the GL push and filters say what they did"
+        }
+      ]
     },
     "CR-115": {
       "key": "CR-115",
@@ -2035,13 +2657,19 @@
       "agent": "code",
       "title": "The sign-in report's \"All time\" numbers come from the newest 5,000 rows, so a burst of failed attempts makes real logins disappear",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:34:23.000Z",
+      "closedNote": "resolved: SQL totals over the whole table (`86ced24`).",
+      "commits": [
+        {
+          "sha": "86ced24",
+          "date": "2026-11-02T05:34:23.000Z",
+          "subject": "fix: CR-090 CR-115 CR-091 CR-098 harden the sign-in report and the access-request throttle"
+        }
+      ]
     },
     "CR-116": {
       "key": "CR-116",
@@ -2049,13 +2677,19 @@
       "agent": "code",
       "title": "The post-sign-in redirect check can be passed with a tab or newline, which browsers strip, sending a freshly signed-in user to another site",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:28:49.000Z",
+      "closedNote": "resolved: `safeNextPath` parses the URL (`830a5c3`).",
+      "commits": [
+        {
+          "sha": "830a5c3",
+          "date": "2026-11-02T05:28:49.000Z",
+          "subject": "fix: CR-116 CR-063 parse the post-sign-in path; encode RFC 8187 delimiters in filenames"
+        }
+      ]
     },
     "CR-117": {
       "key": "CR-117",
@@ -2063,13 +2697,19 @@
       "agent": "code",
       "title": "An email attachment of an unsupported type (an Excel loss run, a scanned image) is dropped with no warning at all",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:25:10.000Z",
+      "closedNote": "resolved: named in the result's warnings (`bfd5870`).",
+      "commits": [
+        {
+          "sha": "bfd5870",
+          "date": "2026-11-02T05:25:10.000Z",
+          "subject": "fix: CR-029 CR-117 report unread email attachments instead of losing the email or the file"
+        }
+      ]
     },
     "CR-118": {
       "key": "CR-118",
@@ -2077,13 +2717,19 @@
       "agent": "code",
       "title": "Long producer contact lines run off the page on every issued document, because the two-column block never wraps",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:28:50.000Z",
+      "closedNote": "resolved: wrapped columns, one line per detail (`72e6851`).",
+      "commits": [
+        {
+          "sha": "72e6851",
+          "date": "2026-11-02T05:28:50.000Z",
+          "subject": "fix: CR-046 CR-109 CR-118 issued PDFs wrap long text and keep line breaks readable"
+        }
+      ]
     },
     "CR-119": {
       "key": "CR-119",
@@ -2091,13 +2737,19 @@
       "agent": "code",
       "title": "Pushing a period with no lines through the API or MCP still opens a batch, writes an audit row, and says every line was pushed",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:30:04.000Z",
+      "closedNote": "resolved: `NothingToPushError` and a 409 (`0fce129`).",
+      "commits": [
+        {
+          "sha": "0fce129",
+          "date": "2026-11-02T05:30:04.000Z",
+          "subject": "fix: CR-127 CR-114 CR-119 CR-107 CR-086 CR-068 the GL push and filters say what they did"
+        }
+      ]
     },
     "CR-120": {
       "key": "CR-120",
@@ -2105,13 +2757,19 @@
       "agent": "code",
       "title": "Remove the unused `DirtyHint` component and the second copy of `GL_API_VERSION`",
       "severity": "Suggestion",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:40:45.000Z",
+      "closedNote": "resolved (`36726c0`).",
+      "commits": [
+        {
+          "sha": "36726c0",
+          "date": "2026-11-02T05:40:45.000Z",
+          "subject": "fix: CR-120 remove the unused DirtyHint and the second GL_API_VERSION"
+        }
+      ]
     },
     "CR-121": {
       "key": "CR-121",
@@ -2119,13 +2777,19 @@
       "agent": "code",
       "title": "`SEED_HISTORY` is not repeatable from one day to another, so a later restart can book extra policies and back-dated journals",
       "severity": "Medium",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:33:44.000Z",
+      "closedNote": "resolved: one random stream per risk, and a count of seeded files (`ea7e42e`).",
+      "commits": [
+        {
+          "sha": "ea7e42e",
+          "date": "2026-11-02T05:33:44.000Z",
+          "subject": "fix: CR-121 CR-076 CR-075 CR-038 seeded history is repeatable and resumes"
+        }
+      ]
     },
     "CR-122": {
       "key": "CR-122",
@@ -2133,13 +2797,24 @@
       "agent": "code",
       "title": "One claim shown at different amounts on an application and a loss run is counted as two claims, and intake has no way to correct it",
       "severity": "Medium",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:32:15.000Z",
+      "closedNote": "resolved: the loss run wins for dates it covers, with a warning (`ac9e611`). Loss rows stay read-only on intake, by recorded decision.",
+      "commits": [
+        {
+          "sha": "ac9e611",
+          "date": "2026-11-02T05:26:42.000Z",
+          "subject": "fix: CR-122 CR-060 use the loss run for any date it covers; ignore state order in conflicts"
+        },
+        {
+          "sha": "17b08ca",
+          "date": "2026-11-02T05:32:15.000Z",
+          "subject": "fix: CR-122 CR-123 keep the loss regression tests together"
+        }
+      ]
     },
     "CR-123": {
       "key": "CR-123",
@@ -2147,13 +2822,24 @@
       "agent": "code",
       "title": "A claim on a fillable application with no date is dropped with no warning, so it counts toward no referral",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:32:15.000Z",
+      "closedNote": "resolved: warnings for a missing date or amount (`76f7bd3`).",
+      "commits": [
+        {
+          "sha": "76f7bd3",
+          "date": "2026-11-02T05:26:14.000Z",
+          "subject": "fix: CR-123 warn about form loss rows with no date or no amount"
+        },
+        {
+          "sha": "17b08ca",
+          "date": "2026-11-02T05:32:15.000Z",
+          "subject": "fix: CR-122 CR-123 keep the loss regression tests together"
+        }
+      ]
     },
     "CR-124": {
       "key": "CR-124",
@@ -2161,13 +2847,24 @@
       "agent": "code",
       "title": "The book's \"loss ratio\" divides five years of losses by one year of premium",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:39:59.000Z",
+      "closedNote": "resolved: one `lossRatio` helper over premium × 5 (`b83cbf6`).",
+      "commits": [
+        {
+          "sha": "b83cbf6",
+          "date": "2026-11-02T05:26:40.000Z",
+          "subject": "fix: CR-102 CR-066 CR-124 CR-089 CR-080 one definition of the book's numbers"
+        },
+        {
+          "sha": "dcc3bef",
+          "date": "2026-11-02T05:39:59.000Z",
+          "subject": "fix: CR-068 CR-124 quote and intake dates use the shared check; plain tile sub-label"
+        }
+      ]
     },
     "CR-125": {
       "key": "CR-125",
@@ -2175,13 +2872,19 @@
       "agent": "code",
       "title": "A policy with no producer contact or agency puts the wrong text in the renewal's fields and in the GL's producer",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:37:23.000Z",
+      "closedNote": "resolved: `producer_fields` and `producerOf` (`ddde221`).",
+      "commits": [
+        {
+          "sha": "ddde221",
+          "date": "2026-11-02T05:37:23.000Z",
+          "subject": "fix: CR-113 CR-019 CR-050 CR-034 CR-125 CR-024 CR-084 CR-111 quoting, binding and starting renewals"
+        }
+      ]
     },
     "CR-126": {
       "key": "CR-126",
@@ -2189,13 +2892,19 @@
       "agent": "code",
       "title": "A fillable loss run or questionnaire with one `Policy_` field filled is never read, yet the file counts as having loss runs and shows no losses",
       "severity": "Medium",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:25:53.000Z",
+      "closedNote": "resolved: `read_from_form` requires mapped fields and a non-loss-run document type (`5be1b9e`).",
+      "commits": [
+        {
+          "sha": "5be1b9e",
+          "date": "2026-11-02T05:25:53.000Z",
+          "subject": "fix: CR-126 CR-042 read only real applications from form fields, report who read each document"
+        }
+      ]
     },
     "CR-127": {
       "key": "CR-127",
@@ -2203,13 +2912,19 @@
       "agent": "code",
       "title": "After a partial push, the Accounting page downloads fewer lines than the page and the audit row say the file holds",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:30:04.000Z",
+      "closedNote": "resolved: the download keeps the page's filter (`0fce129`).",
+      "commits": [
+        {
+          "sha": "0fce129",
+          "date": "2026-11-02T05:30:04.000Z",
+          "subject": "fix: CR-127 CR-114 CR-119 CR-107 CR-086 CR-068 the GL push and filters say what they did"
+        }
+      ]
     },
     "CR-128": {
       "key": "CR-128",
@@ -2217,13 +2932,19 @@
       "agent": "code",
       "title": "Generated inbox folders are visible before all their documents are written",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:29:51.000Z",
+      "closedNote": "resolved: temp folder then rename (`91abe26`).",
+      "commits": [
+        {
+          "sha": "91abe26",
+          "date": "2026-11-02T05:29:51.000Z",
+          "subject": "fix: CR-128 generated inbox folders appear only when complete"
+        }
+      ]
     },
     "CR-129": {
       "key": "CR-129",
@@ -2231,13 +2952,19 @@
       "agent": "code",
       "title": "The assistant's Claude calls have no timeout of their own, so a stalled call locks the chat for many minutes",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:37:53.000Z",
+      "closedNote": "resolved: call and question deadlines plus a Stop button (`b565d36`).",
+      "commits": [
+        {
+          "sha": "b565d36",
+          "date": "2026-11-02T05:37:53.000Z",
+          "subject": "fix: CR-129 a stalled Claude call can't lock the assistant's chat"
+        }
+      ]
     },
     "CR-130": {
       "key": "CR-130",
@@ -2245,13 +2972,19 @@
       "agent": "code",
       "title": "Gross receipts of 0 passes the worksheet and intake checks, then shows raw validation JSON in the error banner",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:27:00.000Z",
+      "closedNote": "resolved: refused under the field, and FastAPI lists are read (`13393d1`).",
+      "commits": [
+        {
+          "sha": "13393d1",
+          "date": "2026-11-02T05:27:00.000Z",
+          "subject": "fix: CR-101 CR-112 CR-130 CR-048 CR-104 CR-053 CR-067 referrals and worksheet inputs tell the truth"
+        }
+      ]
     },
     "CR-131": {
       "key": "CR-131",
@@ -2259,13 +2992,24 @@
       "agent": "code",
       "title": "If `fly secrets list` fails during a local deploy, the script replaces every login with one new one and overwrites `.fly-credentials`",
       "severity": "Medium",
-      "status": "open",
-      "statusText": "New",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
-      "commits": []
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:40:44.000Z",
+      "closedNote": "resolved: `has_secret` stops the script, and an existing `.fly-credentials` blocks generation (`5c9c638`).",
+      "commits": [
+        {
+          "sha": "5c9c638",
+          "date": "2026-11-02T05:39:51.000Z",
+          "subject": "fix: CR-131 a failed fly secrets list can no longer replace logins"
+        },
+        {
+          "sha": "36efe3c",
+          "date": "2026-11-02T05:40:44.000Z",
+          "subject": "fix: CR-131 type the deploy test's minimal environment"
+        }
+      ]
     },
     "CR-132": {
       "key": "CR-132",
@@ -2273,10 +3017,596 @@
       "agent": "code",
       "title": "States written in capitals as \"AZ AND NV\" are refused, leaving a field that rating requires empty",
       "severity": "Low",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-01",
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T05:23:57.000Z",
+      "closedNote": "resolved: `re.I` on the split (`a5a8a5c`).",
+      "commits": [
+        {
+          "sha": "a5a8a5c",
+          "date": "2026-11-02T05:23:57.000Z",
+          "subject": "fix: CR-106 CR-132 reject non-finite and negative numbers, accept AND between states"
+        }
+      ]
+    },
+    "CR-133": {
+      "key": "CR-133",
+      "id": "CR-133",
+      "agent": "code",
+      "title": "The GL OpenAPI document leaves out the `forbidden` error the push route returns and the `batch` filter it accepts",
+      "severity": "Low",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T06:15:26.000Z",
+      "closedNote": "resolved: `API_ERROR_CODES` and the declared parameters (`ece6251`).",
+      "commits": [
+        {
+          "sha": "ece6251",
+          "date": "2026-11-02T06:15:26.000Z",
+          "subject": "fix: CR-133 CR-134 the GL API publishes its errors and filter; control characters can't break a workbook"
+        }
+      ]
+    },
+    "CR-134": {
+      "key": "CR-134",
+      "id": "CR-134",
+      "agent": "code",
+      "title": "A control character in an insured name or description makes the pushed Excel workbook unreadable, after its lines are already stamped",
+      "severity": "Low",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T09:12:00.000Z",
+      "closedAt": "2026-11-02T06:15:26.000Z",
+      "closedNote": "resolved: `xlsx.ts` strips characters XML forbids (`ece6251`); the store failure on a NUL is now CR-141.",
+      "commits": [
+        {
+          "sha": "ece6251",
+          "date": "2026-11-02T06:15:26.000Z",
+          "subject": "fix: CR-133 CR-134 the GL API publishes its errors and filter; control characters can't break a workbook"
+        }
+      ]
+    },
+    "CR-135": {
+      "key": "CR-135",
+      "id": "CR-135",
+      "agent": "code",
+      "title": "Policies bound in the Desktop report zero claims: the desk says \"clean\" and the assistant is told 0, whatever the submission's loss history says",
+      "severity": "Medium",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:12:00.000Z",
+      "closedAt": "2026-11-02T18:35:17.000Z",
+      "closedNote": "resolved: `lossTotals` now feeds the desk, `/book` and `renewals_due` (`7e869c0`). The prior-system renewal case that remains is CR-152.",
+      "commits": [
+        {
+          "sha": "7e869c0",
+          "date": "2026-11-02T18:35:17.000Z",
+          "subject": "fix: CR-135 CR-136 CR-137 CR-149 the desk and the assistant report the book as it stands"
+        }
+      ]
+    },
+    "CR-136": {
+      "key": "CR-136",
+      "id": "CR-136",
+      "agent": "code",
+      "title": "On a renewal's effective date, both the expiring policy and the renewal count as in force",
+      "severity": "Low",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:12:00.000Z",
+      "closedAt": "2026-11-02T18:35:17.000Z",
+      "closedNote": "resolved: `isInForce`, `listPolicies` and the `underwriters` tool now use `expiration_date > today` (`7e869c0`).",
+      "commits": [
+        {
+          "sha": "7e869c0",
+          "date": "2026-11-02T18:35:17.000Z",
+          "subject": "fix: CR-135 CR-136 CR-137 CR-149 the desk and the assistant report the book as it stands"
+        }
+      ]
+    },
+    "CR-137": {
+      "key": "CR-137",
+      "id": "CR-137",
+      "agent": "code",
+      "title": "An expired quote counts as both \"out\" and \"lost\" on the desk",
+      "severity": "Low",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:12:00.000Z",
+      "closedAt": "2026-11-02T18:35:17.000Z",
+      "closedNote": "resolved: the tile, a new `live` filter and `book_summary` count only valid quotes (`7e869c0`).",
+      "commits": [
+        {
+          "sha": "7e869c0",
+          "date": "2026-11-02T18:35:17.000Z",
+          "subject": "fix: CR-135 CR-136 CR-137 CR-149 the desk and the assistant report the book as it stands"
+        }
+      ]
+    },
+    "CR-138": {
+      "key": "CR-138",
+      "id": "CR-138",
+      "agent": "code",
+      "title": "A bound file's referral panel judges the edited worksheet, not the terms that were bound",
+      "severity": "Low",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:12:00.000Z",
+      "closedAt": "2026-11-02T18:58:13.000Z",
+      "closedNote": "resolved: the panel uses the bound quote's inputs, and any clearance counts on a bound file (`adb6039`, `d31c75c`). The assistant's copy of this logic is CR-155.",
+      "commits": [
+        {
+          "sha": "adb6039",
+          "date": "2026-11-02T18:44:30.000Z",
+          "subject": "fix: CR-138 CR-140 CR-144 CR-148 clearances, corrections and quotes stay on the record and on the facts shown"
+        },
+        {
+          "sha": "d31c75c",
+          "date": "2026-11-02T18:53:57.000Z",
+          "subject": "fix: CR-138 a referral cleared at issue stays cleared on a bound file when its note was later replaced"
+        },
+        {
+          "sha": "08b78c7",
+          "date": "2026-11-02T18:58:13.000Z",
+          "subject": "step-29: the code review backlog after step-28 (build log and playbook)"
+        }
+      ]
+    },
+    "CR-139": {
+      "key": "CR-139",
+      "id": "CR-139",
+      "agent": "code",
+      "title": "A push ignores filter errors and widens to all periods; its `/accounting/export` route has no caller",
+      "severity": "Low",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:12:00.000Z",
+      "closedAt": "2026-11-02T18:46:15.000Z",
+      "closedNote": "resolved: `pushToGlAction` refuses bad filters and the route is deleted (`be791c9`).",
+      "commits": [
+        {
+          "sha": "be791c9",
+          "date": "2026-11-02T18:46:15.000Z",
+          "subject": "fix: CR-139 CR-146 CR-021 a bad filter can't widen a push; the API docs and .env.example tell the truth"
+        }
+      ]
+    },
+    "CR-140": {
+      "key": "CR-140",
+      "id": "CR-140",
+      "agent": "code",
+      "title": "Renewal status changes at bind and on release of a stranded claim write no audit event",
+      "severity": "Low",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:12:00.000Z",
+      "closedAt": "2026-11-02T18:44:30.000Z",
+      "closedNote": "resolved: `renewal.completed` and `renewal.released` are written in the same transactions (`adb6039`).",
+      "commits": [
+        {
+          "sha": "adb6039",
+          "date": "2026-11-02T18:44:30.000Z",
+          "subject": "fix: CR-138 CR-140 CR-144 CR-148 clearances, corrections and quotes stay on the record and on the facts shown"
+        }
+      ]
+    },
+    "CR-141": {
+      "key": "CR-141",
+      "id": "CR-141",
+      "agent": "code",
+      "title": "A NUL in a PDF form field still stops the whole submission from being stored",
+      "severity": "Low",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:12:00.000Z",
+      "closedAt": "2026-11-02T18:38:04.000Z",
+      "closedNote": "resolved: `scrubbed()` cleans the whole pipeline result and `Loss` cleans its text (`8436601`).",
+      "commits": [
+        {
+          "sha": "8436601",
+          "date": "2026-11-02T18:38:04.000Z",
+          "subject": "fix: CR-141 CR-142 CR-145 CR-147 intake can't be stopped by a NUL, doubled by a copy or fooled by an unread loss run"
+        }
+      ]
+    },
+    "CR-142": {
+      "key": "CR-142",
+      "id": "CR-142",
+      "agent": "code",
+      "title": "The same file sent twice under one name doubles its claims, and intake can't correct them",
+      "severity": "Medium",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:12:00.000Z",
+      "closedAt": "2026-11-02T18:38:04.000Z",
+      "closedNote": "resolved: documents are de-duplicated by content hash, with a warning (`8436601`).",
+      "commits": [
+        {
+          "sha": "8436601",
+          "date": "2026-11-02T18:38:04.000Z",
+          "subject": "fix: CR-141 CR-142 CR-145 CR-147 intake can't be stopped by a NUL, doubled by a copy or fooled by an unread loss run"
+        }
+      ]
+    },
+    "CR-143": {
+      "key": "CR-143",
+      "id": "CR-143",
+      "agent": "code",
+      "title": "Rate edits have no plausibility check: a surplus lines tax typed as 5 means 500%",
+      "severity": "Medium",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:12:00.000Z",
+      "closedAt": "2026-11-02T18:39:07.000Z",
+      "closedNote": "resolved: `sl_tax.*` values of 1 or more are refused, and a mod range must include 1 to activate (`bb98186`).",
+      "commits": [
+        {
+          "sha": "bb98186",
+          "date": "2026-11-02T18:39:07.000Z",
+          "subject": "fix: CR-143 CR-150 rate edits and gross receipts have sane limits"
+        }
+      ]
+    },
+    "CR-144": {
+      "key": "CR-144",
+      "id": "CR-144",
+      "agent": "code",
+      "title": "Intake corrections, acceptance and referral clearances are audited after they commit",
+      "severity": "Low",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:12:00.000Z",
+      "closedAt": "2026-11-02T18:44:30.000Z",
+      "closedNote": "resolved: these paths now audit inside the transaction, with tests (`adb6039`, `46e61da`).",
+      "commits": [
+        {
+          "sha": "adb6039",
+          "date": "2026-11-02T18:44:30.000Z",
+          "subject": "fix: CR-138 CR-140 CR-144 CR-148 clearances, corrections and quotes stay on the record and on the facts shown"
+        }
+      ]
+    },
+    "CR-145": {
+      "key": "CR-145",
+      "id": "CR-145",
+      "agent": "code",
+      "title": "After \"Try again\", the extraction timer keeps counting from the first attempt",
+      "severity": "Low",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:12:00.000Z",
+      "closedAt": "2026-11-02T18:38:04.000Z",
+      "closedNote": "resolved: a new `key` per attempt remounts the panel (`8436601`). Confirmed by reading only, as the build log also notes.",
+      "commits": [
+        {
+          "sha": "8436601",
+          "date": "2026-11-02T18:38:04.000Z",
+          "subject": "fix: CR-141 CR-142 CR-145 CR-147 intake can't be stopped by a NUL, doubled by a copy or fooled by an unread loss run"
+        }
+      ]
+    },
+    "CR-146": {
+      "key": "CR-146",
+      "id": "CR-146",
+      "agent": "code",
+      "title": "The API docs page still lists only 400, 401 and 404 as errors",
+      "severity": "Low",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:12:00.000Z",
+      "closedAt": "2026-11-02T18:46:15.000Z",
+      "closedNote": "resolved: the page derives them through `errorStatuses` (`be791c9`).",
+      "commits": [
+        {
+          "sha": "be791c9",
+          "date": "2026-11-02T18:46:15.000Z",
+          "subject": "fix: CR-139 CR-146 CR-021 a bad filter can't widen a push; the API docs and .env.example tell the truth"
+        }
+      ]
+    },
+    "CR-147": {
+      "key": "CR-147",
+      "id": "CR-147",
+      "agent": "code",
+      "title": "A loss run nobody read counts as a loss run on file",
+      "severity": "Medium",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:12:00.000Z",
+      "closedAt": "2026-11-02T18:38:04.000Z",
+      "closedNote": "resolved: `NO_LOSS_RUNS` fires with its own wording, and intake says \"No losses read\" (`8436601`).",
+      "commits": [
+        {
+          "sha": "8436601",
+          "date": "2026-11-02T18:38:04.000Z",
+          "subject": "fix: CR-141 CR-142 CR-145 CR-147 intake can't be stopped by a NUL, doubled by a copy or fooled by an unread loss run"
+        }
+      ]
+    },
+    "CR-148": {
+      "key": "CR-148",
+      "id": "CR-148",
+      "agent": "code",
+      "title": "Clear and Issue act on whatever the worksheet holds now, not what the page showed",
+      "severity": "Medium",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:12:00.000Z",
+      "closedAt": "2026-11-02T18:44:30.000Z",
+      "closedNote": "resolved: both now refuse a stale page (`adb6039`). The check itself introduced CR-151.",
+      "commits": [
+        {
+          "sha": "adb6039",
+          "date": "2026-11-02T18:44:30.000Z",
+          "subject": "fix: CR-138 CR-140 CR-144 CR-148 clearances, corrections and quotes stay on the record and on the facts shown"
+        }
+      ]
+    },
+    "CR-149": {
+      "key": "CR-149",
+      "id": "CR-149",
+      "agent": "code",
+      "title": "The assistant's list tools report totals of the first 50 rows as if they were the whole answer",
+      "severity": "Medium",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:12:00.000Z",
+      "closedAt": "2026-11-02T18:35:17.000Z",
+      "closedNote": "resolved: `listMeta` reports `total_matching` and `truncated`, and money totals cover every match (`7e869c0`).",
+      "commits": [
+        {
+          "sha": "7e869c0",
+          "date": "2026-11-02T18:35:17.000Z",
+          "subject": "fix: CR-135 CR-136 CR-137 CR-149 the desk and the assistant report the book as it stands"
+        }
+      ]
+    },
+    "CR-150": {
+      "key": "CR-150",
+      "id": "CR-150",
+      "agent": "code",
+      "title": "Gross receipts have no upper limit: a typo gets a 500 from rating or a raw database error at issue",
+      "severity": "Low",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:12:00.000Z",
+      "closedAt": "2026-11-02T18:39:07.000Z",
+      "closedNote": "resolved: capped at $10 billion in the rating service and in `parseInputs` (`bb98186`).",
+      "commits": [
+        {
+          "sha": "bb98186",
+          "date": "2026-11-02T18:39:07.000Z",
+          "subject": "fix: CR-143 CR-150 rate edits and gross receipts have sane limits"
+        }
+      ]
+    },
+    "CR-151": {
+      "key": "CR-151",
+      "id": "CR-151",
+      "agent": "code",
+      "title": "A referral whose text holds a line break can never be cleared",
+      "severity": "Medium",
+      "status": "open",
+      "statusText": "Open",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-03T01:12:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "CR-152": {
+      "key": "CR-152",
+      "id": "CR-152",
+      "agent": "code",
+      "title": "A prior-system renewal's claims disappear once it is bound, and the next renewal loses its loss referrals",
+      "severity": "Medium",
+      "status": "open",
+      "statusText": "Open",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-03T01:12:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "CR-153": {
+      "key": "CR-153",
+      "id": "CR-153",
+      "agent": "code",
+      "title": "A loss run that isn't a text PDF is treated as no loss run at all",
+      "severity": "Medium",
+      "status": "open",
+      "statusText": "Open",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-03T01:12:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "CR-154": {
+      "key": "CR-154",
+      "id": "CR-154",
+      "agent": "code",
+      "title": "Saving an untouched multi-line description records a correction nobody made",
+      "severity": "Low",
+      "status": "open",
+      "statusText": "Open",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-03T01:12:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "CR-155": {
+      "key": "CR-155",
+      "id": "CR-155",
+      "agent": "code",
+      "title": "The assistant reports open referrals on a bound file",
+      "severity": "Low",
+      "status": "open",
+      "statusText": "Open",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-03T01:12:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "CR-156": {
+      "key": "CR-156",
+      "id": "CR-156",
+      "agent": "code",
+      "title": "A renewal quote's period isn't checked against the expiring policy",
+      "severity": "Low",
+      "status": "open",
+      "statusText": "Open",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-03T01:12:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "CR-157": {
+      "key": "CR-157",
+      "id": "CR-157",
+      "agent": "code",
+      "title": "A failed clean-up after a failed renewal start is silent",
+      "severity": "Low",
+      "status": "open",
+      "statusText": "Open",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-03T01:12:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "CR-158": {
+      "key": "CR-158",
+      "id": "CR-158",
+      "agent": "code",
+      "title": "`npm test` creates and drops databases on whatever Postgres answers at localhost",
+      "severity": "Suggestion",
+      "status": "open",
+      "statusText": "Open",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-03T01:12:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "CR-159": {
+      "key": "CR-159",
+      "id": "CR-159",
+      "agent": "code",
+      "title": "An upload over 10 MB is cut off before it reaches the 25 MB limit it was given",
+      "severity": "Medium",
       "status": "open",
       "statusText": "New",
-      "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-02T01:12:00.000Z",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-03T01:12:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "CR-160": {
+      "key": "CR-160",
+      "id": "CR-160",
+      "agent": "code",
+      "title": "Any PDF that mentions a loss run on its first page is treated as a loss run",
+      "severity": "Medium",
+      "status": "open",
+      "statusText": "New",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-03T01:12:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "CR-161": {
+      "key": "CR-161",
+      "id": "CR-161",
+      "agent": "code",
+      "title": "An underwriter can take 20% off through the experience mod with no reason and no referral",
+      "severity": "Medium",
+      "status": "open",
+      "statusText": "New",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-03T01:12:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "CR-162": {
+      "key": "CR-162",
+      "id": "CR-162",
+      "agent": "code",
+      "title": "A checked box in a fillable PDF reads as a bad value, and the worksheet assumes COIs are required",
+      "severity": "Low",
+      "status": "open",
+      "statusText": "New",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-03T01:12:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "CR-163": {
+      "key": "CR-163",
+      "id": "CR-163",
+      "agent": "code",
+      "title": "Rating worksheets round the factor they show",
+      "severity": "Low",
+      "status": "open",
+      "statusText": "New",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-03T01:12:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "CR-164": {
+      "key": "CR-164",
+      "id": "CR-164",
+      "agent": "code",
+      "title": "A quote can be issued for a period that has already ended, and it can never be bound",
+      "severity": "Low",
+      "status": "open",
+      "statusText": "New",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-03T01:12:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "CR-165": {
+      "key": "CR-165",
+      "id": "CR-165",
+      "agent": "code",
+      "title": "Two server actions issue a renewal quote the same way",
+      "severity": "Suggestion",
+      "status": "open",
+      "statusText": "New",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-03T01:12:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -2290,7 +3620,7 @@
       "status": "open",
       "statusText": "Open",
       "firstSeen": "2026-10-22",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": [
@@ -2375,7 +3705,7 @@
       "status": "open",
       "statusText": "Open",
       "firstSeen": "2026-10-22",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": [
@@ -2440,7 +3770,7 @@
       "status": "open",
       "statusText": "Open",
       "firstSeen": "2026-10-22",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": [
@@ -2460,12 +3790,12 @@
       "key": "SEC-008",
       "id": "SEC-008",
       "agent": "security",
-      "title": "Bound parsing cost in `POST /extract` and `/extract/stream` (EML nesting, zip/stream expansion, wall-clock, thread count)",
+      "title": "Bound parsing cost in `POST /extract` and `/extract/stream` (EML nesting, zip and stream expansion, wall clock, non-stream concurrency)",
       "severity": "Medium",
       "status": "open",
       "statusText": "Open",
       "firstSeen": "2026-10-22",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": [
@@ -2485,7 +3815,7 @@
       "status": "open",
       "statusText": "Open",
       "firstSeen": "2026-10-22",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": [
@@ -2505,7 +3835,7 @@
       "status": "open",
       "statusText": "Open",
       "firstSeen": "2026-10-22",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": [
@@ -2550,7 +3880,7 @@
       "status": "open",
       "statusText": "Open",
       "firstSeen": "2026-10-22",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": [
@@ -2570,12 +3900,12 @@
       "key": "SEC-013",
       "id": "SEC-013",
       "agent": "security",
-      "title": "Stop surfacing raw exception text to clients and validate ids before they reach a uuid cast",
+      "title": "Stop surfacing raw exception text to clients",
       "severity": "Low",
       "status": "open",
       "statusText": "Open",
       "firstSeen": "2026-10-22",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": [
@@ -2640,7 +3970,7 @@
       "status": "open",
       "statusText": "Open",
       "firstSeen": "2026-10-22",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": [
@@ -2660,7 +3990,7 @@
       "status": "open",
       "statusText": "Open",
       "firstSeen": "2026-10-22",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": [
@@ -2680,7 +4010,7 @@
       "status": "open",
       "statusText": "Open",
       "firstSeen": "2026-10-22",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": [
@@ -2785,12 +4115,12 @@
       "key": "SEC-025",
       "id": "SEC-025",
       "agent": "security",
-      "title": "Gate the back-dating hooks (`rated_at`, `at`/`occurredAt`) so audit timestamps cannot be forged outside seeding",
+      "title": "Refuse `SEED_HISTORY` in production unless it is explicitly allowed",
       "severity": "Low",
       "status": "open",
       "statusText": "Open",
       "firstSeen": "2026-10-30",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -2821,12 +4151,12 @@
       "agent": "security",
       "title": "Also neutralize cells beginning with `-`, tab or CR in the CSV export",
       "severity": "Low",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-30",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
+      "lastSeen": "2026-11-02T09:10:00.000Z",
+      "closedAt": "2026-11-02T09:10:00.000Z",
+      "closedNote": "resolved: `cell()` now neutralizes `=`, `+`, `-`, `@`, tab and CR (`7bdaa55`), and the sign-in CSV guards its header-derived cells (`86ced24`). Not yet on `origin/main`.",
       "commits": []
     },
     "SEC-028": {
@@ -2838,7 +4168,7 @@
       "status": "open",
       "statusText": "Open",
       "firstSeen": "2026-10-30",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -2847,12 +4177,12 @@
       "key": "SEC-029",
       "id": "SEC-029",
       "agent": "security",
-      "title": "Bind session cookies to the current user list, add revocation, and anchor the gate's path exclusions",
+      "title": "Add per-session revocation and bind session cookies to the password",
       "severity": "Low",
       "status": "open",
       "statusText": "Open",
       "firstSeen": "2026-10-30",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -2881,12 +4211,12 @@
       "key": "SEC-031",
       "id": "SEC-031",
       "agent": "security",
-      "title": "Bound what one caller can spend through the assistant (concurrency, rounds, body size)",
+      "title": "Bound what one caller can spend through the assistant and the JSON endpoints (concurrency, rounds, body size)",
       "severity": "Low",
       "status": "open",
       "statusText": "Open",
       "firstSeen": "2026-10-30",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -2895,12 +4225,12 @@
       "key": "SEC-032",
       "id": "SEC-032",
       "agent": "security",
-      "title": "Throttle the sign-in page: every unauthenticated attempt writes a row, fires an outbound lookup, and the report reads them all back",
+      "title": "Extend the sign-in throttle to HTTP Basic and limit what unauthenticated requests can cost",
       "severity": "Medium",
       "status": "open",
       "statusText": "Open",
       "firstSeen": "2026-10-31",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -2914,7 +4244,7 @@
       "status": "open",
       "statusText": "Open",
       "firstSeen": "2026-10-31",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": [
@@ -2929,12 +4259,12 @@
       "key": "SEC-034",
       "id": "SEC-034",
       "agent": "security",
-      "title": "The read-only Bash guard is a deny-list that misses common write forms and blocks a common read form",
+      "title": "The read-only Bash guard is a deny-list that misses common write forms and blocks common read forms",
       "severity": "Low",
       "status": "open",
       "statusText": "Open",
       "firstSeen": "2026-10-31",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -2943,12 +4273,12 @@
       "key": "SEC-035",
       "id": "SEC-035",
       "agent": "security",
-      "title": "App Tests publishes this security report, with how to trigger every open finding, to every login on the live site",
-      "severity": "Medium",
+      "title": "Stop publishing open security findings' titles to every login, and stop redeploying on the security report",
+      "severity": "Low",
       "status": "open",
-      "statusText": "New",
+      "statusText": "Open",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -2957,12 +4287,110 @@
       "key": "SEC-036",
       "id": "SEC-036",
       "agent": "security",
-      "title": "Make the request-access throttle atomic and keep requester text from steering the owner's email",
+      "title": "Keep requester text out of the subject of the owner's access-request email",
+      "severity": "Low",
+      "status": "open",
+      "statusText": "Open",
+      "firstSeen": "2026-11-01",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "SEC-037": {
+      "key": "SEC-037",
+      "id": "SEC-037",
+      "agent": "security",
+      "title": "Authenticate the ingestion service and the rating service's reads and `POST /rate`; they rely on network position alone",
+      "severity": "Medium",
+      "status": "open",
+      "statusText": "Open",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "SEC-038": {
+      "key": "SEC-038",
+      "id": "SEC-038",
+      "agent": "security",
+      "title": "Reject control characters in `safeNext`: a tab defeats the local-path check on the post-sign-in redirect",
+      "severity": "Low",
+      "status": "resolved",
+      "statusText": "Resolved",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T09:10:00.000Z",
+      "closedAt": "2026-11-02T09:10:00.000Z",
+      "closedNote": "resolved: `safeNextPath` parses the value with `new URL` and rejects a changed origin or a `//` path, covering tabs, newlines, backslashes and `/.//` (`830a5c3`). Not yet on `origin/main`.",
+      "commits": []
+    },
+    "SEC-039": {
+      "key": "SEC-039",
+      "id": "SEC-039",
+      "agent": "security",
+      "title": "Decide whether the App Tests ledger hook should run on every tool call",
+      "severity": "Informational",
+      "status": "open",
+      "statusText": "Open",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "SEC-040": {
+      "key": "SEC-040",
+      "id": "SEC-040",
+      "agent": "security",
+      "title": "Stop rendering `msg` and `error` banners verbatim from the URL",
+      "severity": "Low",
+      "status": "open",
+      "statusText": "Open",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "SEC-041": {
+      "key": "SEC-041",
+      "id": "SEC-041",
+      "agent": "security",
+      "title": "Pin container base images and extend Dependabot beyond GitHub Actions",
+      "severity": "Low",
+      "status": "open",
+      "statusText": "Open",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "SEC-042": {
+      "key": "SEC-042",
+      "id": "SEC-042",
+      "agent": "security",
+      "title": "Decide how applicant identifiers are retained and shared before real submissions",
+      "severity": "Informational",
+      "status": "open",
+      "statusText": "Open",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "SEC-043": {
+      "key": "SEC-043",
+      "id": "SEC-043",
+      "agent": "security",
+      "title": "Confine the `/admin` proxy to `/admin` paths before it attaches the rating token",
       "severity": "Low",
       "status": "open",
       "statusText": "New",
-      "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T04:10:00.000Z",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T21:10:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -3375,7 +4803,7 @@
       "status": "declined",
       "statusText": "Declined",
       "firstSeen": "2026-10-22",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
       "closedAt": "2026-10-31T22:14:00.000Z",
       "closedNote": "declined on 2026-10-31: the developer detail is wanted on screen for the demo.",
       "commits": [
@@ -4018,6 +5446,11 @@
           "sha": "6c9dce6",
           "date": "2026-11-01T00:23:20.000Z",
           "subject": "docs: UX review after batch 4 (UX-042..047 resolved; UX-048, UX-049 new) and build-log entry"
+        },
+        {
+          "sha": "c2a079d",
+          "date": "2026-11-02T04:52:23.000Z",
+          "subject": "docs: snapshot the Nov 1 code, security and UX reviews"
         }
       ]
     },
@@ -4027,12 +5460,12 @@
       "agent": "ux",
       "title": "\"Today\" is the UTC date, so the desk says tomorrow from 8 PM Eastern and day counts and date stamps shift with it",
       "severity": "P3 Minor",
-      "status": "open",
-      "statusText": "Open",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-10-31",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
+      "closedAt": "2026-11-02T12:35:00.000Z",
+      "closedNote": "resolved in code: `lib/time.ts:33` adds `todayIso` in the books' zone, used by the desk, workbench, policy pages, quote validity, bind and the PDFs. Not rendered this run. Commit `8c25542`.",
       "commits": [
         {
           "sha": "6c9dce6",
@@ -4047,12 +5480,12 @@
       "agent": "ux",
       "title": "A bound file's workbench can show a premium and inputs that were never bound",
       "severity": "P1 Blocker",
-      "status": "open",
-      "statusText": "New",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
+      "closedAt": "2026-11-02T12:35:00.000Z",
+      "closedNote": "resolved in code: `workbench/page.tsx:69-75` reads the rating, inputs and schedule from the bound quote, and the Clear form is gated on no policy. The flags were not moved with them; see UX-070. Commit `381a128`.",
       "commits": []
     },
     "UX-051": {
@@ -4062,9 +5495,9 @@
       "title": "Open subjectivities can never be marked received, so the chase task cannot finish",
       "severity": "P1 Blocker",
       "status": "open",
-      "statusText": "New",
+      "statusText": "Open",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -4075,12 +5508,12 @@
       "agent": "ux",
       "title": "A bound renewal's comparison still leads with Re-rate",
       "severity": "P2 Major",
-      "status": "open",
-      "statusText": "New",
+      "status": "resolved",
+      "statusText": "Resolved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
-      "closedAt": null,
-      "closedNote": "",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
+      "closedAt": "2026-11-02T12:35:00.000Z",
+      "closedNote": "resolved in code: `renewal/page.tsx:190` hides the Rate section, `:93` and `:100` remove the prompts, `:64-66` uses the bound quote's comparison, and `worksheets.ts:161-162` refuses a stale re-rate. Commit `381a128`.",
       "commits": []
     },
     "UX-053": {
@@ -4090,9 +5523,9 @@
       "title": "Intake review speaks in schema paths and raw JSON",
       "severity": "P2 Major",
       "status": "open",
-      "statusText": "New",
+      "statusText": "Open",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -4104,9 +5537,9 @@
       "title": "Expired quotes look live everywhere except the desk",
       "severity": "P2 Major",
       "status": "open",
-      "statusText": "New",
+      "statusText": "Open",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -4118,9 +5551,9 @@
       "title": "The quote buries the total, gives no next step, and contradicts the binder on subjectivities",
       "severity": "P2 Major",
       "status": "open",
-      "statusText": "New",
+      "statusText": "Improved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -4132,9 +5565,9 @@
       "title": "The desk's \"+ N more\" is a dead end",
       "severity": "P2 Major",
       "status": "open",
-      "statusText": "New",
+      "statusText": "Open",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -4146,9 +5579,9 @@
       "title": "Header search cannot find prior-system policies",
       "severity": "P2 Major",
       "status": "open",
-      "statusText": "New",
+      "statusText": "Open",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -4160,9 +5593,9 @@
       "title": "Once intake is accepted, a wrong name or address cannot be fixed",
       "severity": "P2 Major",
       "status": "open",
-      "statusText": "New",
+      "statusText": "Open",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -4171,12 +5604,12 @@
       "key": "UX-059",
       "id": "UX-059",
       "agent": "ux",
-      "title": "A failed inbox extraction shows the raw error",
+      "title": "A failed inbox extraction can still show the raw error",
       "severity": "P3 Minor",
       "status": "open",
-      "statusText": "New",
+      "statusText": "Improved",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -4188,9 +5621,9 @@
       "title": "Assistant errors discard the server's message and the question",
       "severity": "P3 Minor",
       "status": "open",
-      "statusText": "New",
+      "statusText": "Open",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -4202,9 +5635,9 @@
       "title": "Accounting's \"Export\" buttons permanently stamp lines, and nothing downloads without stamping",
       "severity": "P3 Minor",
       "status": "open",
-      "statusText": "New",
+      "statusText": "Open",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -4216,9 +5649,9 @@
       "title": "Quotes and Policies have no filters and don't state their order",
       "severity": "P3 Minor",
       "status": "open",
-      "statusText": "New",
+      "statusText": "Open",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -4230,9 +5663,9 @@
       "title": "App Tests loses the before/after once a finding resolves, and Full report flattens every wireframe",
       "severity": "P3 Minor",
       "status": "open",
-      "statusText": "New",
+      "statusText": "Open",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -4244,9 +5677,9 @@
       "title": "The desk calls UW Desktop policies \"clean\" without looking at their losses",
       "severity": "P3 Minor",
       "status": "open",
-      "statusText": "New",
+      "statusText": "Open",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -4255,12 +5688,12 @@
       "key": "UX-065",
       "id": "UX-065",
       "agent": "ux",
-      "title": "A past effective date passes silently onto the quote",
+      "title": "A past effective date passes silently onto the quote, and Expiration invites edits it always refuses",
       "severity": "P3 Minor",
       "status": "open",
-      "statusText": "New",
+      "statusText": "Open",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -4272,9 +5705,9 @@
       "title": "An abandoned rate draft cannot be discarded, and a no-change activation stays enabled",
       "severity": "P3 Minor",
       "status": "open",
-      "statusText": "New",
+      "statusText": "Open",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
@@ -4283,12 +5716,96 @@
       "key": "UX-067",
       "id": "UX-067",
       "agent": "ux",
-      "title": "Six small copy, spacing and contrast slips",
+      "title": "Eight small copy, spacing and contrast slips",
       "severity": "P4 Polish",
       "status": "open",
-      "statusText": "New",
+      "statusText": "Open",
       "firstSeen": "2026-11-01",
-      "lastSeen": "2026-11-01T12:41:00.000Z",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "UX-068": {
+      "key": "UX-068",
+      "id": "UX-068",
+      "agent": "ux",
+      "title": "A file can only end in a bind: nothing can be declined, closed as lost, or non-renewed",
+      "severity": "P1 Blocker",
+      "status": "open",
+      "statusText": "New",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "UX-069": {
+      "key": "UX-069",
+      "id": "UX-069",
+      "agent": "ux",
+      "title": "Open referrals sit below the whole premium worksheet, with no link to them",
+      "severity": "P2 Major",
+      "status": "open",
+      "statusText": "New",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "UX-070": {
+      "key": "UX-070",
+      "id": "UX-070",
+      "agent": "ux",
+      "title": "A bound file's Referrals panel judges the worksheet, so \"since bind\" can be untrue",
+      "severity": "P3 Minor",
+      "status": "open",
+      "statusText": "New",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "UX-071": {
+      "key": "UX-071",
+      "id": "UX-071",
+      "agent": "ux",
+      "title": "Policy pages say \"bound\" forever, and never whether the policy is in force",
+      "severity": "P3 Minor",
+      "status": "open",
+      "statusText": "New",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "UX-072": {
+      "key": "UX-072",
+      "id": "UX-072",
+      "agent": "ux",
+      "title": "Policy tables show Total while the figures above them count Premium",
+      "severity": "P3 Minor",
+      "status": "open",
+      "statusText": "New",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
+      "closedAt": null,
+      "closedNote": "",
+      "commits": []
+    },
+    "UX-073": {
+      "key": "UX-073",
+      "id": "UX-073",
+      "agent": "ux",
+      "title": "A reload repeats an old result, because the confirmation lives in the address",
+      "severity": "P3 Minor",
+      "status": "open",
+      "statusText": "New",
+      "firstSeen": "2026-11-02",
+      "lastSeen": "2026-11-02T12:35:00.000Z",
       "closedAt": null,
       "closedNote": "",
       "commits": []
