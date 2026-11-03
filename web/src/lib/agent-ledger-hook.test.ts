@@ -84,3 +84,64 @@ test("a failed rebuild warns once as valid JSON, never blocks, and waits for the
   assert.equal(JSON.parse(p.run().stdout).systemMessage.length > 0, true, "the next report tries again");
   p.done();
 });
+
+// Sending the reports to the deployment (step 30): after the rebuild, in the background, only where it is turned on.
+const SENDS = "sends.txt";
+function publishing(send = "") {
+  const p = project();
+  writeFileSync(path.join(p.root, "web/scripts/publish-reports.ts"), `import { appendFileSync } from "node:fs";\nappendFileSync("${SENDS}", "x");\n${send}\n`);
+  const sends = () => (existsSync(path.join(p.root, SENDS)) ? readFileSync(path.join(p.root, SENDS), "utf8").length : 0);
+  const conf = path.join(p.root, ".fly-reports-publish");
+  return { ...p, conf, sends, on: () => writeFileSync(conf, "url=https://example.test\ntoken=x\n") };
+}
+async function until(done: () => boolean) {
+  for (let i = 0; i < 200 && !done(); i++) await new Promise((r) => setTimeout(r, 50));
+  assert.ok(done(), "the background send never finished");
+}
+
+test("with publishing off nothing is sent, however the reports change", async () => {
+  const p = publishing();
+  p.at("docs/CODE_REVIEW.md", 60);
+  assert.deepEqual(p.run(), { status: 0, stdout: "" });
+  assert.equal(p.rebuilds(), 1);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(p.sends(), 0);
+  p.done();
+});
+
+test("with publishing on a new report is sent once, without holding up the session", async () => {
+  const p = publishing();
+  p.on();
+  p.at("docs/CODE_REVIEW.md", 60);
+  assert.deepEqual(p.run(), { status: 0, stdout: "" });
+  await until(() => existsSync(`${p.conf}.sent`));
+  assert.equal(p.sends(), 1);
+  assert.ok(!existsSync(`${p.conf}.try`), "a send that worked doesn't hold back the next");
+  p.run();
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(p.sends(), 1, "dealt with, not sent on every later tool");
+
+  utimesSync(`${p.conf}.sent`, NOW - 60, NOW - 60);   // macOS's sh compares these to the second
+  utimesSync(path.join(p.root, "docs/CODE_REVIEW.md"), NOW + 60, NOW + 60);
+  p.run();
+  await until(() => p.sends() === 2);
+  p.done();
+});
+
+test("a failed send says why and waits five minutes before trying again", async () => {
+  const p = publishing(`console.error("no route to host"); process.exit(1);`);
+  p.on();
+  p.at("docs/CODE_REVIEW.md", 60);
+  p.run();
+  await until(() => p.sends() === 1 && readFileSync(`${p.conf}.log`, "utf8").includes("no route to host"));
+  await new Promise((r) => setTimeout(r, 200));
+  assert.ok(!existsSync(`${p.conf}.sent`));
+  assert.deepEqual(p.run(), { status: 0, stdout: "" });
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(p.sends(), 1, "not on every tool while the site is unreachable");
+
+  utimesSync(`${p.conf}.try`, NOW - 360, NOW - 360);
+  p.run();
+  await until(() => p.sends() === 2);
+  p.done();
+});

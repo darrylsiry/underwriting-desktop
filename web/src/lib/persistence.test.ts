@@ -3,6 +3,9 @@
 // dropped after; the rating service is stubbed, so no test depends on its rates.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { after, before, test, type TestContext } from "node:test";
 import { Client } from "pg";
 import type { Extraction, SubmissionData } from "./submission.ts";
@@ -33,10 +36,12 @@ const options = { skip: reachable ? false : "Postgres not available" };
 
 const { customerDb, policyDb, pools } = await import("./db.ts");
 const { auditTrail } = await import("./audit.ts");
+const { loadAgentActivity, mockupIds, readMockup, readReport } = await import("./agent-activity.ts");
 const { addDays } = await import("./quote-terms.ts");
 const { loadDashboard } = await import("./dashboard.ts");
 const { migrate } = await import("./migrate.ts");
 const { bindQuote } = await import("./policies.ts");
+const { storePublished } = await import("./published-reports.ts");
 const { issueQuote } = await import("./quotes.ts");
 const { startRenewal } = await import("./renewals.ts");
 const { acceptSubmission, dataFingerprint, getSubmission, saveReview, storeSubmission } = await import("./submissions.ts");
@@ -274,4 +279,52 @@ test("the desk and its renewal list show a bound policy's own claims (CR-135)", 
 
   const row = (await loadDashboard(ACTOR)).renewals.find((p) => p.id === policy.id)!;
   assert.deepEqual([row.claims, row.incurred, row.open_claims], [2, 42_500, 1]);
+});
+
+test("App Tests reads the newest of the published set and the deployed copy, and only while publishing is on (step 30)", options, async (t) => {
+  const dir = mkdtempSync(path.join(tmpdir(), "agent-reports-"));
+  const saved = { dir: process.env.AGENT_REPORTS_DIR, token: process.env.REPORTS_PUBLISH_TOKEN };
+  t.after(() => {
+    rmSync(dir, { recursive: true, force: true });
+    for (const [name, value] of [["AGENT_REPORTS_DIR", saved.dir], ["REPORTS_PUBLISH_TOKEN", saved.token]] as const) {
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    }
+  });
+  process.env.AGENT_REPORTS_DIR = dir;
+  process.env.REPORTS_PUBLISH_TOKEN = "test-token";
+  const ledger = (updatedAt: string) => JSON.stringify({ version: 1, updatedAt, runs: [], items: {} });
+  const report = (id: string) => `# Code review: test\n\n- **Run:** 2026-11-02 20:12\n\n## Medium\n\n### ${id} — A finding\n- **Status:** Open\n`;
+  const baked = (updatedAt: string) => writeFileSync(path.join(dir, "AGENT_LEDGER.json"), ledger(updatedAt));
+  const WRITTEN = "2026-11-02T20:12:00.000Z";
+  const file = (name: string, text: string) => ({ name, text, written_at: WRITTEN });
+  baked("2026-11-02T10:00:00.000Z");
+  writeFileSync(path.join(dir, "CODE_REVIEW.md"), report("CR-001"));
+
+  assert.equal((await loadAgentActivity()).source, "deployed copy", "nothing published yet");
+
+  const set = [file("AGENT_LEDGER.json", ledger("2026-11-02T12:00:00.000Z")), file("CODE_REVIEW.md", report("CR-002")), file("ux-mockups/UX-068.html", "<p>after</p>")];
+  assert.equal(await storePublished(set), "stored");
+  assert.equal(await storePublished(set), "unchanged");
+  const activity = await loadAgentActivity();
+  assert.equal(activity.source, "published");
+  assert.ok(activity.publishedAt);
+  assert.equal(activity.written.code?.toISOString(), WRITTEN, "keeps when the report was written, not when it was sent");
+  assert.match((await readReport("code"))!.text, /CR-002/);
+  assert.deepEqual([...await mockupIds()], ["UX-068"]);
+  assert.equal(await readMockup("UX-068"), "<p>after</p>");
+  assert.equal(await readReport("security"), null, "never held, so /app-tests/security stays a 404 (CR-097)");
+
+  assert.equal(await storePublished([file("AGENT_LEDGER.json", ledger("2026-11-02T11:00:00.000Z")), file("CODE_REVIEW.md", report("CR-003"))]), "stale");
+  assert.match((await readReport("code"))!.text, /CR-002/, "an older set changes nothing");
+
+  assert.equal(await storePublished(set.slice(0, 2)), "stored");
+  assert.deepEqual([...await mockupIds()], [], "a mockup the agent removed goes with the next set");
+
+  baked("2026-11-02T13:00:00.000Z");
+  assert.equal((await loadAgentActivity()).source, "deployed copy", "the image's copy is newer");
+  baked("2026-11-02T10:00:00.000Z");
+
+  delete process.env.REPORTS_PUBLISH_TOKEN;
+  assert.equal((await loadAgentActivity()).source, "deployed copy", "with publishing off the stored set is ignored");
+  assert.match((await readReport("code"))!.text, /CR-001/);
 });

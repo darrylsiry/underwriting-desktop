@@ -11,8 +11,8 @@ const cookie = (name: string) => signSession(name, KEY, new Date(Date.now() + 60
 const basic = (s: string) => `Basic ${Buffer.from(s).toString("base64")}`;
 
 test("the public paths are exact: a look-alike route is gated (CR-099)", () => {
-  for (const p of ["/signin", "/signin/", "/signout", "/request-access", "/request-access/", "/api/live"]) assert.ok(PUBLIC_PATH.test(p), p);
-  for (const p of ["/", "/signin-help", "/signinx", "/signout2", "/request-access-admin", "/api/live2", "/api/livestock", "/api/gl", "/x/signin", "/SIGNIN"]) assert.ok(!PUBLIC_PATH.test(p), p);
+  for (const p of ["/signin", "/signin/", "/signout", "/request-access", "/request-access/", "/api/live", "/api/reports/publish"]) assert.ok(PUBLIC_PATH.test(p), p);
+  for (const p of ["/", "/signin-help", "/signinx", "/signout2", "/request-access-admin", "/api/live2", "/api/livestock", "/api/gl", "/api/reports/logins", "/api/reports/publish2", "/x/signin", "/SIGNIN"]) assert.ok(!PUBLIC_PATH.test(p), p);
 });
 
 test("the middleware runs on every path except static files, so it can strip the identity header there (CR-099)", () => {

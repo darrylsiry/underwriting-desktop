@@ -266,7 +266,8 @@ export default async function AppTestsPage({ searchParams }: { searchParams: Pro
         Read only; the agents and the people fixing things do the work.
       </p>
       <p className="mt-2 text-xs text-slate-500">
-        Reading the {activity.source === "checkout" ? "reports in this checkout's docs folder (current as each agent writes)" : "reports deployed with this release"}
+        Reading the {activity.source === "checkout" ? "reports in this checkout's docs folder (current as each agent writes)"
+          : activity.source === "published" ? <>reports the agents last published, <Stamp at={activity.publishedAt} /></> : "reports deployed with this release"}
         {t.since && <> · history since {day(t.since)}</>}
         {activity.ledgerUpdatedAt && <> · ledger updated <Stamp at={activity.ledgerUpdatedAt} /></>}
       </p>

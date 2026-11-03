@@ -3,8 +3,8 @@
 import { AUTH_USER_HEADER, authenticate, type Users } from "./basic-auth.ts";
 import { verifySession } from "./session.ts";
 
-/** Reachable without signing in. Anchored, so a route added as /signin-help is gated, not public by accident. */
-export const PUBLIC_PATH = /^\/(signin|signout|request-access|api\/live)(\/|$)/;
+/** Reachable without signing in (the publish route has its own token). Anchored, so a route added as /signin-help is gated, not public by accident. */
+export const PUBLIC_PATH = /^\/(signin|signout|request-access|api\/live|api\/reports\/publish)(\/|$)/;
 
 /** Who the request proves it is: a live session of a login that still exists (CR-083), or HTTP Basic. */
 export function requestUser(cookie: string | undefined, authorization: string | null, users: Users, key: string): string | null {

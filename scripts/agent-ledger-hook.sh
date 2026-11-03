@@ -5,6 +5,9 @@
 # what it wrote, because the scheduled reviews copy their report into place with a shell command.
 # Costs a few file tests when nothing changed. Never blocks the session: a failed rebuild warns
 # once, and the next change to a report tries again.
+#
+# Then, where scripts/reports-publish-setup.sh has turned it on, it sends the reports to App Tests on
+# the deployment (step 30), so that page is current without a push.
 cat > /dev/null   # the hook's input isn't needed; read it so the sender never hits a closed pipe
 root="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 ledger="$root/docs/AGENT_LEDGER.json"
@@ -13,16 +16,32 @@ stale=
 for report in CODE_REVIEW SECURITY_REVIEW UX_REVIEW UAT_REPORT; do
   if [ "$root/docs/$report.md" -nt "$ledger" ]; then stale=1; fi
 done
-[ -n "$stale" ] || exit 0
-
-# Dated from before the rebuild, so a report written while it runs still counts as newer next time.
-stamp=$(mktemp)
-out=$(cd "$root" && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON web/scripts/agent-ledger.ts 2>&1)
-status=$?
-touch -r "$stamp" "$ledger"
-rm -f "$stamp"
-if [ "$status" -ne 0 ]; then
-  msg=$(printf '%s' "$out" | tail -n 1 | tr -d '"\\' | cut -c1-200)
-  printf '{"systemMessage":"App Tests ledger not updated: %s"}\n' "$msg"
+if [ -n "$stale" ]; then
+  # Dated from before the rebuild, so a report written while it runs still counts as newer next time.
+  stamp=$(mktemp)
+  out=$(cd "$root" && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON web/scripts/agent-ledger.ts 2>&1)
+  status=$?
+  touch -r "$stamp" "$ledger"
+  rm -f "$stamp"
+  if [ "$status" -ne 0 ]; then
+    msg=$(printf '%s' "$out" | tail -n 1 | tr -d '"\\' | cut -c1-200)
+    printf '{"systemMessage":"App Tests ledger not updated: %s"}\n' "$msg"
+  fi
 fi
+
+# In the background, so a session never waits on the network. The marker carries the ledger's own
+# date, so a report that lands during the send still counts as newer. A failed send leaves its reason
+# in .fly-reports-publish.log and tries again on a later tool, at most every five minutes.
+conf="$root/.fly-reports-publish"
+[ -f "$conf" ] || exit 0
+[ "$ledger" -nt "$conf.sent" ] || exit 0
+[ -z "$(find "$conf.try" -mmin -5 2>/dev/null)" ] || exit 0
+touch "$conf.try"
+(
+  touch -r "$ledger" "$conf.sending"
+  if cd "$root" && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON web/scripts/publish-reports.ts > "$conf.log" 2>&1; then
+    mv "$conf.sending" "$conf.sent"
+    rm -f "$conf.try"
+  fi
+) < /dev/null > /dev/null 2>&1 &
 exit 0

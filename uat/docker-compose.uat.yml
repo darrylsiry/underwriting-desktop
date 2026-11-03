@@ -22,5 +22,6 @@ services:
       BASIC_AUTH_USERS: "uat:uat-sandbox-pass,uat2:uat-sandbox-pass-2,underwriter2:uat-sandbox-pass-uw2"   # underwriter2 owns prior-system book policies in the seed; sandbox-only password
       SESSION_SECRET: "uat-sandbox-session-secret-not-for-production"
       SEED_HISTORY: "${UAT_SEED_HISTORY:-20}"
+      REPORTS_PUBLISH_TOKEN: "uat-publish-token-not-for-production"   # tests/sandbox/70-publish-reports.spec.ts
     volumes: !override
       - ./uat/.work/inbox:/inbox

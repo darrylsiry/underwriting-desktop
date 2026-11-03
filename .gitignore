@@ -9,6 +9,8 @@ storage/
 **/.sandbox-ca.crt
 .claude/security-review/
 .fly-credentials
+# App Tests publishing (step 30): the token, and the hook's markers and last result
+.fly-reports-publish*
 # web/inbox is a deploy-time copy of samples/submissions (see scripts/fly-deploy.sh)
 web/inbox/*
 !web/inbox/.gitkeep
