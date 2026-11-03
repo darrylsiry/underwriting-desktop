@@ -7,12 +7,12 @@ import { Pill, RowLink, Section, money, when, whenDate } from "@/components/ui";
 import { policiesForSubmission } from "@/lib/policies";
 import { addYears, producerOf, suggestedSubjectivities } from "@/lib/quote-terms";
 import { getQuote, quotesForSubmission } from "@/lib/quotes";
-import { changeSummary, compareRenewal, coverageGapNote, inputText, pctText, signed, type Comparison, type Side } from "@/lib/renewal-compare";
+import { changeSummary, compareRenewal, coverageGapNote, quoteDrift, pctText, signed, type Comparison, type Side } from "@/lib/renewal-compare";
 import { factorText } from "@/lib/format";
 import { expiringOf } from "@/lib/renewals";
 import { getSubmission } from "@/lib/submissions";
 import { currentUser } from "@/lib/user";
-import { inputChanges, inputsHash, worksheetChips, type RatingInputs } from "@/lib/worksheet";
+import { worksheetChips } from "@/lib/worksheet";
 import { activeRateVersion, openWorksheet, readiness } from "@/lib/worksheets";
 import { IssueQuoteForm } from "../issue-quote-form";
 import { QuoteDriftNotice, StatusChips } from "../status-chips";
@@ -72,12 +72,7 @@ export default async function RenewalPage({ params, searchParams }: Props) {
   const b = comparison?.bridge;
 
   // UX-003: the same chip pair and drift notice as the workbench, so the two pages agree about one file.
-  const quoted = latest && !policy ? await getQuote(latest.id) : null;
-  const quoteCurrent = !!quoted && inputsHash(quoted.rating_inputs, quoted.schedule) === inputsHash(ws.rating_inputs, ws.schedule);
-  const drift = quoted && !quoteCurrent
-    ? inputChanges({ inputs: quoted.rating_inputs, schedule: quoted.schedule }, { inputs: ws.rating_inputs, schedule: ws.schedule })
-        .map((c) => ({ label: c.label, from: changeText(c.key, c.from), to: changeText(c.key, c.to) }))
-    : [];
+  const { quoteCurrent, drift } = quoteDrift(latest && !policy ? await getQuote(latest.id) : null, ws);
   const chips = worksheetChips({
     policyNumber: policy?.policy_number, quote: latest ? { number: latest.quote_number, version: latest.version } : null, quoteCurrent,
     hasRating: !!ws.last_rating, rated, ready, openReferrals: openReferrals.length,
@@ -271,7 +266,3 @@ export default async function RenewalPage({ params, searchParams }: Props) {
   );
 }
 
-/** A changed value in the drift notice: inputs through `inputText`, schedule percents as given. */
-function changeText(key: string, v: unknown): string {
-  return key.startsWith("schedule.") ? String(v) : inputText(key as keyof RatingInputs, v as RatingInputs[keyof RatingInputs]);
-}

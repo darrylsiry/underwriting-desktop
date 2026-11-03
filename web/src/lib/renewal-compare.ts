@@ -7,7 +7,7 @@ import type { ProducerFields } from "./quote-terms";
 import type { RatingInputs, ScheduleItem } from "./worksheet";
 import type { Rating } from "./worksheets";
 // Explicit .ts extension so node:test can load this module directly (worksheet.ts is itself pure).
-import { INPUT_DEFS, SCHEDULE_CATEGORIES, scheduleTotal } from "./worksheet.ts";
+import { INPUT_DEFS, SCHEDULE_CATEGORIES, inputChanges, inputsHash, scheduleTotal } from "./worksheet.ts";
 
 /** Snapshot of the policy being renewed, stored on the renewal submission when it starts. */
 export type ExpiringPolicy = {
@@ -145,6 +145,23 @@ function scheduleReasons(a: ScheduleItem[], b: ScheduleItem[]): string[] {
     else if (x && y && x.pct !== y.pct) out.push(`The adjustment for ${label.toLowerCase()} changed from ${schedText(x.pct)} to ${schedText(y.pct)}.`);
   }
   return out;
+}
+
+type Terms = { rating_inputs: RatingInputs; schedule: ScheduleItem[] };
+
+/**
+ * Does the worksheet still say what the latest issued quote says? The quote froze its inputs and schedule (UX-003).
+ * The workbench and the renewal page both read this, so they agree about one file (CR-180).
+ */
+export function quoteDrift(quoted: Terms | null, ws: Terms) {
+  const quoteCurrent = !!quoted && inputsHash(quoted.rating_inputs, quoted.schedule) === inputsHash(ws.rating_inputs, ws.schedule);
+  // A schedule change arrives as its percent; every input reads as it does on the worksheet.
+  const text = (key: string, v: unknown) => key.startsWith("schedule.") ? String(v) : inputText(key as keyof RatingInputs, v as RatingInputs[keyof RatingInputs]);
+  const drift = quoted && !quoteCurrent
+    ? inputChanges({ inputs: quoted.rating_inputs, schedule: quoted.schedule }, { inputs: ws.rating_inputs, schedule: ws.schedule })
+        .map((c) => ({ label: c.label, from: text(c.key, c.from), to: text(c.key, c.to) }))
+    : [];
+  return { quoteCurrent, drift };
 }
 
 const RATE_PER_1000 = /\$([\d.]+) per \$1,000/;

@@ -944,3 +944,21 @@ def test_a_rateable_class_code_on_a_form_is_kept():
     pdf = fillable_pdf("INSURANCE APPLICATION", {"GeneralLiability_Hazard_ClassCode_A": "98304"})
     result = pipeline.run([("app.pdf", pdf)], classes, use_claude=False)
     assert result["submission"]["operations"]["class_code"] == "98304" and not any("rateable" in w for w in result["warnings"])
+
+
+@pytest.mark.parametrize("line", ["NO LOSS RUNS AVAILABLE", "LOSS RUNS NOT AVAILABLE", "LOSS RUNS PENDING FROM PRIOR CARRIER"])
+def test_a_letter_saying_there_are_no_loss_runs_isnt_one(line):
+    """CR-177: words the CR-160 fix didn't list."""
+    assert load("letter.pdf", fillable_pdf(line, {}))[0].doc_type == "other"
+
+
+def test_claude_corrects_a_heading_that_only_names_loss_runs(monkeypatch):
+    stored_claude(monkeypatch, document_types={"letter.pdf": "other"})
+    result = pipeline.run([("letter.pdf", fillable_pdf("RE: ACME CONTRACTING - LOSS RUNS", {}))], classes=[])
+    assert result["documents"][0]["doc_type"] == "other"
+
+
+def test_claude_doesnt_overrule_a_loss_run_with_its_own_terms(monkeypatch):
+    stored_claude(monkeypatch, document_types={"lr.pdf": "other"})
+    result = pipeline.run([("lr.pdf", fillable_pdf("LOSS RUN REPORT - VALUED AS OF 10/01/2026", {}))], classes=[])
+    assert result["documents"][0]["doc_type"] == "loss_run"

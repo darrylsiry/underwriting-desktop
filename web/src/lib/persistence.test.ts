@@ -507,3 +507,32 @@ test("leftover test databases go when their process has gone, and no others do (
   assert.ok(!left.includes(gone));
   for (const own of Object.values(names)) assert.ok(left.includes(own), own);
 });
+
+test("long-dead tasks don't outrank current work, and an old expired quote leaves the desk (CR-174)", options, async () => {
+  const longAgo = addDays(todayIso(), -200);
+  const dead = await issueQuote(await ratedSubmission(), period(longAgo), ACTOR, new Date(`${longAgo}T12:00:00Z`));
+  const liveQuote = await issueQuote(await ratedSubmission(), period(), ACTOR);
+  const book = await bookPolicy({ expiration_date: addDays(todayIso(), 2) });
+  const overdue = await issueQuote(await ratedSubmission(), { ...period(), subjectivities: "Signed application" }, ACTOR);
+  const policy = await bindQuote(overdue.id, new Set(), ACTOR);
+  await policyDb.query(`UPDATE policies SET subjectivities = jsonb_set(subjectivities, '{0,due_date}', to_jsonb($2::text)) WHERE id = $1`, [policy.id, addDays(todayIso(), -100)]);
+
+  const { tasks } = await loadDashboard(ACTOR);
+  const at = (needle: string) => tasks.findIndex((t) => t.href.includes(needle));
+  assert.equal(at(dead.id), -1, "dropped once 30 days past valid until");
+  assert.ok(at(liveQuote.id) >= 0, "a live quote stays");
+  assert.ok(at(book) < at(policy.id), "the renewal due in 2 days sorts ahead of a subjectivity 100 days overdue");
+  assert.equal(tasks[at(policy.id)].urgency, -7);
+});
+
+test("the assistant says a rule raised since bind needs no action, and calls nothing open on a bound file (CR-175)", options, async () => {
+  const sub = await ratedSubmission(20);
+  await saveAndRate(sub, formOf((await getWorksheet(sub.id))!.rating_inputs, { experience_mod: "0.90" }), ACTOR);
+  await clearReferral(sub, "EXPERIENCE_MOD", "Confirmed against the bureau worksheet", ACTOR);
+  await bindQuote((await issueQuote(sub, period(), ACTOR)).id, new Set(), ACTOR);
+  await customerDb.query("UPDATE worksheets SET referral_clearances = referral_clearances - 'EXPERIENCE_MOD' WHERE submission_id = $1", [sub.id]);
+
+  const { worksheet } = await tool("get_submission").run({ reference_or_id: sub.reference }, toolCtx as never) as { worksheet: { referrals: { code: string; severity: string; status: string }[] } };
+  assert.equal(worksheet.referrals.find((r) => r.code === "EXPERIENCE_MOD")?.status, "raised_since_bind");
+  assert.ok(!worksheet.referrals.some((r) => r.severity === "refer" && r.status === "open"));
+});

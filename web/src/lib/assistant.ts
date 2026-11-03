@@ -74,7 +74,7 @@ export async function* askAssistant(
   const tools = deps.tools ?? (await import("./assistant-tools")).APP_TOOLS;
   const model = deps.model ?? ASSISTANT_MODEL;
   const messages: Anthropic.Beta.Messages.BetaMessageParam[] = [
-    ...history.slice(-12).map((t) => ({ role: t.role, content: t.text })),
+    ...history.filter((t) => t.text.trim()).slice(-12).map((t) => ({ role: t.role, content: t.text })),   // the API refuses an empty message (CR-176)
     { role: "user", content: `Context: today is ${ctx.today}; the person asking is signed in as ${ctx.actor}.\n\n${question}` },
   ];
   const deadlineMs = deps.deadlineMs ?? QUESTION_DEADLINE_MS;
@@ -118,6 +118,10 @@ export async function* askAssistant(
     const toolUses = res.content.filter((b): b is Anthropic.Beta.Messages.BetaToolUseBlock => b.type === "tool_use");
     if (res.stop_reason !== "tool_use" || !toolUses.length) {
       const text = res.content.filter((b): b is Anthropic.Beta.Messages.BetaTextBlock => b.type === "text").map((b) => b.text).join("\n").trim();
+      if (!text) {
+        yield { type: "error", message: "The model returned no answer; try again." };   // a blank bubble, and a turn that would break the rest of the chat (CR-176)
+        return;
+      }
       yield { type: "answer", markdown: text + (res.stop_reason === "max_tokens" ? "\n\n_(The answer was cut off at the length limit.)_" : ""), model: res.model, steps, usage };
       return;
     }

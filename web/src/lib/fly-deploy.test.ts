@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -29,7 +29,7 @@ esac
 exit 0
 `;
 
-function deploy(o: { secrets?: string; listFails?: boolean; credentials?: string; ci?: boolean }) {
+function deploy(o: { secrets?: string; listFails?: boolean; credentials?: string; ci?: boolean; samples?: boolean }) {
   const root = mkdtempSync(path.join(tmpdir(), "fly-deploy-"));
   const log = path.join(root, ".fly-calls");
   const env = {   // nothing else from this shell: no CI, no real Fly token, no GIT_DIR
@@ -44,11 +44,18 @@ function deploy(o: { secrets?: string; listFails?: boolean; credentials?: string
     copyFileSync(SCRIPT, path.join(root, "scripts/fly-deploy.sh"));
     writeFileSync(path.join(root, ".bin/fly"), FLY_STUB, { mode: 0o755 });
     writeFileSync(log, "");
+    if (o.samples) {
+      for (const d of ["01-tracked", "20261103-generated"]) {
+        mkdirSync(path.join(root, "samples/submissions", d));
+        writeFileSync(path.join(root, "samples/submissions", d, "app.pdf"), "x");
+      }
+      assert.equal(spawnSync("git", ["add", "samples/submissions/01-tracked"], { cwd: root, env }).status, 0);
+    }
     const creds = path.join(root, ".fly-credentials");
     if (o.credentials !== undefined) writeFileSync(creds, o.credentials);
     const r = spawnSync("bash", [path.join(root, "scripts/fly-deploy.sh")], { cwd: root, env, encoding: "utf8" });
     return {
-      status: r.status, out: `${r.stdout}\n${r.stderr}`, calls: readFileSync(log, "utf8"),
+      status: r.status, out: `${r.stdout}\n${r.stderr}`, calls: readFileSync(log, "utf8"), inbox: readdirSync(path.join(root, "web/inbox")),
       credentials: existsSync(creds) ? readFileSync(creds, "utf8") : null,
       credentialsMode: existsSync(creds) ? statSync(creds).mode & 0o777 : null,
     };
@@ -107,4 +114,8 @@ test("on CI a missing login still stops the run", () => {
   assert.notEqual(r.status, 0);
   assert.match(r.out, /Run scripts\/fly-deploy\.sh locally once/);
   assert.equal(r.credentials, null);
+});
+
+test("a deploy ships the tracked sample submissions, not folders the local stack generated (CR-178)", () => {
+  assert.deepEqual(deploy({ samples: true }).inbox, ["01-tracked"]);
 });

@@ -14,12 +14,12 @@ import { getSubmission } from "@/lib/submissions";
 import { todayIso } from "@/lib/time";
 import { currentUser } from "@/lib/user";
 import {
-  INPUT_DEFS, MAX_CATEGORY_PCT, SCHEDULE_CATEGORIES, UW_AUTHORITY_PCT, inputChanges, inputUnit, inputsHash, scheduleMod, scheduleTotal,
+  INPUT_DEFS, MAX_CATEGORY_PCT, SCHEDULE_CATEGORIES, UW_AUTHORITY_PCT, inputUnit, scheduleMod, scheduleTotal,
   worksheetChips, worksheetFingerprint, type RatingInputs,
 } from "@/lib/worksheet";
 import { factorText } from "@/lib/format";
 import { activeRateVersion, boundFlags, money, openWorksheet, readiness } from "@/lib/worksheets";
-import { inputText } from "@/lib/renewal-compare";
+import { inputText, quoteDrift } from "@/lib/renewal-compare";
 import { expiringOf } from "@/lib/renewals";
 import { ActionDirtyHint, ActionError, ActionForm, ActionFormProvider, ActionInput, ActionSelect, ActionSubmit, FieldMessage, WaitForSave } from "../action-form";
 import { IssueQuoteForm } from "../issue-quote-form";
@@ -76,12 +76,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
   const total = scheduleTotal(shownSchedule);
 
   // UX-003: does the worksheet still say what the latest issued quote says? The quote froze its inputs and schedule.
-  const quoted = latest && !policy ? await getQuote(latest.id) : null;
-  const quoteCurrent = !!quoted && inputsHash(quoted.rating_inputs, quoted.schedule) === inputsHash(ws.rating_inputs, ws.schedule);
-  const drift = quoted && !quoteCurrent
-    ? inputChanges({ inputs: quoted.rating_inputs, schedule: quoted.schedule }, { inputs: ws.rating_inputs, schedule: ws.schedule })
-        .map((c) => ({ label: c.label, from: changeText(c.key, c.from), to: changeText(c.key, c.to) }))
-    : [];
+  const { quoteCurrent, drift } = quoteDrift(latest && !policy ? await getQuote(latest.id) : null, ws);
   const differs = drift.length > 0;
   const chips = worksheetChips({
     policyNumber: policy?.policy_number, quote: latest ? { number: latest.quote_number, version: latest.version } : null, quoteCurrent,
@@ -408,11 +403,6 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
 function editValue(d: (typeof INPUT_DEFS)[number], inputs: RatingInputs): string {
   const t = inputText(d.key, inputs[d.key]);
   return d.kind === "money" ? t.replace(/^-?\$/, (m) => m.replace("$", "")) : d.kind === "pct" ? t.replace(/%$/, "") : t;
-}
-
-/** A changed value in the drift notice: inputs through `inputText`, schedule percents as given. */
-function changeText(key: string, v: unknown): string {
-  return key.startsWith("schedule.") ? String(v) : inputText(key as keyof RatingInputs, v as RatingInputs[keyof RatingInputs]);
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {

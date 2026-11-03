@@ -149,7 +149,8 @@ done
 step "Deploy web (public)"
 # The Submissions inbox reads a drop folder; on Fly it's baked into the web image from samples/.
 find "$ROOT/web/inbox" -mindepth 1 ! -name .gitkeep -exec rm -rf {} +
-cp -R "$ROOT/samples/submissions/." "$ROOT/web/inbox/"
+# Tracked folders only: compose lets the app generate more into samples/submissions, and those must not ship (CR-178).
+for d in $(git -C "$ROOT" ls-files samples/submissions | cut -d/ -f3 | sort -u); do cp -R "$ROOT/samples/submissions/$d" "$ROOT/web/inbox/"; done
 # App Tests (step 26) reads the review agents' reports and their ledger; on Fly they are baked into the
 # web image from docs/, so the page starts from what was committed when this deploy ran, and reports
 # published afterwards (step 30, scripts/reports-publish-setup.sh) keep it current. Not the security

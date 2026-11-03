@@ -98,3 +98,20 @@ test("an API failure still reads as itself, not as a stop", async () => {
   const failing: Create = async () => { throw new Error("boom"); };
   assert.deepEqual((await ask({ create: failing })).at(-1), { type: "error", message: "boom" });
 });
+
+test("a reply with no text is an error, not a blank answer that breaks the chat (CR-176)", async () => {
+  const events = await collect(async () => message({ stop_reason: "end_turn", content: [{ type: "thinking", thinking: "hmm", signature: "s" }] }));
+  const last = events.at(-1) as Extract<AssistantEvent, { type: "error" }>;
+  assert.equal(last.type, "error");
+  assert.match(last.message, /no answer/);
+});
+
+test("a blank turn in the history never reaches the model (CR-176)", async () => {
+  const seen: Parameters<Create>[0][] = [];
+  const create: Create = async (params) => {
+    seen.push(params);
+    return message({ stop_reason: "end_turn", content: [{ type: "text", text: "ok" }] });
+  };
+  for await (const _ of askAssistant("Next?", [{ role: "user", text: "hi" }, { role: "assistant", text: "  " }], ctx, { create, tools })) void _;
+  assert.equal(seen[0].messages.length, 2);
+});

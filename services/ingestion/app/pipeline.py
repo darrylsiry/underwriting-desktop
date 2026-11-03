@@ -96,8 +96,9 @@ def run(files: list[tuple[str, bytes]], classes: list[dict], use_claude: bool = 
             claude_info = {"model": result.model, "usage": result.usage}
             for d in to_read:
                 d.read_by_claude = True
-                # Only what the file couldn't say itself: a scan has no first-page text, a Word file no heading test (CR-153).
-                if d.doc_type in ("other", "application") and result.document_types.get(d.filename) in DOC_TYPE_LABELS:
+                # Only what the file couldn't say itself: a scan has no first-page text, a Word file no heading test (CR-153),
+                # and a subject line that only names loss runs isn't one (CR-177).
+                if (d.weak_type or d.doc_type in ("other", "application")) and result.document_types.get(d.filename) in DOC_TYPE_LABELS:
                     d.doc_type = result.document_types[d.filename]
         except claude.ExtractionError as e:
             warnings.append(f"{e}; {len(to_read)} document(s) were not read")

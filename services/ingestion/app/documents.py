@@ -21,7 +21,7 @@ from app import acord
 
 NOT_READ_FROM_FORM = ("loss_run", "supplemental_questionnaire")
 # A mention isn't a loss run: applications and cover letters say "attach loss runs" (CR-160).
-LOSS_RUN_MENTION = re.compile(r"\b(ATTACH\w*|ENCLOS\w*|INCLUD\w*|SEE|PLEASE|PROVIDE\w*|REQUEST\w*|SEND|SENT|FOLLOW\w*|NEED\w*|REQUIRED)\b")
+LOSS_RUN_MENTION = re.compile(r"\b(ATTACH\w*|ENCLOS\w*|INCLUD\w*|SEE|PLEASE|PROVIDE\w*|REQUEST\w*|SEND|SENT|FOLLOW\w*|NEED\w*|REQUIRED|NO|NOT|PENDING)\b")
 LOSS_RUN_TERMS = ("TOTAL INCURRED", "VALUED AS OF", "VALUATION DATE")
 
 
@@ -37,6 +37,7 @@ class Document:
     parent: str | None = None    # email this came attached to
     skipped: list[str] = field(default_factory=list)  # an email's attachments that weren't read, as warnings
     read_by_claude: bool = False  # set by the pipeline once a Claude call over this document succeeds
+    weak_type: bool = False      # a loss-run heading with none of a loss run's own terms: Claude may correct it (CR-177)
 
     @property
     def read_from_form(self) -> bool:
@@ -103,7 +104,9 @@ def _pdf(filename: str, data: bytes, parent: str | None) -> Document:
     reader = PdfReader(io.BytesIO(data))
     fields = {k: _form_value(v.get("/V")) for k, v in (reader.get_fields() or {}).items()}
     first_page = (reader.pages[0].extract_text() or "").upper() if reader.pages else ""
-    return Document(filename, _doc_type(first_page, fields), "application/pdf", data=data, form_fields=fields, parent=parent)
+    doc_type = _doc_type(first_page, fields)
+    weak = doc_type == "loss_run" and not any(term in first_page for term in LOSS_RUN_TERMS)
+    return Document(filename, doc_type, "application/pdf", data=data, form_fields=fields, parent=parent, weak_type=weak)
 
 
 def _attachments(part, body):

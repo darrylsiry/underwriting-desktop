@@ -58,6 +58,31 @@ async function SystemStatus() {
   );
 }
 
+const TASKS_SHOWN = 10;
+
+/** One line of Next up. */
+function TaskRow({ t, today }: { t: Task; today: string }) {
+  return (
+    <li className={`flex items-start gap-3 px-4 py-2.5 ${t.pinned ? "bg-indigo-50/60 shadow-[inset_3px_0_0_0_theme(colors.indigo.400)]" : ""}`}>
+      <span className={`mt-0.5 w-24 shrink-0 text-xs font-medium uppercase tracking-wide ${t.pinned ? "text-indigo-600" : "text-slate-500"}`}>{TASK_KIND[t.kind]}</span>
+      <div className="min-w-0 flex-1">
+        <Link href={t.href} className="font-medium text-slate-900 hover:text-indigo-600 hover:underline">{t.title}</Link>
+        <div className="truncate text-xs text-slate-500" title={t.detail}>{t.detail}</div>
+      </div>
+      {(t.due || t.expiringPremium !== undefined) && (
+        // Phones stack the premium over the chip; wider screens set them side by side, the chip in a
+        // fixed slot so the premiums line up down the list.
+        <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-start sm:gap-3">
+          {t.expiringPremium !== undefined && (
+            <span className="text-sm font-medium tabular-nums text-slate-700" title="Expiring premium"><span className="sr-only">Expiring premium </span>{usd(t.expiringPremium)}</span>
+          )}
+          {t.due && <span className="flex min-w-12 justify-end"><DaysChip days={daysUntil(t.due, today)} /></span>}
+        </div>
+      )}
+    </li>
+  );
+}
+
 export default async function Home() {
   const user = await currentUser();
   const d = await loadDashboard(user);
@@ -113,28 +138,17 @@ export default async function Home() {
           </div>
           {d.tasks.length ? (
             <ul className="divide-y divide-slate-100">
-              {d.tasks.slice(0, 10).map((t, i) => (
-                <li key={i} className={`flex items-start gap-3 px-4 py-2.5 ${t.pinned ? "bg-indigo-50/60 shadow-[inset_3px_0_0_0_theme(colors.indigo.400)]" : ""}`}>
-                  <span className={`mt-0.5 w-24 shrink-0 text-xs font-medium uppercase tracking-wide ${t.pinned ? "text-indigo-600" : "text-slate-500"}`}>{TASK_KIND[t.kind]}</span>
-                  <div className="min-w-0 flex-1">
-                    <Link href={t.href} className="font-medium text-slate-900 hover:text-indigo-600 hover:underline">{t.title}</Link>
-                    <div className="truncate text-xs text-slate-500" title={t.detail}>{t.detail}</div>
-                  </div>
-                  {(t.due || t.expiringPremium !== undefined) && (
-                    // Phones stack the premium over the chip; wider screens set them side by side, the chip in a
-                    // fixed slot so the premiums line up down the list.
-                    <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-start sm:gap-3">
-                      {t.expiringPremium !== undefined && (
-                        <span className="text-sm font-medium tabular-nums text-slate-700" title="Expiring premium"><span className="sr-only">Expiring premium </span>{usd(t.expiringPremium)}</span>
-                      )}
-                      {t.due && <span className="flex min-w-12 justify-end"><DaysChip days={daysUntil(t.due, d.today)} /></span>}
-                    </div>
-                  )}
-                </li>
-              ))}
+              {d.tasks.slice(0, TASKS_SHOWN).map((t, i) => <TaskRow key={i} t={t} today={d.today} />)}
             </ul>
           ) : <p className="px-4 py-8 text-center text-sm text-slate-500">Nothing waiting on you.</p>}
-          {d.tasks.length > 10 && <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">+ {d.tasks.length - 10} more</p>}
+          {d.tasks.length > TASKS_SHOWN && (
+            <details className="border-t border-slate-100">
+              <summary className="cursor-pointer px-4 py-2 text-xs text-indigo-600 hover:underline">Show {d.tasks.length - TASKS_SHOWN} more</summary>
+              <ul className="divide-y divide-slate-100 border-t border-slate-100">
+                {d.tasks.slice(TASKS_SHOWN).map((t, i) => <TaskRow key={i} t={t} today={d.today} />)}
+              </ul>
+            </details>
+          )}
         </section>
 
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm" aria-labelledby="by-class">

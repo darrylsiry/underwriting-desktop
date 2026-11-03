@@ -52,6 +52,10 @@ export type Dashboard = {
   activity: { occurred_at: Date; action: string; summary: string }[];
 };
 
+// Overdue stays near the top, but a long-dead task can't bury a renewal due this week (CR-174).
+const OVERDUE_URGENCY_FLOOR = -7;
+const EXPIRED_QUOTE_TASK_DAYS = 30;
+
 export async function loadDashboard(user: string): Promise<Dashboard> {
   const today = todayIso();
   const { rows: subs } = await customerDb.query<SubmissionRow & { ws: WorksheetRow | null }>(
@@ -136,9 +140,10 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
   for (const q of latestQuote.values()) {
     if (q.status !== "issued") continue;
     const left = daysUntil(q.valid_until, today);
+    if (left < -EXPIRED_QUOTE_TASK_DAYS) continue;   // the hit ratio has already counted it as lost
     tasks.push({ kind: "bind", title: `${left < 0 ? "Expired quote" : "Chase bind order"}: ${q.insured_name}`,
       detail: `${q.quote_number} v${q.version} · ${money(q.total)} · ${left < 0 ? `expired ${plural(-left, "day")} ago` : `valid for ${left} more day${left === 1 ? "" : "s"}`}`,
-      href: `/quotes/${q.id}`, due: q.valid_until, urgency: left });
+      href: `/quotes/${q.id}`, due: q.valid_until, urgency: Math.max(left, OVERDUE_URGENCY_FLOOR) });
   }
   for (const p of policies.rows) {
     const open = (p.subjectivities ?? []).filter((x) => x.status === "open");
@@ -147,7 +152,7 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     const left = daysUntil(next, today);
     tasks.push({ kind: "subjectivity", title: `Chase ${open.length} open subjectivit${open.length === 1 ? "y" : "ies"}: ${p.insured_name}`,
       detail: `${p.policy_number} · ${left < 0 ? `overdue by ${plural(-left, "day")}` : `next due in ${plural(left, "day")}`}`,
-      href: `/policies/${p.id}`, due: next, urgency: left });
+      href: `/policies/${p.id}`, due: next, urgency: Math.max(left, OVERDUE_URGENCY_FLOOR) });
   }
   for (const p of renewals) {
     const left = daysUntil(p.expiration_date, today);

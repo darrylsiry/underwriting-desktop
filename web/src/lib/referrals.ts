@@ -4,7 +4,7 @@
 import { moneyExact as money } from "./format.ts";   // exact: a flag's detail must stay as it was, or its clearance lapses
 import type { ExpiringPolicy } from "./renewal-compare";
 import type { Extraction, Loss, SubmissionData } from "./submission";
-import { ASSUMED_INPUTS, type Clearance, type RatingInputs, type ScheduleItem } from "./worksheet.ts";   // .ts: worksheet.ts is pure too
+import { ASSUMED_INPUTS, UW_AUTHORITY_PCT, type Clearance, type RatingInputs, type ScheduleItem } from "./worksheet.ts";   // .ts: worksheet.ts is pure too
 
 export type Flag = { code: string; severity: "refer" | "warn"; title: string; detail: string };
 
@@ -30,7 +30,7 @@ export const LIMITS = {
   heightFt: 50,
   receipts: 15_000_000,
   occurrenceLimit: 1_000_000,
-  scheduleAuthorityPct: 15,
+  scheduleAuthorityPct: UW_AUTHORITY_PCT,
   experienceMod: 1,
   newVentureYears: 3,
 };

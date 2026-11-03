@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { changeSummary, compareRenewal, coverageGapNote, type Side } from "./renewal-compare.ts";
+import { changeSummary, compareRenewal, coverageGapNote, quoteDrift, type Side } from "./renewal-compare.ts";
 import type { Rating } from "./worksheets.ts";
 
 const inputs = {
@@ -123,4 +123,13 @@ test("a renewal that starts after the expiring policy ends says how long the gap
   assert.equal(coverageGapNote("2027-03-15", "2027-03-15"), null);
   assert.match(coverageGapNote("2027-03-15", "2027-04-01")!, /17 days/);
   assert.match(coverageGapNote("2027-03-15", "2027-03-16")!, /1 day\b/);
+});
+
+test("drift says what moved since the quote, in the words of the worksheet (CR-180)", () => {
+  const terms = { rating_inputs: inputs, schedule: [] };
+  assert.deepEqual(quoteDrift(null, terms), { quoteCurrent: false, drift: [] });
+  assert.deepEqual(quoteDrift(terms, terms), { quoteCurrent: true, drift: [] });
+  const changed = quoteDrift(terms, { rating_inputs: { ...inputs, deductible: 2500 }, schedule: [] });
+  assert.equal(changed.quoteCurrent, false);
+  assert.deepEqual(changed.drift.map((d) => [d.label, d.from, d.to]), [["Deductible", "$1,000", "$2,500"]]);
 });

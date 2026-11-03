@@ -158,7 +158,7 @@ export const APP_TOOLS: AppTool[] = [
   },
   {
     name: "get_submission",
-    description: "Everything about one submission: the applicant, operations, coverage requested, producer, losses, intake warnings, the underwriting worksheet (rating inputs, schedule, last rating with its factor-by-factor worksheet, referrals open or cleared, ready to quote?), its quotes, its policy, and for a renewal the expiring policy. Use to explain how a risk was rated or what is holding it up.",
+    description: "Everything about one submission: the applicant, operations, coverage requested, producer, losses, intake warnings, the underwriting worksheet (rating inputs, schedule, last rating with its factor-by-factor worksheet, referrals open or cleared, ready to quote?), its quotes, its policy, and for a renewal the expiring policy. A referral marked raised_since_bind comes from a rule added after the file was bound and needs no action. Use to explain how a risk was rated or what is holding it up.",
     input_schema: { type: "object", properties: { reference_or_id: { type: "string", description: "SUB-0012 or the submission id" } }, required: ["reference_or_id"] },
     run: async (a, ctx) => {
       const id = await submissionIdFor(str(a.reference_or_id));
@@ -177,7 +177,7 @@ export const APP_TOOLS: AppTool[] = [
           last_rating: shownRating ? { premium: money(shownRating.premium), policy_fee: money(shownRating.policy_fee), surplus_lines_tax: money(shownRating.surplus_lines_tax), total: money(shownRating.total), rate_version: shownRating.rate_version, minimum_premium_applied: shownRating.minimum_premium_applied, steps: shownRating.worksheet } : null,
           ...(boundQuote ? { bound: true } : { rating_is_current: st.rated, rates_changed_since: st.staleRates, ready_to_quote: st.ready }),
           active_rate_version: active,
-          referrals: (boundQuote ? boundFlags(sub, ws, boundQuote) : flagsFor(sub, ws)).map((f) => ({ code: f.code, severity: f.severity, title: f.title, detail: f.detail, status: f.severity === "warn" ? "note" : clearanceStatus(f, ws.referral_clearances[f.code], !!boundQuote) === "cleared" ? "cleared" : "open", clearance: ws.referral_clearances[f.code] ?? null })),
+          referrals: (boundQuote ? boundFlags(sub, ws, boundQuote) : flagsFor(sub, ws)).map((f) => ({ code: f.code, severity: f.severity, title: f.title, detail: f.detail, status: f.severity === "warn" ? "note" : clearanceStatus(f, ws.referral_clearances[f.code], !!boundQuote) === "cleared" ? "cleared" : boundQuote ? "raised_since_bind" : "open", clearance: ws.referral_clearances[f.code] ?? null })),
           bridge_rating_on_expiring_rates: ws.bridge_rating ? { premium: money(ws.bridge_rating.premium), total: money(ws.bridge_rating.total), rate_version: ws.bridge_rating.rate_version } : null,
           updated_by: ws.updated_by, updated_at: ws.updated_at.toISOString(),
         };
