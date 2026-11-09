@@ -8,6 +8,7 @@ import { accountingPeriod } from "./gl-journal";
 import { postPolicyBound } from "./ledger";
 import { renderBinderPdf, renderPolicyPdf, type PolicyDocument } from "./policy-pdf";
 import { producerOf, type ProducerFields } from "./quote-terms";
+import { wrongStatus } from "./submission";
 import type { ExpiringPolicy } from "./renewal-compare";
 import type { RatingInputs } from "./worksheet";
 import { money, type Rating } from "./worksheets";
@@ -104,8 +105,11 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
        FROM quotes WHERE id = $1 FOR UPDATE`, [quoteId])).rows[0];
     if (!found) throw new Error("Quote not found");
     q = found;
-    const renewedFrom = (await customerDb.query<{ renewal_of: ExpiringPolicy | null }>(
-      "SELECT renewal_of FROM submissions WHERE id = $1 AND kind = 'renewal'", [q.submission_id])).rows[0]?.renewal_of ?? null;
+    // After the quote's lock: a reopen holds these locks while it commits, so a bind waiting here then finds the file in review (CR-182).
+    const file = (await customerDb.query<{ status: string; kind: string; renewal_of: ExpiringPolicy | null }>(
+      "SELECT status, kind, renewal_of FROM submissions WHERE id = $1", [q.submission_id])).rows[0];
+    if (file && file.status !== "accepted") throw new Error(wrongStatus(q.submission_ref, file.status, "accepted"));
+    const renewedFrom = file?.kind === "renewal" ? file.renewal_of : null;
     const blockers = bindBlockers(q, today);
     if (blockers.length) throw new Error(blockers.join("; "));
 

@@ -40,17 +40,18 @@ const { LOSS_RATIO_BASIS, lossRatio } = await import("./book-metrics.ts");
 const { loadAgentActivity, mockupIds, readMockup, readReport } = await import("./agent-activity.ts");
 const { closeQuote, declineSubmission, markSubjectivityReceived, nonRenewPolicy, reopenDeclined, reopenIntake, reverseNonRenewal } = await import("./file-closure.ts");
 const { addDays } = await import("./quote-terms.ts");
-const { loadDashboard } = await import("./dashboard.ts");
+const { loadDashboard, submissionStagesById } = await import("./dashboard.ts");
+const { quoteDrift } = await import("./renewal-compare.ts");
 const { migrate } = await import("./migrate.ts");
 const { APP_TOOLS } = await import("./assistant-tools.ts");
 const { bindQuote } = await import("./policies.ts");
 const { storePublished } = await import("./published-reports.ts");
-const { issueQuote } = await import("./quotes.ts");
+const { getQuote, issueQuote } = await import("./quotes.ts");
 const { startRenewal } = await import("./renewals.ts");
 const { acceptSubmission, dataFingerprint, getSubmission, saveReview, storeSubmission } = await import("./submissions.ts");
 const { todayIso } = await import("./time.ts");
 const { StaleWorksheetError, worksheetFingerprint } = await import("./worksheet.ts");
-const { clearReferral, flagsFor, getWorksheet, openWorksheet, saveAndRate } = await import("./worksheets.ts");
+const { activeRateVersion, clearReferral, flagsFor, getWorksheet, openWorksheet, readiness, saveAndRate } = await import("./worksheets.ts");
 
 const ACTOR = "underwriter1";
 const realFetch = globalThis.fetch;
@@ -603,7 +604,7 @@ test("a declined file leaves the desk, closes its quote, refuses work and can be
 
   await assert.rejects(saveAndRate(declined, formOf((await getWorksheet(sub.id))!.rating_inputs), ACTOR), /declined/);
   await assert.rejects(issueQuote(declined, period(), ACTOR), /declined/);
-  await assert.rejects(bindQuote(quote.id, new Set(), ACTOR), /closed as not taken/);
+  await assert.rejects(bindQuote(quote.id, new Set(), ACTOR), /is declined/);   // the file is checked first now (CR-182)
   await assert.rejects(declineSubmission(declined, { reason: "Price" }, ACTOR), /already declined/);
 
   assert.equal(await reopenDeclined(declined, ACTOR), "accepted");
@@ -684,4 +685,110 @@ test("an accepted intake can be reopened to correct it until the file is bound (
   await acceptSubmission(sub.id, ACTOR);
   await bindQuote((await issueQuote(await fresh(sub.id), period(), ACTOR)).id, new Set(), ACTOR);
   await assert.rejects(reopenIntake(await fresh(sub.id), ACTOR), /endorsement/);
+});
+
+// --- a reopened intake (CR-181, CR-182, CR-183, CR-185, CR-191, CR-200, UX-081, UX-086, UX-092) ---
+
+/** A quoted file reopened for corrections, with the quote that was out. */
+async function reopenedQuoted() {
+  const sub = await ratedSubmission();
+  const quote = await issueQuote(sub, period(), ACTOR);
+  await reopenIntake(await fresh(sub.id), ACTOR);
+  return { sub, quote };
+}
+
+test("a correction on a reopened intake reaches the worksheet, and the rating and quote say they're out of date (CR-181, UX-081)", options, async () => {
+  const { sub, quote } = await reopenedQuoted();
+  await saveReview(sub.id, { "operations.gross_receipts": "1500000", "applicant.name": "Corrected Roofing LLC" }, ACTOR);
+  await acceptSubmission(sub.id, ACTOR);
+
+  const accepted = await fresh(sub.id);
+  const ws = (await getWorksheet(sub.id))!;
+  assert.equal(ws.rating_inputs.gross_receipts, 1_500_000);
+  assert.equal(readiness(accepted, ws, await activeRateVersion()).rated, false, "the old rating no longer describes the file");
+  const changed = (await auditTrail("submission", sub.id)).filter((e) => e.action === "worksheet.input_changed");
+  assert.deepEqual(changed.map((e) => e.after), [{ gross_receipts: 1_500_000 }]);
+
+  const { quoteCurrent, drift } = quoteDrift(await getQuote(quote.id), ws, accepted);
+  assert.equal(quoteCurrent, false);
+  assert.deepEqual(drift.map((d) => d.label), ["Gross receipts", "Named insured"]);
+  assert.deepEqual(drift.find((d) => d.label === "Named insured"), { label: "Named insured", from: quote.insured_name, to: "Corrected Roofing LLC" });
+});
+
+test("a reopen with no corrections changes nothing the worksheet or the quote can see (CR-181)", options, async () => {
+  const { sub, quote } = await reopenedQuoted();
+  await acceptSubmission(sub.id, ACTOR);
+  const accepted = await fresh(sub.id);
+  const ws = (await getWorksheet(sub.id))!;
+  assert.equal(readiness(accepted, ws, await activeRateVersion()).rated, true);
+  assert.deepEqual(quoteDrift(await getQuote(quote.id), ws, accepted), { quoteCurrent: true, drift: [] });
+});
+
+test("nothing can be quoted or bound while the intake is reopened, even from a tab opened before (CR-182)", options, async () => {
+  const { sub, quote } = await reopenedQuoted();
+  await assert.rejects(issueQuote(sub, period(), ACTOR), /reopened for corrections/);
+  await assert.rejects(bindQuote(quote.id, new Set(), ACTOR), /reopened for corrections/);
+  assert.equal((await policyDb.query("SELECT 1 FROM policies WHERE submission_id = $1", [sub.id])).rowCount, 0);
+  assert.ok(!(await actions("quote", quote.id)).includes("quote.bound"));
+});
+
+test("a reopen made while a bind is landing can't leave a bound file in review (CR-182)", options, async () => {
+  const sub = await ratedSubmission();
+  const quote = await issueQuote(sub, period(), ACTOR);
+  const stale = await fresh(sub.id);
+  await bindQuote(quote.id, new Set(), ACTOR);
+  await assert.rejects(reopenIntake(stale, ACTOR), /bound as/);
+  assert.equal((await fresh(sub.id)).status, "accepted");
+});
+
+test("accepting a reopened intake again keeps its insured and corrects it (CR-183)", options, async () => {
+  const sub = await newSubmission({ accept: false });
+  await customerDb.query("UPDATE submissions SET data = jsonb_set(data, '{applicant,fein}', '\"\"') WHERE id = $1", [sub.id]);
+  await acceptSubmission(sub.id, ACTOR);
+  const first = (await fresh(sub.id)).insured_id!;
+  const insureds = async () => Number((await customerDb.query<{ n: string }>("SELECT count(*) AS n FROM insureds")).rows[0].n);
+  const before = await insureds();
+
+  await reopenIntake(await fresh(sub.id), ACTOR);
+  const reopened = await fresh(sub.id);
+  assert.equal(reopened.reviewed_by, null, "it isn't accepted by anyone while it is back in review");
+  await saveReview(sub.id, { "applicant.name": "Renamed Roofing Co" }, ACTOR);
+  await acceptSubmission(sub.id, ACTOR);
+
+  assert.equal((await fresh(sub.id)).insured_id, first);
+  assert.equal(await insureds(), before, "no second insured");
+  const { rows } = await customerDb.query<{ name: string }>("SELECT name FROM insureds WHERE id = $1", [first]);
+  assert.equal(rows[0].name, "Renamed Roofing Co");
+  assert.ok((await actions("insured", first)).includes("insured.corrected"));
+});
+
+test("a file reopened after a decline is back on the desk, and its stage isn't the closed quote (CR-185, UX-086)", options, async () => {
+  const sub = await ratedSubmission();
+  await issueQuote(sub, period(), ACTOR);
+  await declineSubmission(await fresh(sub.id), { reason: "Price" }, ACTOR);
+  await reopenDeclined(await fresh(sub.id), ACTOR);
+  assert.ok(await taskFor(sub.id), "a task to quote it again");
+  assert.notEqual((await submissionStagesById([sub.id])).get(sub.id)?.key, "not_taken");
+
+  const closedOnPurpose = await ratedSubmission();
+  const q = await issueQuote(closedOnPurpose, period(), ACTOR);
+  await closeQuote(q.id, { reason: "Lost on price" }, ACTOR);
+  assert.equal(await taskFor(closedOnPurpose.id), undefined, "a quote closed as not taken keeps the file off the desk");
+});
+
+test("a reopened quoted file reads Needs review, and an expired quote reads Expired, wherever stages show (CR-191, UX-092)", options, async () => {
+  const { sub } = await reopenedQuoted();
+  assert.equal((await submissionStagesById([sub.id])).get(sub.id)?.key, "review");
+
+  const lapsed = await ratedSubmission();
+  const q = await issueQuote(lapsed, period(), ACTOR);
+  await policyDb.query("UPDATE quotes SET valid_until = $2 WHERE id = $1", [q.id, addDays(todayIso(), -1)]);
+  assert.equal((await submissionStagesById([lapsed.id])).get(lapsed.id)?.key, "expired");
+});
+
+test("a stale intake tab on a declined file is told it was declined, not accepted (CR-200)", options, async () => {
+  const sub = await newSubmission({ accept: false });
+  await declineSubmission(sub, { reason: "Incomplete submission" }, ACTOR);
+  await assert.rejects(saveReview(sub.id, { "applicant.name": "X Co" }, ACTOR), /is declined; reopen it/);
+  await assert.rejects(acceptSubmission(sub.id, ACTOR), /is declined; reopen it/);
 });

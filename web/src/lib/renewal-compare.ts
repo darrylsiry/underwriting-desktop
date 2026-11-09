@@ -3,7 +3,8 @@ import { whenDate } from "./time.ts";
 // factors changed, and how the premium change splits between the two. Pure module (type-only
 // imports) so node:test can load it; the memo PDF and the comparison page both render from this.
 import { money, moneySigned as signed } from "./format.ts";
-import type { ProducerFields } from "./quote-terms";
+import { quotedFactChanges, type ProducerFields } from "./quote-terms.ts";
+import type { SubmissionData } from "./submission";
 import type { RatingInputs, ScheduleItem } from "./worksheet";
 import type { Rating } from "./worksheets";
 // Explicit .ts extension so node:test can load this module directly (worksheet.ts is itself pure).
@@ -153,13 +154,18 @@ type Terms = { rating_inputs: RatingInputs; schedule: ScheduleItem[] };
  * Does the worksheet still say what the latest issued quote says? The quote froze its inputs and schedule (UX-003).
  * The workbench and the renewal page both read this, so they agree about one file (CR-180).
  */
-export function quoteDrift(quoted: Terms | null, ws: Terms) {
-  const quoteCurrent = !!quoted && inputsHash(quoted.rating_inputs, quoted.schedule) === inputsHash(ws.rating_inputs, ws.schedule);
+export function quoteDrift(
+  quoted: (Terms & { insured_name?: string; terms?: { insured_address: string[]; producer: string[] } }) | null, ws: Terms,
+  sub?: { applicant_name: string; data: SubmissionData },
+) {
+  // The insured and producer a quote froze count too: a correction to them on a reopened intake is a difference (UX-081).
+  const facts = quoted && sub && quoted.insured_name !== undefined && quoted.terms ? quotedFactChanges({ insured_name: quoted.insured_name, terms: quoted.terms }, sub) : [];
+  const quoteCurrent = !!quoted && !facts.length && inputsHash(quoted.rating_inputs, quoted.schedule) === inputsHash(ws.rating_inputs, ws.schedule);
   // A schedule change arrives as its percent; every input reads as it does on the worksheet.
   const text = (key: string, v: unknown) => key.startsWith("schedule.") ? String(v) : inputText(key as keyof RatingInputs, v as RatingInputs[keyof RatingInputs]);
   const drift = quoted && !quoteCurrent
-    ? inputChanges({ inputs: quoted.rating_inputs, schedule: quoted.schedule }, { inputs: ws.rating_inputs, schedule: ws.schedule })
-        .map((c) => ({ label: c.label, from: text(c.key, c.from), to: text(c.key, c.to) }))
+    ? [...inputChanges({ inputs: quoted.rating_inputs, schedule: quoted.schedule }, { inputs: ws.rating_inputs, schedule: ws.schedule })
+        .map((c) => ({ label: c.label, from: text(c.key, c.from), to: text(c.key, c.to) })), ...facts]
     : [];
   return { quoteCurrent, drift };
 }

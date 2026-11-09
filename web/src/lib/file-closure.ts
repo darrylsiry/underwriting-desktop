@@ -6,6 +6,7 @@
 import type { PoolClient } from "pg";
 import { audit } from "./audit";
 import { customerDb, policyDb } from "./db";
+import { DECLINE_CLOSE_PREFIX } from "./stage.ts";
 import { whenDate } from "./time";
 import type { RenewalStatus } from "./renewals";
 import type { SubmissionRow } from "./submissions";
@@ -44,8 +45,11 @@ async function transaction<T>(pool: { connect: () => Promise<PoolClient> }, fn: 
   }
 }
 
-const boundAs = async (submissionId: string) =>
-  (await policyDb.query<{ policy_number: string }>("SELECT policy_number FROM policies WHERE submission_id = $1 LIMIT 1", [submissionId])).rows[0]?.policy_number;
+const boundAs = async (submissionId: string, db: { query: PoolClient["query"] } = policyDb) =>
+  (await db.query<{ policy_number: string }>("SELECT policy_number FROM policies WHERE submission_id = $1 LIMIT 1", [submissionId])).rows[0]?.policy_number;
+
+/** Hold every quote of a file, so a bind of any of them waits for this transaction (CR-182). */
+const lockQuotes = (client: PoolClient, submissionId: string) => client.query("SELECT 1 FROM quotes WHERE submission_id = $1 FOR UPDATE", [submissionId]);
 
 const renewalTable = (source: "book" | "desktop") => (source === "book" ? "book_policies" : "policies");
 const renewalEntity = (source: "book" | "desktop") => (source === "book" ? "book_policy" as const : "policy" as const);
@@ -56,17 +60,19 @@ const renewalEntity = (source: "book" | "desktop") => (source === "book" ? "book
  */
 export async function declineSubmission(sub: SubmissionRow, input: { reason?: string; note?: string }, actor: string): Promise<void> {
   const closure = closureOf(input, DECLINE_REASONS, actor);
-  const policy = await boundAs(sub.id);
-  if (policy) throw new Error(`${sub.reference} is bound as ${policy}, so it can't be declined`);
   await transaction(customerDb, async (customer) => {
     const was = (await customer.query<{ status: SubmissionRow["status"] }>("SELECT status FROM submissions WHERE id = $1 FOR UPDATE", [sub.id])).rows[0]?.status;
     if (was === "declined") throw new Error(`${sub.reference} is already declined`);
     const decline: Decline = { ...closure, from: was };
     await customer.query("UPDATE submissions SET status = 'declined', decline = $2 WHERE id = $1", [sub.id, decline]);
     await transaction(policyDb, async (policyClient) => {
+      // Checked under the quotes' locks, so a bind in flight is either seen here or finds its quote closed (CR-182).
+      await lockQuotes(policyClient, sub.id);
+      const policy = await boundAs(sub.id, policyClient);
+      if (policy) throw new Error(`${sub.reference} is bound as ${policy}, so it can't be declined`);
       const closed = (await policyClient.query<{ id: string; quote_number: string; version: number }>(
         "UPDATE quotes SET status = 'not_taken', closed = $2 WHERE submission_id = $1 AND status = 'issued' RETURNING id, quote_number, version",
-        [sub.id, { ...closure, reason: `Declined: ${closure.reason}` }])).rows;
+        [sub.id, { ...closure, reason: `${DECLINE_CLOSE_PREFIX}${closure.reason}` }])).rows;
       const exp = sub.kind === "renewal" ? sub.renewal_of : null;
       const released = exp ? (await policyClient.query(
         `UPDATE ${renewalTable(exp.source)} SET renewal_status = 'non_renewed', non_renewal = $3 WHERE id = $1 AND renewal_submission_id = $2 AND renewal_status = 'in_progress'`,
@@ -107,13 +113,20 @@ export async function reopenDeclined(sub: SubmissionRow, actor: string): Promise
 
 /** Reopen an accepted intake to correct it (UX-058). The worksheet is kept, and issued quotes stay as sent. */
 export async function reopenIntake(sub: SubmissionRow, actor: string): Promise<void> {
-  const policy = await boundAs(sub.id);
-  if (policy) throw new Error(`${sub.reference} is bound as ${policy}; changes now need a policy endorsement`);
-  await transaction(customerDb, async (customer) => {
-    const done = await customer.query("UPDATE submissions SET status = 'needs_review' WHERE id = $1 AND status = 'accepted'", [sub.id]);
-    if (!done.rowCount) throw new Error(`${sub.reference} isn't accepted, so there is nothing to reopen`);
-    await audit({ actor, action: "submission.intake_reopened", entityType: "submission", entityId: sub.id,
-      summary: `${sub.reference}: intake reopened for corrections`, before: { status: "accepted" }, after: { status: "needs_review" } });
+  // The quotes' locks are held until the file reads "in review", so a bind either lands first and is refused here,
+  // or waits for them and then finds the file in review (CR-182).
+  await transaction(policyDb, async (policyClient) => {
+    await lockQuotes(policyClient, sub.id);
+    const policy = await boundAs(sub.id, policyClient);
+    if (policy) throw new Error(`${sub.reference} is bound as ${policy}; changes now need a policy endorsement`);
+    await transaction(customerDb, async (customer) => {
+      // Nobody has accepted it while it is back in review (CR-183).
+      const done = await customer.query(
+        "UPDATE submissions SET status = 'needs_review', reviewed_by = NULL, reviewed_at = NULL WHERE id = $1 AND status = 'accepted'", [sub.id]);
+      if (!done.rowCount) throw new Error(`${sub.reference} isn't accepted, so there is nothing to reopen`);
+      await audit({ actor, action: "submission.intake_reopened", entityType: "submission", entityId: sub.id,
+        summary: `${sub.reference}: intake reopened for corrections`, before: { status: "accepted" }, after: { status: "needs_review" } });
+    });
   });
 }
 

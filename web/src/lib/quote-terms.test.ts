@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addDays, addYears, formsFor, parseSubjectivities, producerFields, producerLines, producerOf, quoteLimits, quotePeriod, suggestedSubjectivities } from "./quote-terms.ts";
+import { addDays, addYears, formsFor, parseSubjectivities, producerFields, producerLines, producerOf, quoteLimits, quotePeriod, suggestedSubjectivities, quoteFormEffective, quotedFactChanges } from "./quote-terms.ts";
 import { buildSyntheticCase, rng } from "./synthetic-risk.ts";
 import type { Flag } from "./referrals.ts";
 import type { SubmissionData } from "./submission.ts";
@@ -89,4 +89,22 @@ test("producer details are read by name, not by position in the display lines (C
   assert.deepEqual(producerOf({ producer: ["Sunbelt Brokers", "Pat Lee", "a@b.example"] }), { agency: "Sunbelt Brokers", contact: "Pat Lee", email: "", phone: "" });
   assert.equal(producerOf({ producer: ["Sunbelt Brokers"] }).contact, "");
   assert.equal(producerOf({}).agency, "");
+});
+
+test("a quote form starts from the intake's date only when it was corrected after the latest quote (CR-181)", () => {
+  const latest = { effective_date: "2026-12-01", issued_at: new Date("2026-11-05T12:00:00Z") };
+  const corrected = (at: string) => ({ action: "submission.field_corrected", occurred_at: new Date(at), before: { "policy.effective_date": "2026-12-01" } });
+  assert.equal(quoteFormEffective(undefined, "2027-01-01", []), "2027-01-01");
+  assert.equal(quoteFormEffective(latest, "2027-01-01", []), "2026-12-01", "a quote typed with another date keeps it");
+  assert.equal(quoteFormEffective(latest, "2027-01-01", [corrected("2026-11-04T12:00:00Z")]), "2026-12-01", "corrected before the quote");
+  assert.equal(quoteFormEffective(latest, "2027-01-01", [corrected("2026-11-06T12:00:00Z")]), "2027-01-01");
+  const otherField = { action: "submission.field_corrected", occurred_at: new Date("2026-11-06T12:00:00Z"), before: { "applicant.name": "X" } };
+  assert.equal(quoteFormEffective(latest, "2027-01-01", [otherField]), "2026-12-01");
+});
+
+test("what a quote froze about the insured and producer, against the file now (UX-081)", () => {
+  const data = { applicant: { street: "1 Main St", city: "Austin", state: "TX", zip: "78701" }, producer: { agency: "Copper State", contact: "Lena Ruiz" } } as never;
+  const quoted = { insured_name: "Desert Bloom LC", terms: { insured_address: ["1 Main St", "Austin, TX 78701"], producer: ["Copper State", "Lena Ruiz"] } };
+  assert.deepEqual(quotedFactChanges(quoted, { applicant_name: "Desert Bloom LC", data }), []);
+  assert.deepEqual(quotedFactChanges(quoted, { applicant_name: "Desert Bloom LLC", data }), [{ label: "Named insured", from: "Desert Bloom LC", to: "Desert Bloom LLC" }]);
 });

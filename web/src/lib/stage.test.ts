@@ -27,3 +27,9 @@ test("the count line names what needs attention", () => {
   assert.equal(stageSummary(stages), "5 submissions · 2 need review · 1 with referrals open · 1 ready to quote · newest first");
   assert.equal(stageSummary([stageOf(base)]), "1 submission · newest first");
 });
+
+test("a reopened intake reads Needs review even with a quote out (CR-191)", () => {
+  const quote = { version: 1, total: 1000, status: "issued", valid_until: "2030-01-01" };
+  assert.equal(stageOf({ ...base, status: "needs_review", quote, today: "2026-11-09" }).key, "review");
+  assert.equal(stageOf({ ...base, status: "needs_review", quote, policy: { policy_number: "GL-1" } }).key, "bound");
+});

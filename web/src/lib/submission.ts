@@ -201,3 +201,10 @@ export function formatValue(type: FieldType, v: Value): string {
   if (type === "pct") return `${v}%`;
   return toInput(type, v);
 }
+
+/** Why a file in `status` can't take a step that needs it accepted or in review (CR-182, CR-200). */
+export function wrongStatus(reference: string, status: string, needs: "accepted" | "needs_review"): string {
+  if (status === "declined") return `${reference} is declined; reopen it to ${needs === "accepted" ? "work on it" : "change the intake"}`;
+  if (needs === "accepted") return `${reference} is reopened for corrections; accept it first`;
+  return `${reference} is already accepted`;
+}

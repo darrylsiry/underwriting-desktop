@@ -28,7 +28,7 @@ export function QuoteDriftNotice({ quote, changes, newTotal }: {
   const v = `${quote.quote_number} v${quote.version}`;
   return (
     <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" role="status">
-      <span className="font-medium">Worksheet differs from {v}:</span>{" "}
+      <span className="font-medium">The file differs from {v}:</span>{" "}
       {changes.map((c) => `${c.label} ${c.from} → ${c.to}`).join(" · ")}
       {" · "}total {money(quote.total)} → {newTotal === null ? "not rated yet" : money(newTotal)}.{" "}
       Issue v{quote.version + 1} to quote the new terms, or bind v{quote.version} exactly as issued.

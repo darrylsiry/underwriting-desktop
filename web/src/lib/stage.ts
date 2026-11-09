@@ -15,15 +15,21 @@ export type StageInput = {
 };
 
 
+/** How a quote closed by declining its file is marked: reopening the file leaves it closed, and the file is live again (CR-185). */
+export const DECLINE_CLOSE_PREFIX = "Declined: ";
+export const closedByDecline = (q: { status: string; closed?: { reason?: string } | null }) =>
+  q.status === "not_taken" && !!q.closed?.reason?.startsWith(DECLINE_CLOSE_PREFIX);
+
 export function stageOf(x: StageInput): Stage {
   if (x.policy) return { key: "bound", label: `Bound ${x.policy.policy_number}`, tone: "emerald", ...(x.policy.id ? { href: `/policies/${x.policy.id}` } : {}) };
   if (x.status === "declined") return { key: "declined", label: "Declined", tone: "slate" };
+  // A quoted file reopened for corrections: review is its next step, whatever is out (CR-191).
+  if (x.status === "needs_review") return { key: "review", label: x.missing ? `Needs review (${x.missing} missing)` : "Needs review", tone: "amber" };
   if (x.quote?.status === "not_taken") return { key: "not_taken", label: `Not taken v${x.quote.version}`, tone: "slate" };
   if (x.quote && x.today && x.quote.status === "issued" && x.quote.valid_until && x.quote.valid_until < x.today) {
     return { key: "expired", label: `Expired v${x.quote.version} · ${usd(x.quote.total)}`, tone: "amber" };
   }
   if (x.quote) return { key: "quoted", label: `Quoted v${x.quote.version} · ${usd(x.quote.total)}`, tone: "indigo" };
-  if (x.status === "needs_review") return { key: "review", label: x.missing ? `Needs review (${x.missing} missing)` : "Needs review", tone: "amber" };
   if (x.worksheet && x.worksheet.openReferrals > 0) {
     const n = x.worksheet.openReferrals;
     return { key: "referred", label: `${n} referral${n === 1 ? "" : "s"} open`, tone: "amber" };

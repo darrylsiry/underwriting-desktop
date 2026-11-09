@@ -1,10 +1,11 @@
 import { isUuid, paddedSeq } from "./text.ts";
 import { audit } from "./audit";
-import { policyDb } from "./db";
+import { customerDb, policyDb } from "./db";
+import { wrongStatus } from "./submission";
 import { renderQuotePdf } from "./quote-pdf";
 import { changeSummary, compareRenewal, type Comparison } from "./renewal-compare";
 import { renderRenewalMemoPdf } from "./renewal-memo-pdf";
-import { QUOTE_VALID_DAYS, addDays, formsFor, parseSubjectivities, producerFields, producerLines, quoteLimits, quotePeriod, type ProducerFields } from "./quote-terms";
+import { QUOTE_VALID_DAYS, addDays, formsFor, insuredAddressLines, parseSubjectivities, producerFields, producerLines, quoteLimits, quotePeriod, type ProducerFields } from "./quote-terms";
 import { rateOn } from "./rating-api";
 import type { SubmissionRow } from "./submissions";
 import { todayIso, whenDate } from "./time";
@@ -73,7 +74,9 @@ export type QuoteForm = {
  * `at` back-dates the issue (seeded history); it defaults to now.
  */
 export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: string, at: Date | null = null): Promise<QuoteRow> {
-  if (sub.status === "declined") throw new Error(`${sub.reference} is declined; reopen it to quote`);
+  // Read now, not from the caller's copy: a tab opened before a reopen or a decline still holds "accepted" (CR-182).
+  const status = (await customerDb.query<{ status: string }>("SELECT status FROM submissions WHERE id = $1", [sub.id])).rows[0]?.status ?? sub.status;
+  if (status !== "accepted") throw new Error(wrongStatus(sub.reference, status, "accepted"));
   const ws = await getWorksheet(sub.id);
   if (!ws) throw new Error("Open the workbench and rate first");
   const { effective, expiration } = quotePeriod(form);
@@ -110,7 +113,7 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
   const producer = producerFields(sub.data.producer ?? {});
   const inputs = ws.rating_inputs;
   const terms = {
-    insured_address: [String(a.street ?? ""), [a.city, a.state].filter(Boolean).join(", ") + (a.zip ? ` ${a.zip}` : "")].filter((l) => l.trim()),
+    insured_address: insuredAddressLines(a),
     producer: producerLines(producer),
     producer_fields: producer,
     limits: quoteLimits(inputs),

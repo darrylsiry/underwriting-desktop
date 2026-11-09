@@ -5,7 +5,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { Pill, when, whenDate } from "@/components/ui";
 import { auditTrail } from "@/lib/audit";
 import { recordedApart } from "@/lib/timeline-merge";
-import { suggestedSubjectivities } from "@/lib/quote-terms";
+import { quoteFormEffective, suggestedSubjectivities } from "@/lib/quote-terms";
 import { bindBlockers, quoteState } from "@/lib/bind-rules";
 import { assumedInputs, clearanceStatus } from "@/lib/referrals";
 import { policiesForSubmission } from "@/lib/policies";
@@ -74,10 +74,11 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
   const ws = await openWorksheet(sub, me);
   const classes = await rateableClasses();
   const { flags, openReferrals, rated, ready, staleRates } = readiness(sub, ws, await activeRateVersion());
-  const history = (await auditTrail("submission", id)).filter((h) => WORKSHEET_ACTIONS.has(h.action));
+  const trail = await auditTrail("submission", id);
+  const history = trail.filter((h) => WORKSHEET_ACTIONS.has(h.action));
   const quotes = await quotesForSubmission(id);
   const latest = quotes[0];
-  const effective = latest?.effective_date ?? String(sub.data.policy?.effective_date ?? "");
+  const effective = quoteFormEffective(latest, String(sub.data.policy?.effective_date ?? ""), trail);   // CR-181
   const subjectivities = latest?.subjectivities ?? (sub.kind === "renewal"
     ? ["Signed renewal application or no-change confirmation", ...suggestedSubjectivities(flags, sub.data).slice(1)]
     : suggestedSubjectivities(flags, sub.data));
@@ -94,7 +95,7 @@ export default async function WorkbenchPage({ params, searchParams }: Props) {
   const total = scheduleTotal(shownSchedule);
 
   // UX-003: does the worksheet still say what the latest issued quote says? The quote froze its inputs and schedule.
-  const { quoteCurrent, drift } = quoteDrift(latest && !policy ? await getQuote(latest.id) : null, ws);
+  const { quoteCurrent, drift } = quoteDrift(latest && !policy ? await getQuote(latest.id) : null, ws, sub);
   const differs = drift.length > 0;
   const chips = worksheetChips({
     policyNumber: policy?.policy_number, quote: latest ? { number: latest.quote_number, version: latest.version, state: quoteState(latest, todayIso()) } : null, quoteCurrent,

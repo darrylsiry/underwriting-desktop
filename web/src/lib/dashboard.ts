@@ -7,7 +7,7 @@ import { customerDb, policyDb } from "./db";
 import { listInbox } from "./inbox";
 import { producerOf, type ProducerFields } from "./quote-terms";
 import { missingForRating, type SubmissionRow } from "./submissions";
-import { stageOf, type Stage } from "./stage";
+import { closedByDecline, stageOf, type Stage } from "./stage";
 import { todayIso, whenDate } from "./time";
 import { readiness, recentRateVersion, type WorksheetRow } from "./worksheets";
 
@@ -77,8 +77,8 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
               p.renewal_status, p.renewal_submission_id, (p.renewed_from IS NOT NULL) AS is_renewal
        FROM policies p JOIN quotes q ON q.id = p.quote_id WHERE p.submission_id = ANY($1)`, [mine]),
     policyDb.query<{ id: string; quote_number: string; version: number; status: string; submission_id: string;
-      insured_name: string; valid_until: string; total: number }>(
-      `SELECT id, quote_number, version, status, submission_id, insured_name, valid_until::text, total::float8 AS total
+      insured_name: string; valid_until: string; total: number; closed: { reason?: string } | null }>(
+      `SELECT id, quote_number, version, status, submission_id, insured_name, valid_until::text, total::float8 AS total, closed
        FROM quotes WHERE submission_id = ANY($1)`, [mine]),
     policyDb.query<{ occurred_at: Date; action: string; summary: string }>(
       "SELECT occurred_at, action, summary FROM audit_events WHERE actor = $1 ORDER BY occurred_at DESC, id DESC LIMIT 8", [user]),
@@ -106,7 +106,8 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     const cur = latestQuote.get(q.quote_number);
     if (!cur || q.version > cur.version) latestQuote.set(q.quote_number, q);
   }
-  const quotedSubs = new Set(quotes.rows.map((q) => q.submission_id));
+  // A quote closed by a decline doesn't count once the file is reopened: it needs quoting again (CR-185).
+  const quotedSubs = new Set(quotes.rows.filter((q) => !closedByDecline(q)).map((q) => q.submission_id));
 
   for (const s of subs) {
     if (s.status === "declined") continue;
@@ -140,6 +141,7 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
   }
   for (const q of latestQuote.values()) {
     if (q.status !== "issued") continue;
+    if (subById.get(q.submission_id)?.status === "needs_review") continue;   // reopened: its review task comes first, and it can't be bound (CR-182)
     const left = daysUntil(q.valid_until, today);
     if (left < -EXPIRED_QUOTE_TASK_DAYS) continue;   // the hit ratio has already counted it as lost
     tasks.push({ kind: "bind", title: `${left < 0 ? "Expired quote" : "Chase bind order"}: ${q.insured_name}`,
@@ -199,8 +201,10 @@ export async function submissionStages(subs: SubmissionRow[]): Promise<Map<strin
   const ids = subs.map((s) => s.id);
   const [worksheets, quotes, policies, activeVersion] = await Promise.all([
     customerDb.query<WorksheetRow>("SELECT * FROM worksheets WHERE submission_id = ANY($1)", [ids]),
-    policyDb.query<{ submission_id: string; version: number; total: string; status: string }>(
-      "SELECT DISTINCT ON (submission_id) submission_id, version, total, status FROM quotes WHERE submission_id = ANY($1) ORDER BY submission_id, version DESC", [ids]),
+    // valid_until, so an expired quote reads Expired here too (UX-092); closed, so one closed by a decline doesn't stand for a reopened file (CR-185).
+    policyDb.query<{ submission_id: string; version: number; total: string; status: string; valid_until: string; closed: { reason?: string } | null }>(
+      `SELECT DISTINCT ON (submission_id) submission_id, version, total, status, valid_until::text, closed
+       FROM quotes WHERE submission_id = ANY($1) ORDER BY submission_id, version DESC`, [ids]),
     policyDb.query<{ id: string; submission_id: string; policy_number: string }>("SELECT id, submission_id, policy_number FROM policies WHERE submission_id = ANY($1)", [ids]),
     recentRateVersion(),
   ]);
@@ -209,11 +213,12 @@ export async function submissionStages(subs: SubmissionRow[]): Promise<Map<strin
   const policy = new Map(policies.rows.map((p) => [p.submission_id, p]));
   return new Map(subs.map((s) => {
     const w = ws.get(s.id);
+    const q = quote.get(s.id);
     const r = w ? readiness(s, w, activeVersion) : null;
     return [s.id, stageOf({
       status: s.status, missing: missingForRating(s.data).length,
       worksheet: r ? { rated: r.rated, openReferrals: r.openReferrals.length } : null,
-      quote: quote.get(s.id) ?? null, policy: policy.get(s.id) ?? null, today: todayIso(),
+      quote: (q && !closedByDecline(q) ? q : null), policy: policy.get(s.id) ?? null, today: todayIso(),
     })];
   }));
 }

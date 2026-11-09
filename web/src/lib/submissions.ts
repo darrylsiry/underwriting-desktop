@@ -8,8 +8,9 @@ import type { ExpiringPolicy } from "./renewal-compare";
 import { INGESTION_SERVICE_URL } from "./services";
 import { ServiceError, describeServiceError, errorDetailOf } from "./service-errors";
 import {
-  FIELD_DEFS, fromInput, getPath, missingForRating, normalizeFein, sameValue, setPath,
+  FIELD_DEFS, fromInput, getPath, missingForRating, normalizeFein, sameValue, setPath, wrongStatus,
   type Extraction, type SubmissionData, type Value, fieldLabel } from "./submission";
+import { INPUT_DEFS, inputsFromSubmission, type RatingInputs } from "./worksheet.ts";
 
 export { missingForRating };
 
@@ -154,7 +155,7 @@ async function withReviewLock<T>(id: string, fn: (client: PoolClient, sub: Submi
     await client.query("BEGIN");
     const sub = (await client.query<SubmissionRow>("SELECT * FROM submissions WHERE id = $1 FOR UPDATE", [id])).rows[0];
     if (!sub) throw new Error("Submission not found");
-    if (sub.status !== "needs_review") throw new Error(`${sub.reference} is already accepted`);
+    if (sub.status !== "needs_review") throw new Error(wrongStatus(sub.reference, sub.status, "needs_review"));
     const result = await fn(client, sub);
     await client.query("COMMIT");
     return result;
@@ -198,16 +199,45 @@ export async function saveReview(id: string, inputs: Record<string, string>, act
          WHERE id = $1 AND status = 'needs_review'`,
         [id, data, corrected, (data.applicant?.name as string) ?? ""],
       );
+      const carried = await carryToWorksheet(client, sub, data, actor);
       // Under the lock and before COMMIT, so a failure leaves no unaudited correction and a retry isn't told someone else changed it (CR-144).
       const correlationId = crypto.randomUUID();
-      await audit(...changes.map((c) => ({
-        actor, action: "submission.field_corrected", entityType: "submission" as const, entityId: id,
-        summary: `${sub.reference}: ${fieldLabel(c.path)} corrected`, before: { [c.path]: c.before }, after: { [c.path]: c.after },
-        correlationId,
-      })));
+      await audit(
+        ...changes.map((c) => ({
+          actor, action: "submission.field_corrected", entityType: "submission" as const, entityId: id,
+          summary: `${sub.reference}: ${fieldLabel(c.path)} corrected`, before: { [c.path]: c.before }, after: { [c.path]: c.after },
+          correlationId,
+        })),
+        ...carried.map((c) => ({
+          actor, action: "worksheet.input_changed", entityType: "submission" as const, entityId: id,
+          summary: `${sub.reference}: ${c.label} changed by an intake correction`, before: { [c.key]: c.before }, after: { [c.key]: c.after },
+          correlationId,
+        })),
+      );
     }
     return changes.length;
   });
+}
+
+const sameInput = (key: keyof RatingInputs, a: unknown, b: unknown) =>
+  key === "states" && Array.isArray(a) && Array.isArray(b) ? [...a].sort().join() === [...b].sort().join() : JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * A reopened intake already has a worksheet, seeded once from the intake. A correction to a rated fact goes into it,
+ * so the rating stops reading as current and the quote shows the difference (CR-181). Returns what moved.
+ */
+async function carryToWorksheet(client: PoolClient, sub: SubmissionRow, data: SubmissionData, actor: string) {
+  const ws = (await client.query<{ rating_inputs: RatingInputs }>(
+    "SELECT rating_inputs FROM worksheets WHERE submission_id = $1 FOR UPDATE", [sub.id])).rows[0];
+  if (!ws) return [];
+  const was = inputsFromSubmission(sub.data), now = inputsFromSubmission(data);
+  const moved = INPUT_DEFS.filter((d) => !sameInput(d.key, was[d.key], now[d.key]) && !sameInput(d.key, ws.rating_inputs[d.key], now[d.key]))
+    .map((d) => ({ key: d.key, label: d.label, before: ws.rating_inputs[d.key], after: now[d.key] }));
+  if (moved.length) {
+    const inputs = { ...ws.rating_inputs, ...Object.fromEntries(moved.map((m) => [m.key, m.after])) };
+    await client.query("UPDATE worksheets SET rating_inputs = $2, updated_by = $3, updated_at = now() WHERE submission_id = $1", [sub.id, inputs, actor]);
+  }
+  return moved;
 }
 
 /** Accept the intake: link (or create) the insured and lock the extracted data for underwriting. `at` back-dates it (seeded history). */
@@ -221,13 +251,32 @@ export async function acceptSubmission(id: string, actor: string, at: Date | nul
     const fein = normalizeFein(String(a.fein ?? ""));
     const state = String(a.state ?? "");
 
-    // One statement, so two accepts of one FEIN can't both insert: the loser waits, inserts nothing, and finds the winner's row (CR-036).
-    // A blank FEIN isn't covered by the unique index, so it always makes a new insured.
-    const made = (await client.query<{ id: string }>(
-      `INSERT INTO insureds (name, fein, state, created_at) VALUES ($1, $2, $3, coalesce($4, now()))
-       ON CONFLICT (fein) WHERE fein <> '' DO NOTHING RETURNING id`, [name, fein, state, at],
-    )).rows[0];
-    const insuredId = made?.id ?? (await client.query<{ id: string }>("SELECT id FROM insureds WHERE fein = $1", [fein])).rows[0].id;
+    // Accepted before and reopened: keep its insured and correct it, unless the FEIN now names another company (CR-183).
+    const current = sub.insured_id ? (await client.query<{ id: string; name: string; fein: string; state: string }>(
+      "SELECT id, name, fein, state FROM insureds WHERE id = $1 FOR UPDATE", [sub.insured_id])).rows[0] : undefined;
+    const elsewhere = current && fein && fein !== current.fein
+      ? (await client.query<{ id: string }>("SELECT id FROM insureds WHERE fein = $1", [fein])).rows[0] : undefined;
+    const keep = current && (!fein || fein === current.fein || (current.fein === "" && !elsewhere));
+    let made: { id: string } | undefined;
+    let corrected: { before: { name: string; fein: string; state: string }; after: { name: string; fein: string; state: string } } | null = null;
+    let insuredId: string;
+    if (keep) {
+      insuredId = current.id;
+      const after = { name, fein: fein || current.fein, state };
+      const before = { name: current.name, fein: current.fein, state: current.state };
+      if (JSON.stringify(before) !== JSON.stringify(after)) {
+        await client.query("UPDATE insureds SET name = $2, fein = $3, state = $4 WHERE id = $1", [insuredId, after.name, after.fein, after.state]);
+        corrected = { before, after };
+      }
+    } else {
+      // One statement, so two accepts of one FEIN can't both insert: the loser waits, inserts nothing, and finds the winner's row (CR-036).
+      // A blank FEIN isn't covered by the unique index, so it always makes a new insured.
+      made = (await client.query<{ id: string }>(
+        `INSERT INTO insureds (name, fein, state, created_at) VALUES ($1, $2, $3, coalesce($4, now()))
+         ON CONFLICT (fein) WHERE fein <> '' DO NOTHING RETURNING id`, [name, fein, state, at],
+      )).rows[0];
+      insuredId = made?.id ?? (await client.query<{ id: string }>("SELECT id FROM insureds WHERE fein = $1", [fein])).rows[0].id;
+    }
     await client.query(
       `UPDATE submissions SET status = 'accepted', insured_id = $2, reviewed_by = $3, reviewed_at = coalesce($4, now())
        WHERE id = $1 AND status = 'needs_review'`,
@@ -241,6 +290,10 @@ export async function acceptSubmission(id: string, actor: string, at: Date | nul
         actor, action: "insured.created", entityType: "insured" as const, entityId: insuredId,
         summary: `Insured ${name} created from ${sub.reference}`, after: { name, fein, state }, correlationId,
         occurredAt: at ?? undefined,
+      }] : []),
+      ...(corrected ? [{
+        actor, action: "insured.corrected", entityType: "insured" as const, entityId: insuredId,
+        summary: `Insured ${name} corrected from ${sub.reference}`, before: corrected.before, after: corrected.after, correlationId,
       }] : []),
       {
         actor, action: "submission.accepted", entityType: "submission", entityId: id,

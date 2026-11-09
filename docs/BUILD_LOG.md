@@ -1043,3 +1043,25 @@ read this to replay the build quickly.
   - **Re-applying a changed migration locally:** the runner won't run a recorded filename again. Run the file with `psql` until it's committed.
   - In zsh, unquoted `====` fails (`=` expansion), as step-16 already warned.
 - **How to show it:** on underwriter1's desk the tile reads 25% with 4 open claims. Click it for `/book?view=losses`: Red Rock is 56%, and the policy page agrees. Ask the assistant "What's my loss ratio, and which policy is worst?" and it gives the same numbers.
+
+## step-34: A reopened intake's corrections reach the quote, and nothing binds mid-review
+- **Prompt used:** "Yes, fix them", answering whether to fix CR-181 and the findings around it after the Nov 9 review run. In a fresh session: "Fix CR-181 and the other code and UX findings about reopening a file's intake."
+- **What was built:** Reopening an intake (step-32) now behaves as an underwriter would expect from start to finish. Fixes CR-181 to CR-185, CR-191, CR-195 and CR-200 from the code review, and UX-080, UX-081, UX-086 and UX-092 from the UX review.
+  - **Corrections reach the rating (CR-181, UX-081).** Saving a reopened intake carries any change to a rating input into the worksheet, audited as `worksheet.input_changed` "changed by an intake correction". The workbench notice now reads "The file differs from Q-… v1:" and names both rating inputs and the facts printed on the quote (named insured, mailing address, producer), so the old quote stops reading as current and Bind is outlined. The quote form uses the corrected effective date only when it was corrected after the quote was issued.
+  - **Nothing issues or binds mid-review (CR-182).** `issueQuote` and `bindQuote` read the file's status and refuse unless it's accepted. Reopen locks the file's quote rows first, so a bind racing a reopen either lands first and blocks the reopen, or waits and is refused. The quote page shows "Intake reopened · Finish the review →" instead of Bind.
+  - **One insured (CR-183).** Accepting a reopened intake again renames the existing insured (`insured.corrected`) instead of creating a second one, unless the FEIN changed to one another insured already has. Reopen clears who reviewed it.
+  - **Declined renewals (CR-184, UX-080).** The renewal comparison shows "Declined by … : reason" or "back in intake review", with a link to intake, instead of the error page.
+  - **The desk (CR-185, UX-086).** A quote closed by a decline no longer counts once the file is reopened, so its tasks come back. A file in review gets no "chase the expired quote" task.
+  - **Stages (CR-191, CR-195, UX-092).** A reopened file reads "Needs review" even with a quote, and an expired quote reads Expired on Submissions, intake, search and the customer page.
+  - **Messages (CR-200).** A stale tab on a declined file is told "is declined; reopen it", not "already accepted".
+- **Files:** `web/src/lib/stage.ts`, `web/src/lib/submission.ts`, `web/src/lib/submissions.ts`, `web/src/lib/quote-terms.ts`, `web/src/lib/renewal-compare.ts`, `web/src/lib/quotes.ts`, `web/src/lib/policies.ts`, `web/src/lib/file-closure.ts`, `web/src/lib/dashboard.ts`, `web/src/app/submissions/[id]/workbench/page.tsx`, `web/src/app/submissions/[id]/renewal/page.tsx`, `web/src/app/submissions/[id]/status-chips.tsx`, `web/src/app/quotes/[id]/page.tsx`, tests in `web/src/lib/persistence.test.ts`, `web/src/lib/stage.test.ts`, `web/src/lib/quote-terms.test.ts`, `uat/tests/sandbox/20-workbench.spec.ts`
+- **Commit:** `step-34: a reopened intake's corrections reach the quote, and nothing binds mid-review`
+- **Decisions:**
+  - **Copy changed inputs, don't re-derive the worksheet.** Only inputs the correction actually changed are written, so an underwriter's own edits to other inputs survive. States compare as a set, so reordering them isn't a change.
+  - **The quote stays as issued.** A correction never rewrites an issued quote; it makes the quote out of date, and the underwriter issues v2 or binds v1 exactly as sent.
+  - **The status check is in the library, not the page.** Pages already hide Bind, but a stale tab or the API could still call it; the library check holds either way.
+  - **Lock order matches bind.** Bind locks the quote and then reads the file; reopen now locks the quotes and then changes the file. Opposite orders would deadlock or let both through.
+- **Dead ends / gotchas:**
+  - **An older test changed meaning.** UX-068's test expected binding a declined file's quote to fail with "closed as not taken"; the file-status check now fires first with "is declined". Same outcome, earlier reason.
+  - **A notice page still needs an `<h1>`.** The renewal page's notice first shipped without a heading, the gap UAT flags elsewhere; both notices now carry "Renewal · <insured>".
+- **How to show it:** on a quoted file, click "Reopen intake to correct". The quote page now says "Intake reopened · Finish the review →" and has no Bind. Change gross receipts and the named insured, Save & accept, then open the workbench: "The file differs from Q-… v1: Gross receipts … · Named insured …", Rating out of date, Bind outlined.

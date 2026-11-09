@@ -1,3 +1,6 @@
+import { closureText } from "@/lib/file-closure";
+import { auditTrail } from "@/lib/audit";
+import { quoteFormEffective } from "@/lib/quote-terms";
 import { Flash } from "@/components/flash";
 import { todayIso } from "@/lib/time";
 import { quoteState } from "@/lib/bind-rules";
@@ -48,8 +51,21 @@ export default async function RenewalPage({ params, searchParams }: Props) {
   if (!exp) {
     return (
       <main className="mx-auto max-w-3xl p-8">
+        <h1 className="mb-4 text-2xl font-semibold">Renewal · {sub.applicant_name}</h1>
         <p className="rounded bg-amber-50 px-4 py-3 text-amber-800">
           {sub.reference} is new business, not a renewal. <Link href={`/submissions/${id}/workbench`} className="underline">Open its workbench</Link>.
+        </p>
+      </main>
+    );
+  }
+  // As the workbench does: a declined renewal or one back in intake review has nothing to compare yet (CR-184, UX-080).
+  if (sub.status !== "accepted") {
+    return (
+      <main className="mx-auto max-w-3xl p-8">
+        <h1 className="mb-4 text-2xl font-semibold">Renewal · {sub.applicant_name}</h1>
+        <p className="rounded bg-slate-100 px-4 py-3 text-slate-800">
+          {sub.reference}: {sub.status === "declined" && sub.decline ? `${closureText("Declined", sub.decline)}.` : "this renewal is back in intake review."}{" "}
+          <Link href={`/submissions/${id}`} className="underline">Open its intake page</Link> to continue.
         </p>
       </main>
     );
@@ -59,7 +75,7 @@ export default async function RenewalPage({ params, searchParams }: Props) {
   const [quotes, policies] = await Promise.all([quotesForSubmission(id), policiesForSubmission(id)]);
   const latest = quotes[0];
   const policy = policies[0];
-  const effective = latest?.effective_date ?? String(sub.data.policy?.effective_date ?? exp.expiration_date);
+  const effective = quoteFormEffective(latest, String(sub.data.policy?.effective_date ?? exp.expiration_date), await auditTrail("submission", id));   // CR-181
   const expiration = latest?.expiration_date ?? addYears(effective, 1);
   const gap = coverageGapNote(exp.expiration_date, effective);
   const subjectivities = latest?.subjectivities ?? ["Signed renewal application or no-change confirmation", ...suggestedSubjectivities(flags, sub.data).slice(1)];
@@ -75,7 +91,7 @@ export default async function RenewalPage({ params, searchParams }: Props) {
   const b = comparison?.bridge;
 
   // UX-003: the same chip pair and drift notice as the workbench, so the two pages agree about one file.
-  const { quoteCurrent, drift } = quoteDrift(latest && !policy ? await getQuote(latest.id) : null, ws);
+  const { quoteCurrent, drift } = quoteDrift(latest && !policy ? await getQuote(latest.id) : null, ws, sub);
   const chips = worksheetChips({
     policyNumber: policy?.policy_number, quote: latest ? { number: latest.quote_number, version: latest.version, state: quoteState(latest, todayIso()) } : null, quoteCurrent,
     hasRating: !!ws.last_rating, rated, ready, openReferrals: openReferrals.length,

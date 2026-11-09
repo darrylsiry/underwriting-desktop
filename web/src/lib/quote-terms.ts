@@ -102,3 +102,39 @@ export function formsFor(inputs: Pick<RatingInputs, "states" | "subcontracted_pc
   if (ROOFING_CLASSES.includes(inputs.class_code)) forms.push("Roofing Operations Endorsement (no hot tar or torch-down work)");
   return forms;
 }
+
+/** The insured's mailing address as a quote prints it. */
+export function insuredAddressLines(a: Record<string, unknown>): string[] {
+  return [String(a.street ?? ""), [a.city, a.state].filter(Boolean).join(", ") + (a.zip ? ` ${a.zip}` : "")].filter((l) => l.trim());
+}
+
+type Quoted = { insured_name: string; terms: { insured_address: string[]; producer: string[] } };
+
+/**
+ * What a quote froze about the insured and producer, against the file now. They come from the intake at issue,
+ * so any difference is a correction made since, which the quote and a binder bound from it would not show (UX-081).
+ */
+export function quotedFactChanges(quoted: Quoted, sub: { applicant_name: string; data: SubmissionData }): { label: string; from: string; to: string }[] {
+  const now = {
+    name: sub.applicant_name,
+    address: insuredAddressLines(sub.data.applicant ?? {}).join(", "),
+    producer: producerLines(producerFields(sub.data.producer ?? {})).join(", "),
+  };
+  const then = { name: quoted.insured_name, address: quoted.terms.insured_address.join(", "), producer: quoted.terms.producer.join(", ") };
+  const labels = { name: "Named insured", address: "Mailing address", producer: "Producer" } as const;
+  return (Object.keys(labels) as (keyof typeof labels)[]).filter((k) => then[k] !== now[k]).map((k) => ({ label: labels[k], from: then[k] || "none", to: now[k] || "none" }));
+}
+
+/**
+ * The date a quote form starts from: the latest quote's, unless the intake's effective date was corrected
+ * after that quote was issued, when the correction wins (CR-181).
+ */
+export function quoteFormEffective(
+  latest: { effective_date: string; issued_at: Date } | undefined, intakeDate: string,
+  trail: { action: string; occurred_at: Date; before: unknown }[],
+): string {
+  if (!latest) return intakeDate;
+  const correctedSince = trail.some((e) => e.action === "submission.field_corrected" && e.occurred_at > latest.issued_at
+    && !!e.before && typeof e.before === "object" && "policy.effective_date" in e.before);
+  return correctedSince && intakeDate ? intakeDate : latest.effective_date;
+}

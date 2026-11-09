@@ -1,3 +1,4 @@
+import { getSubmission } from "@/lib/submissions";
 import { Flash } from "@/components/flash";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -34,7 +35,8 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
   const { msg, error } = await searchParams;
   const q = await load(id);
   if (!q) notFound();
-  const [versions, policies] = await Promise.all([quoteVersions(q.quote_number), policiesForSubmission(q.submission_id)]);
+  const [versions, policies, file] = await Promise.all([quoteVersions(q.quote_number), policiesForSubmission(q.submission_id), getSubmission(q.submission_id)]);
+  const inReview = file?.status === "needs_review";   // reopened for corrections: it can't be bound until accepted again (CR-182)
   const policy = policies.find((p) => p.quote_id === q.id);
   const live = versions.find((v) => v.status !== "superseded");   // UX-043: the version that is actually out
   const r = q.rating;
@@ -52,7 +54,10 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
         {state === "expired" && !policy && (
           <Link href={`/submissions/${q.submission_id}/workbench`} className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100">Expired {whenDate(q.valid_until)} · Revise on the workbench →</Link>
         )}
-        {state === "issued" && !policy && (
+        {state === "issued" && !policy && inReview && (
+          <Link href={`/submissions/${q.submission_id}`} className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100">Intake reopened · Finish the review →</Link>
+        )}
+        {state === "issued" && !policy && !inReview && (
           <Link href={`/submissions/${q.submission_id}/workbench`} className="rounded-md bg-emerald-700 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-600">Bind on the workbench →</Link>
         )}
         {q.status === "superseded" && live && live.id !== q.id && (

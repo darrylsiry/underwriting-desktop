@@ -89,7 +89,7 @@ test.describe.serial("workbench, quote and bind", () => {
     await page.getByRole("button", { name: "Save & rate" }).click();
     await expectMessage(page, /Rated:/);
     await clearReferrals(page);
-    await expect(page.getByText(/Worksheet differs from Q-\d{4}-\d{4} v1/).first()).toBeVisible();
+    await expect(page.getByText(/The file differs from Q-\d{4}-\d{4} v1/).first()).toBeVisible();
     await page.getByRole("button", { name: /^Issue revised quote \(v2\)/ }).click();
     await expectMessage(page, /Quote Q-\d{4}-\d{4} v2 issued/);
     const v2 = idFrom((await page.getByRole("link", { name: /^Q-\d{4}-\d{4} v2$/ }).first().getAttribute("href"))!, "quotes");
