@@ -37,7 +37,7 @@ jobs:
     timeout-minutes: 30
     environment: production
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (2026-10)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4 (2026-10)
       - uses: superfly/flyctl-actions/setup-flyctl@98172f70657cb3e15db199af139be99bd3e61200 # master as of 2026-10-31
       # setup-flyctl installs the binary as `flyctl`; the deploy script calls `fly`.
       - run: sudo ln -sf "$(command -v flyctl)" /usr/local/bin/fly && fly version
