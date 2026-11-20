@@ -106,8 +106,9 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
     const cur = latestQuote.get(q.quote_number);
     if (!cur || q.version > cur.version) latestQuote.set(q.quote_number, q);
   }
-  // A quote closed by a decline doesn't count once the file is reopened: it needs quoting again (CR-185).
-  const quotedSubs = new Set(quotes.rows.filter((q) => !closedByDecline(q)).map((q) => q.submission_id));
+  // A quote closed by a decline doesn't count once the file is reopened: it needs quoting again (CR-185). Only each
+  // file's latest version decides, as on Submissions: an earlier one it superseded says nothing about now.
+  const quotedSubs = new Set([...latestQuote.values()].filter((q) => !closedByDecline(q)).map((q) => q.submission_id));
 
   for (const s of subs) {
     if (s.status === "declined") continue;
@@ -141,7 +142,9 @@ export async function loadDashboard(user: string): Promise<Dashboard> {
   }
   for (const q of latestQuote.values()) {
     if (q.status !== "issued") continue;
-    if (subById.get(q.submission_id)?.status === "needs_review") continue;   // reopened: its review task comes first, and it can't be bound (CR-182)
+    const fileStatus = subById.get(q.submission_id)?.status;
+    if (fileStatus === "needs_review") continue;   // reopened: its review task comes first, and it can't be bound (CR-182)
+    if (fileStatus === "declined") continue;   // nothing to chase on a declined file, should a live quote ever survive one (CR-221)
     const left = daysUntil(q.valid_until, today);
     if (left < -EXPIRED_QUOTE_TASK_DAYS) continue;   // the hit ratio has already counted it as lost
     tasks.push({ kind: "bind", title: `${left < 0 ? "Expired quote" : "Chase bind order"}: ${q.insured_name}`,

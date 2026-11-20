@@ -9,6 +9,7 @@ import path from "node:path";
 import { after, before, test, type TestContext } from "node:test";
 import { Client } from "pg";
 import type { Extraction, SubmissionData } from "./submission.ts";
+import type { SubmissionRow } from "./submissions.ts";
 import type { RatingInputs } from "./worksheet.ts";
 
 // The modules under test import each other without file extensions, as Next's bundler allows and node doesn't.
@@ -791,4 +792,78 @@ test("a stale intake tab on a declined file is told it was declined, not accepte
   await declineSubmission(sub, { reason: "Incomplete submission" }, ACTOR);
   await assert.rejects(saveReview(sub.id, { "applicant.name": "X Co" }, ACTOR), /is declined; reopen it/);
   await assert.rejects(acceptSubmission(sub.id, ACTOR), /is declined; reopen it/);
+});
+
+// --- the gaps the Nov 20 review found in the reopen work (CR-183, CR-185, CR-220, CR-221) ---
+
+test("a decline and a reopen racing on one file both finish, and the file ends declined with nothing out (CR-220)", { ...options, timeout: 20_000 }, async () => {
+  const files: SubmissionRow[] = [];
+  for (let i = 0; i < 4; i++) {
+    const sub = await ratedSubmission();
+    await issueQuote(sub, period(), ACTOR);
+    files.push(await fresh(sub.id));
+  }
+  const started = Date.now();
+  await Promise.all(files.map((sub) => Promise.allSettled([declineSubmission(sub, { reason: "Price" }, ACTOR), reopenIntake(sub, ACTOR)])));
+  assert.ok(Date.now() - started < 10_000, "neither sat waiting on the other");
+  for (const sub of files) {
+    assert.equal((await fresh(sub.id)).status, "declined", "a reopen first is then declined; a decline first refuses the reopen");
+    assert.equal((await policyDb.query("SELECT 1 FROM quotes WHERE submission_id = $1 AND status = 'issued'", [sub.id])).rowCount, 0);
+  }
+});
+
+test("a decline or a reopen while a quote is being rated stops the quote (CR-221)", options, async () => {
+  const interrupts: [string, (sub: SubmissionRow) => Promise<unknown>][] = [
+    ["declined", (sub) => declineSubmission(sub, { reason: "Price" }, ACTOR)],
+    ["reopened", (sub) => reopenIntake(sub, ACTOR)],
+  ];
+  for (const [what, interrupt] of interrupts) {
+    const sub = await ratedSubmission();
+    duringRating = async () => { await interrupt(await fresh(sub.id)); };
+    await assert.rejects(issueQuote(sub, period(), ACTOR), what === "declined" ? /is declined/ : /reopened for corrections/);
+    assert.equal((await policyDb.query("SELECT 1 FROM quotes WHERE submission_id = $1", [sub.id])).rowCount, 0, `no quote on a file ${what} mid-issue`);
+  }
+
+  // Should one exist anyway, the desk doesn't chase a quote on a declined file.
+  const odd = await ratedSubmission();
+  const quote = await issueQuote(odd, period(), ACTOR);
+  await customerDb.query("UPDATE submissions SET status = 'declined' WHERE id = $1", [odd.id]);
+  assert.equal(await taskFor(quote.id), undefined);
+});
+
+test("a file reopened after a decline is back on the desk even when it had a revised quote (CR-185)", options, async () => {
+  const sub = await ratedSubmission();
+  await issueQuote(sub, period(), ACTOR);
+  await issueQuote(await fresh(sub.id), period(), ACTOR);   // v2 supersedes v1, and the decline closes only v2
+  await declineSubmission(await fresh(sub.id), { reason: "Price" }, ACTOR);
+  await reopenDeclined(await fresh(sub.id), ACTOR);
+  assert.ok(await taskFor(sub.id), "a task to quote it again");
+});
+
+test("a FEIN corrected on a reopened intake keeps or moves the insured, quotes follow the file, and a bind lands on the file's insured (CR-183)", options, async () => {
+  const feinOf = async (insuredId: string) => (await customerDb.query<{ fein: string }>("SELECT fein FROM insureds WHERE id = $1", [insuredId])).rows[0].fein;
+
+  // A mistyped FEIN on a customer with no other files: the same customer, its FEIN corrected.
+  const typo = await ratedSubmission();
+  const typoQuote = await issueQuote(typo, period(), ACTOR);
+  await reopenIntake(await fresh(typo.id), ACTOR);
+  await saveReview(typo.id, { "applicant.fein": "87-0000001" }, ACTOR);
+  await acceptSubmission(typo.id, ACTOR);
+  assert.equal((await fresh(typo.id)).insured_id, typo.insured_id, "one customer, corrected");
+  assert.equal(await feinOf(typo.insured_id!), "87-0000001");
+  assert.ok((await actions("insured", typo.insured_id!)).includes("insured.corrected"));
+  assert.equal((await bindQuote(typoQuote.id, new Set(), ACTOR)).insured_id, typo.insured_id);
+
+  // A FEIN that names a company already on file: the file moves to it, and so does its quote.
+  const other = await newSubmission();
+  const moved = await ratedSubmission();
+  const movedQuote = await issueQuote(moved, period(), ACTOR);
+  await reopenIntake(await fresh(moved.id), ACTOR);
+  await saveReview(moved.id, { "applicant.fein": await feinOf(other.insured_id!) }, ACTOR);
+  await acceptSubmission(moved.id, ACTOR);
+  const now = (await fresh(moved.id)).insured_id;
+  assert.equal(now, other.insured_id, "the file belongs to the company that FEIN names");
+  assert.equal((await getQuote(movedQuote.id))!.insured_id, now, "its quote moved with it");
+  assert.ok((await actions("quote", movedQuote.id)).includes("quote.insured_changed"));
+  assert.equal((await bindQuote(movedQuote.id, new Set(), ACTOR)).insured_id, now);
 });

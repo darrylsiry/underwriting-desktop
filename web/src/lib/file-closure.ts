@@ -39,17 +39,31 @@ async function transaction<T>(pool: { connect: () => Promise<PoolClient> }, fn: 
     return result;
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
+    // lock_not_available: holdFile and boundedWait gave up waiting on someone else's change to this file (CR-220).
+    if ((err as { code?: string }).code === "55P03") throw new Error("Someone else is changing this file right now. Try again in a moment.");
     throw err;
   } finally {
     client.release();
   }
 }
 
+/** A wait for another change's lock gives up after this long instead of hanging the request (CR-220). */
+const boundedWait = (client: PoolClient) => client.query("SET LOCAL lock_timeout = '10s'");
+
+/**
+ * Hold a file for a change that spans both databases. The policy side is always taken first and the customer row
+ * second, everywhere, so two changes racing on one file wait in turn instead of on each other (CR-220). The per-file
+ * lock is the one issueQuote takes before it inserts, so a quote being issued either lands first or sees this change
+ * (CR-221); the quote rows keep a bind out (CR-182).
+ */
+async function holdFile(client: PoolClient, submissionId: string) {
+  await boundedWait(client);
+  await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [submissionId]);
+  await client.query("SELECT 1 FROM quotes WHERE submission_id = $1 FOR UPDATE", [submissionId]);
+}
+
 const boundAs = async (submissionId: string, db: { query: PoolClient["query"] } = policyDb) =>
   (await db.query<{ policy_number: string }>("SELECT policy_number FROM policies WHERE submission_id = $1 LIMIT 1", [submissionId])).rows[0]?.policy_number;
-
-/** Hold every quote of a file, so a bind of any of them waits for this transaction (CR-182). */
-const lockQuotes = (client: PoolClient, submissionId: string) => client.query("SELECT 1 FROM quotes WHERE submission_id = $1 FOR UPDATE", [submissionId]);
 
 const renewalTable = (source: "book" | "desktop") => (source === "book" ? "book_policies" : "policies");
 const renewalEntity = (source: "book" | "desktop") => (source === "book" ? "book_policy" as const : "policy" as const);
@@ -60,16 +74,18 @@ const renewalEntity = (source: "book" | "desktop") => (source === "book" ? "book
  */
 export async function declineSubmission(sub: SubmissionRow, input: { reason?: string; note?: string }, actor: string): Promise<void> {
   const closure = closureOf(input, DECLINE_REASONS, actor);
-  await transaction(customerDb, async (customer) => {
-    const was = (await customer.query<{ status: SubmissionRow["status"] }>("SELECT status FROM submissions WHERE id = $1 FOR UPDATE", [sub.id])).rows[0]?.status;
-    if (was === "declined") throw new Error(`${sub.reference} is already declined`);
-    const decline: Decline = { ...closure, from: was };
-    await customer.query("UPDATE submissions SET status = 'declined', decline = $2 WHERE id = $1", [sub.id, decline]);
-    await transaction(policyDb, async (policyClient) => {
-      // Checked under the quotes' locks, so a bind in flight is either seen here or finds its quote closed (CR-182).
-      await lockQuotes(policyClient, sub.id);
-      const policy = await boundAs(sub.id, policyClient);
-      if (policy) throw new Error(`${sub.reference} is bound as ${policy}, so it can't be declined`);
+  await transaction(policyDb, async (policyClient) => {
+    // Checked under the file's locks, so a bind in flight is either seen here or finds its quote closed (CR-182).
+    await holdFile(policyClient, sub.id);
+    const policy = await boundAs(sub.id, policyClient);
+    if (policy) throw new Error(`${sub.reference} is bound as ${policy}, so it can't be declined`);
+    // The customer side commits first and the policy side straight after, as in reopenIntake (CR-220).
+    await transaction(customerDb, async (customer) => {
+      await boundedWait(customer);
+      const was = (await customer.query<{ status: SubmissionRow["status"] }>("SELECT status FROM submissions WHERE id = $1 FOR UPDATE", [sub.id])).rows[0]?.status;
+      if (was === "declined") throw new Error(`${sub.reference} is already declined`);
+      const decline: Decline = { ...closure, from: was };
+      await customer.query("UPDATE submissions SET status = 'declined', decline = $2 WHERE id = $1", [sub.id, decline]);
       const closed = (await policyClient.query<{ id: string; quote_number: string; version: number }>(
         "UPDATE quotes SET status = 'not_taken', closed = $2 WHERE submission_id = $1 AND status = 'issued' RETURNING id, quote_number, version",
         [sub.id, { ...closure, reason: `${DECLINE_CLOSE_PREFIX}${closure.reason}` }])).rows;
@@ -91,11 +107,14 @@ export async function declineSubmission(sub: SubmissionRow, input: { reason?: st
 
 /** Undo a decline: the file goes back where it was. A quote it closed stays closed, so a new version says what is on offer now. */
 export async function reopenDeclined(sub: SubmissionRow, actor: string): Promise<SubmissionRow["status"]> {
-  return transaction(customerDb, async (customer) => {
-    const row = (await customer.query<{ status: SubmissionRow["status"]; decline: Decline | null }>("SELECT status, decline FROM submissions WHERE id = $1 FOR UPDATE", [sub.id])).rows[0];
-    if (row?.status !== "declined" || !row.decline) throw new Error(`${sub.reference} isn't declined`);
-    await customer.query("UPDATE submissions SET status = $2, decline = NULL WHERE id = $1", [sub.id, row.decline.from]);
-    await transaction(policyDb, async (policyClient) => {
+  // The same order as every other change to a file: the policy side, then the customer row (CR-220).
+  return transaction(policyDb, async (policyClient) => {
+    await holdFile(policyClient, sub.id);
+    return transaction(customerDb, async (customer) => {
+      await boundedWait(customer);
+      const row = (await customer.query<{ status: SubmissionRow["status"]; decline: Decline | null }>("SELECT status, decline FROM submissions WHERE id = $1 FOR UPDATE", [sub.id])).rows[0];
+      if (row?.status !== "declined" || !row.decline) throw new Error(`${sub.reference} isn't declined`);
+      await customer.query("UPDATE submissions SET status = $2, decline = NULL WHERE id = $1", [sub.id, row.decline.from]);
       const exp = sub.kind === "renewal" ? sub.renewal_of : null;
       const restored = exp ? (await policyClient.query(
         `UPDATE ${renewalTable(exp.source)} SET renewal_status = 'in_progress', non_renewal = NULL WHERE id = $1 AND renewal_submission_id = $2 AND renewal_status = 'non_renewed'`,
@@ -106,20 +125,21 @@ export async function reopenDeclined(sub: SubmissionRow, actor: string): Promise
         ...(exp && restored ? [{ actor, action: "renewal.non_renewal_reversed", entityType: renewalEntity(exp.source), entityId: exp.policy_id,
           summary: `${exp.policy_number}: renewal back in progress, ${sub.reference} reopened`, before: { renewal_status: "non_renewed" }, after: { renewal_status: "in_progress" } }] : []),
       ], policyClient);
+      return row.decline.from;
     });
-    return row.decline.from;
   });
 }
 
 /** Reopen an accepted intake to correct it (UX-058). The worksheet is kept, and issued quotes stay as sent. */
 export async function reopenIntake(sub: SubmissionRow, actor: string): Promise<void> {
-  // The quotes' locks are held until the file reads "in review", so a bind either lands first and is refused here,
-  // or waits for them and then finds the file in review (CR-182).
+  // The file's locks are held until it reads "in review", so a bind either lands first and is refused here,
+  // or waits for them and then finds the file in review (CR-182); a quote being issued does the same (CR-221).
   await transaction(policyDb, async (policyClient) => {
-    await lockQuotes(policyClient, sub.id);
+    await holdFile(policyClient, sub.id);
     const policy = await boundAs(sub.id, policyClient);
     if (policy) throw new Error(`${sub.reference} is bound as ${policy}; changes now need a policy endorsement`);
     await transaction(customerDb, async (customer) => {
+      await boundedWait(customer);
       // Nobody has accepted it while it is back in review (CR-183).
       const done = await customer.query(
         "UPDATE submissions SET status = 'needs_review', reviewed_by = NULL, reviewed_at = NULL WHERE id = $1 AND status = 'accepted'", [sub.id]);

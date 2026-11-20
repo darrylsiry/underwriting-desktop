@@ -169,6 +169,10 @@ export async function issueQuote(sub: SubmissionRow, form: QuoteForm, actor: str
       "SELECT quote_number, version, status FROM quotes WHERE submission_id = $1 ORDER BY version DESC FOR UPDATE", [sub.id])).rows;
     const bound = current.find((c) => c.status === "bound");
     if (bound) throw new Error(`${bound.quote_number} is already bound; changes now need a policy endorsement`);
+    // Again, under the per-file lock that a decline or a reopen holds until the file has changed: one made while
+    // this quote was being rated is seen here, and the quote isn't issued (CR-221).
+    const now = (await customerDb.query<{ status: string }>("SELECT status FROM submissions WHERE id = $1", [sub.id])).rows[0]?.status ?? sub.status;
+    if (now !== "accepted") throw new Error(wrongStatus(sub.reference, now, "accepted"));
     if ((current[0]?.version ?? 0) !== (previous?.version ?? 0)) {
       throw new Error(`${current[0].quote_number} v${current[0].version} was issued on this file just now. Reload to see it before issuing another.`);
     }

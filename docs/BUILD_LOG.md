@@ -1075,3 +1075,20 @@ read this to replay the build quickly.
   - **Why.** Since step-30 they reach the live site without a push, so committing them only added snapshot commits and kept a list of open security findings in the repository. The Oct 31 to Nov 2 snapshots stay in history.
   - **The baked fallback stays.** A deploy from this machine still copies the local reports into the web image; a deploy from GitHub Actions copies none, and App Tests shows the published set. It falls back to the baked copy only when nothing has been published.
 - **For the live repo:** don't commit the reports there either; start with them in `.gitignore`.
+
+## Fix: the gaps the Nov 20 review found in step-34's reopen work (CR-183, CR-185, CR-220, CR-221)
+- **Prompt used:** "Yes, fix them", after App Tests showed four open code findings left by step-34.
+- **What changed:**
+  - **No deadlock between decline and reopen (CR-220).** Step-34 made reopen take the policy locks before the customer row, but decline still took them the other way round, and the two could wait on each other across the two databases until a 30-second timeout. Every change to a file (decline, reopen after decline, reopen intake) now goes through `holdFile` in `file-closure.ts`: the policy side first (the per-file advisory lock, then the quote rows), then the customer row. A lock wait gives up after 10 seconds with "Someone else is changing this file right now".
+  - **No quote issued on a file declined or reopened mid-issue (CR-221).** `issueQuote` checks the file's status again under the per-file lock, which decline and reopen now also hold until the file has changed. The desk also skips a live quote on a declined file.
+  - **Revised quotes (CR-185).** The desk judges each file by its latest quote version, as Submissions already did, so a file with a v2 is back on the desk once reopened after a decline.
+  - **FEIN corrections (CR-183).** A corrected FEIN no other customer has is a typo fixed in place when the file is that customer's only one. A FEIN that names another customer, or a change on a customer with other files, moves the file, and its unbound quotes follow it (`quote.insured_changed`). A bind always takes the file's insured.
+- **Files:** `web/src/lib/file-closure.ts`, `web/src/lib/quotes.ts`, `web/src/lib/dashboard.ts`, `web/src/lib/policies.ts`, `web/src/lib/submissions.ts`, `web/src/lib/persistence.test.ts`
+- **Commit:** `fix: CR-183, CR-185, CR-220, CR-221 the reopen work's last gaps`
+- **Decisions:**
+  - **One lock order, written once.** All the file changes call the same helper, so a future one can't drift the way decline did.
+  - **The customer side commits first, the policy side straight after,** for every file change. Across two databases neither order is atomic; one order everywhere is what prevents the deadlock.
+  - **A FEIN isn't printed on a quote,** so a FEIN correction doesn't make the quote out of date. The quote moves to the right customer instead.
+- **Dead ends / gotchas:**
+  - **The race test reproduced the deadlock.** Before the fix it hung until the test's 20-second timeout; after, it finishes in about a tenth of a second. Four files raced at once make the interleaving near-certain.
+  - **Check every function that touches the same rows when fixing a lock order.** Step-34 checked reopen against bind but not against decline.

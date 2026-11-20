@@ -3,7 +3,7 @@ import { isUuid, paddedSeq, plural } from "./text.ts";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import { audit } from "./audit";
-import { customerDb } from "./db";
+import { customerDb, policyDb } from "./db";
 import type { ExpiringPolicy } from "./renewal-compare";
 import { INGESTION_SERVICE_URL } from "./services";
 import { ServiceError, describeServiceError, errorDetailOf } from "./service-errors";
@@ -242,7 +242,7 @@ async function carryToWorksheet(client: PoolClient, sub: SubmissionRow, data: Su
 
 /** Accept the intake: link (or create) the insured and lock the extracted data for underwriting. `at` back-dates it (seeded history). */
 export async function acceptSubmission(id: string, actor: string, at: Date | null = null): Promise<void> {
-  await withReviewLock(id, async (client, sub) => {
+  const moved = await withReviewLock(id, async (client, sub) => {
     const missing = missingForRating(sub.data);
     if (missing.length) throw new Error(`Fill in before accepting: ${missing.map(fieldLabel).join(", ")}`);
     const a = sub.data.applicant;
@@ -254,9 +254,14 @@ export async function acceptSubmission(id: string, actor: string, at: Date | nul
     // Accepted before and reopened: keep its insured and correct it, unless the FEIN now names another company (CR-183).
     const current = sub.insured_id ? (await client.query<{ id: string; name: string; fein: string; state: string }>(
       "SELECT id, name, fein, state FROM insureds WHERE id = $1 FOR UPDATE", [sub.insured_id])).rows[0] : undefined;
-    const elsewhere = current && fein && fein !== current.fein
+    const newFein = !!current && !!fein && fein !== current.fein;
+    const elsewhere = newFein
       ? (await client.query<{ id: string }>("SELECT id FROM insureds WHERE fein = $1", [fein])).rows[0] : undefined;
-    const keep = current && (!fein || fein === current.fein || (current.fein === "" && !elsewhere));
+    // A FEIN no other customer has is a typo fixed when this file is the customer's only one; with other files it
+    // means a different company, which gets its own insured (CR-183).
+    const alone = newFein && !elsewhere
+      && !(await client.query("SELECT 1 FROM submissions WHERE insured_id = $1 AND id <> $2 LIMIT 1", [current!.id, id])).rowCount;
+    const keep = current && (!newFein || (!elsewhere && (current.fein === "" || alone)));
     let made: { id: string } | undefined;
     let corrected: { before: { name: string; fein: string; state: string }; after: { name: string; fein: string; state: string } } | null = null;
     let insuredId: string;
@@ -301,5 +306,32 @@ export async function acceptSubmission(id: string, actor: string, at: Date | nul
         after: { insured_id: insuredId, corrected_fields: sub.corrected_fields }, correlationId, occurredAt: at ?? undefined,
       },
     );
+    return sub.insured_id && sub.insured_id !== insuredId ? { reference: sub.reference, from: sub.insured_id, to: insuredId, fein } : null;
   });
+  if (moved) await quotesFollowFile(id, moved, actor);
+}
+
+/**
+ * A corrected FEIN moved the file to another customer, so its quotes go with it and show on that customer's page.
+ * After the customer side has committed, and never a bound quote; a bind takes the file's insured anyway (CR-183).
+ */
+async function quotesFollowFile(submissionId: string, moved: { reference: string; from: string; to: string; fein: string }, actor: string) {
+  const client = await policyDb.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ id: string; quote_number: string; version: number }>(
+      "UPDATE quotes SET insured_id = $2 WHERE submission_id = $1 AND status <> 'bound' AND insured_id IS DISTINCT FROM $2 RETURNING id, quote_number, version",
+      [submissionId, moved.to]);
+    await audit(rows.map((q) => ({
+      actor, action: "quote.insured_changed", entityType: "quote" as const, entityId: q.id,
+      summary: `${q.quote_number} v${q.version}: moved with ${moved.reference} to the insured with FEIN ${moved.fein}`,
+      before: { insured_id: moved.from }, after: { insured_id: moved.to },
+    })), client);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }

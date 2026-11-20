@@ -106,8 +106,8 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
     if (!found) throw new Error("Quote not found");
     q = found;
     // After the quote's lock: a reopen holds these locks while it commits, so a bind waiting here then finds the file in review (CR-182).
-    const file = (await customerDb.query<{ status: string; kind: string; renewal_of: ExpiringPolicy | null }>(
-      "SELECT status, kind, renewal_of FROM submissions WHERE id = $1", [q.submission_id])).rows[0];
+    const file = (await customerDb.query<{ status: string; kind: string; renewal_of: ExpiringPolicy | null; insured_id: string | null }>(
+      "SELECT status, kind, renewal_of, insured_id FROM submissions WHERE id = $1", [q.submission_id])).rows[0];
     if (file && file.status !== "accepted") throw new Error(wrongStatus(q.submission_ref, file.status, "accepted"));
     const renewedFrom = file?.kind === "renewal" ? file.renewal_of : null;
     const blockers = bindBlockers(q, today);
@@ -133,7 +133,8 @@ export async function bindQuote(quoteId: string, received: Set<number>, actor: s
          effective_date, expiration_date, premium, policy_fee, surplus_lines_tax, total, subjectivities,
          binder_pdf, policy_pdf, bound_by, bound_at, renewed_from)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
-      [numbers.policy, numbers.binder, q.id, q.submission_id, q.insured_id, q.insured_name, q.effective_date,
+      // The file's insured, not the quote's: a corrected FEIN can have moved the file to another customer (CR-183).
+      [numbers.policy, numbers.binder, q.id, q.submission_id, file?.insured_id ?? q.insured_id, q.insured_name, q.effective_date,
        q.expiration_date, q.premium, q.policy_fee, q.surplus_lines_tax, q.total, JSON.stringify(subjectivities),
        Buffer.from(binderPdf), Buffer.from(policyPdf), actor, boundAt,
        renewedFrom ? { source: renewedFrom.source, policy_id: renewedFrom.policy_id, policy_number: renewedFrom.policy_number } : null],
