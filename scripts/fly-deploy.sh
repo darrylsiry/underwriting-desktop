@@ -151,10 +151,11 @@ step "Deploy web (public)"
 find "$ROOT/web/inbox" -mindepth 1 ! -name .gitkeep -exec rm -rf {} +
 # Tracked folders only: compose lets the app generate more into samples/submissions, and those must not ship (CR-178).
 for d in $(git -C "$ROOT" ls-files samples/submissions | cut -d/ -f3 | sort -u); do cp -R "$ROOT/samples/submissions/$d" "$ROOT/web/inbox/"; done
-# App Tests (step 26) reads the review agents' reports and their ledger; on Fly they are baked into the
-# web image from docs/, so the page starts from what was committed when this deploy ran, and reports
-# published afterwards (step 30, scripts/reports-publish-setup.sh) keep it current. Not the security
-# report: its reproduction steps stay in the repository, and the ledger carries its findings (CR-097).
+# App Tests (step 26) reads the review agents' reports and their ledger. They aren't in git: the hook
+# publishes them to the live site (step 30, scripts/reports-publish-setup.sh). A deploy from this machine
+# still bakes its local copies into the web image as a fallback; a deploy from GitHub Actions has none,
+# and the page shows the published set. Not the security report: its reproduction steps stay on this
+# machine, and the ledger carries its findings (CR-097).
 find "$ROOT/web/agent-reports" -mindepth 1 ! -name .gitkeep -exec rm -rf {} +
 mkdir -p "$ROOT/web/agent-reports/ux-mockups"
 for f in CODE_REVIEW.md UX_REVIEW.md UAT_REPORT.md AGENT_LEDGER.json; do

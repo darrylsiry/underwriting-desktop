@@ -1065,3 +1065,13 @@ read this to replay the build quickly.
   - **An older test changed meaning.** UX-068's test expected binding a declined file's quote to fail with "closed as not taken"; the file-status check now fires first with "is declined". Same outcome, earlier reason.
   - **A notice page still needs an `<h1>`.** The renewal page's notice first shipped without a heading, the gap UAT flags elsewhere; both notices now carry "Renewal · <insured>".
 - **How to show it:** on a quoted file, click "Reopen intake to correct". The quote page now says "Intake reopened · Finish the review →" and has no Bind. Change gross receipts and the named insured, Save & accept, then open the workbench: "The file differs from Q-… v1: Gross receipts … · Named insured …", Rating out of date, Bind outlined.
+
+## Tooling: the review reports and mockups stay out of git
+- **Prompt used:** "Yes, stop tracking", after asking whether the review reports and mockups should go to the remote repo.
+- **What changed:** `docs/CODE_REVIEW.md`, `SECURITY_REVIEW.md`, `UX_REVIEW.md`, `UAT_REPORT.md`, `AGENT_LEDGER.json` and `docs/ux-mockups/` are no longer tracked; they're in `.gitignore`. The reviewers still write and read them locally, and the hook still sends them to the live App Tests page (step 30). A report change no longer triggers a deploy.
+- **Files:** `.gitignore`, `.github/workflows/fly-deploy.yml`, `scripts/fly-deploy.sh` (comment only), `web/Dockerfile` (comment only), and the untracked report files
+- **Commit:** `tooling: the review reports and mockups stay out of git`
+- **Decisions:**
+  - **Why.** Since step-30 they reach the live site without a push, so committing them only added snapshot commits and kept a list of open security findings in the repository. The Oct 31 to Nov 2 snapshots stay in history.
+  - **The baked fallback stays.** A deploy from this machine still copies the local reports into the web image; a deploy from GitHub Actions copies none, and App Tests shows the published set. It falls back to the baked copy only when nothing has been published.
+- **For the live repo:** don't commit the reports there either; start with them in `.gitignore`.

@@ -15,7 +15,8 @@ COPY --from=build /app/migrations ./migrations
 # Broker drop folder baked into the image (filled from samples/submissions by scripts/fly-deploy.sh).
 # Owned by node: the app tops it up with generated submissions when it runs low.
 COPY --chown=node:node --from=build /app/inbox ./inbox
-# The review agents' reports and ledger for App Tests (step 26), copied from docs/ by scripts/fly-deploy.sh.
+# The review agents' reports and ledger for App Tests (step 26), copied from docs/ by scripts/fly-deploy.sh
+# when they're on the deploying machine (they aren't in git); otherwise empty, and the published set is shown.
 COPY --from=build /app/agent-reports ./agent-reports
 USER node
 EXPOSE 3000

@@ -27,3 +27,12 @@ samples/submissions/.tmp-*/
 
 # Finder metadata
 .DS_Store
+
+# The review agents' reports, ledger and mockups. /audit, /security-audit, /ux-audit and /uat write them
+# here, and scripts/agent-ledger-hook.sh sends them to the live App Tests page (step 30), not through git.
+docs/CODE_REVIEW.md
+docs/SECURITY_REVIEW.md
+docs/UX_REVIEW.md
+docs/UAT_REPORT.md
+docs/AGENT_LEDGER.json
+docs/ux-mockups/
